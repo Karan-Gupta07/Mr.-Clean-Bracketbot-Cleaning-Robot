@@ -102,6 +102,7 @@ scripts/check_grasp.py      Tries to pick up each object in the room.
 scripts/validate_ik.py      Proves the arm IK: round-trip on random poses, then every object in the room.
 scripts/check_arm_clearance.py  Measures arm-to-chassis clearance along the grasp paths (the sim filters self-collision).
 scripts/room.py             Live viewer you can drive the robot around the room in.
+scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed policy.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
@@ -109,6 +110,9 @@ src/rlbot/arm.py            Arm inverse kinematics and the grasp sequence.
 src/rlbot/room.py           What is in the room and where. Shared by the builder and the grasp test.
 src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' libhybrid_ik_lib.so, set up the way their daemon uses it.
 src/rlbot/sensing.py        The lidar and the wheel odometry.
+src/rlbot/grasp.py          The motions a pick is made of, shared by the harness and the agent.
+src/rlbot/skills.py         The robot as an agent sees it: typed skills, symbolic scene.
+src/rlbot/filming.py        Records a run to an mp4.
 ```
 
 ## How the robot model was fixed
@@ -161,6 +165,71 @@ means closing on the table.
 The ball is the exception, left in deliberately. It is the object the current
 hand cannot pick up, and it is worth keeping as the thing a better end effector -
 or a policy that learns to trap it against something - has to beat.
+
+## Driving it with an agent
+
+`scripts/agent.py` parks the robot at one table and lets a planner tidy it by
+calling robot skills. The base is welded at the docking pose, so the wheels never
+turn - this is manipulation only, and navigation is a separate problem.
+
+```bash
+# No API key needed. A fixed policy - pick each object, put it in the crate -
+# driving exactly the same skills. Start here.
+.venv/bin/python scripts/agent.py --table cubes --planner sweep
+
+# The same job, decided move by move by Claude Fable 5.1.
+export ANTHROPIC_API_KEY=sk-ant-...
+.venv/bin/python scripts/agent.py --table ware --planner fable
+
+# Record an mp4 of either.
+.venv/bin/python scripts/agent.py --table ware --planner sweep --video out/ware.mp4
+```
+
+### The skill API
+
+Six tools, and the shape of them follows what the published work on LLM-driven
+manipulation actually found, rather than what is intuitive:
+
+| Tool | Notes |
+| --- | --- |
+| `look` | The whole scene, symbolically: where each object is, what each hand holds. No coordinates. |
+| `pick(object, arm?)` | `arm` is a hint. The robot chooses the hand. |
+| `place(into?)` | Into the crate by default. |
+| `home` | Arms back at rest. |
+| `give_up(object, why)` | Declaring something impossible is a first-class action. |
+| `finished(summary)` | Done. |
+
+Four decisions worth calling out, each of which came from a measured failure:
+
+- **Object names are an enum.** An unknown name is refused at the tool boundary
+  with the list of real ones. Confidently asking for an object that is not there
+  is the largest hallucination class in embodied agents, and corrective feedback
+  does not reliably fix it.
+- **The code picks the arm, not the model.** Published bimanual planners that let
+  the LLM assign arms score near zero where the same model feeding a
+  deterministic assigner scores near the ceiling. Here the choice comes from
+  which hand is free and which can actually plan the reach.
+- **Retries live inside `pick`.** It works through wrist angles and both hands
+  itself. Models re-sequence and re-target well; they do not invent new
+  low-level motion strategies.
+- **The harness owns the loop rules**, not the prompt: a per-object failure cap,
+  a repeated-call detector, and a step budget.
+
+### What it gets today
+
+Sweeping all three tables with no model in the loop:
+
+| Table | Picked | Into the crate |
+| --- | --- | --- |
+| ball | 0 of 1 | 0 |
+| cubes | 4 of 4 | 1 |
+| tableware | 2 of 2 | 1 |
+
+Six of the seven objects can be picked up. Most of them are then lost on the way
+to the crate: the grasp survives a straight lift and about half the carries. The
+ball cannot be picked up at all - flat rigid pads have nothing to bite on a
+sphere. This is a gripper problem, not an agent problem, and the `sweep` planner
+exists precisely so the two can be told apart.
 
 ## Plan for the next steps
 

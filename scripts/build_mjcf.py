@@ -93,7 +93,12 @@ PAD_BANDS = ((-0.044, -0.004),)    # m, depth along the blade
 PAD_SKIN = 0.004           # m, how far in from a slice's extreme counts as face
 PAD_SLICES = 12            # slices along the blade used to trace that face
 PAD_HALF = (0.014, 0.003, 0.018)   # m, half sizes: across, through, along
-GRIP_FRICTION = [1.2, 0.02, 0.002]   # sliding, torsional, rolling
+# Rubber pads, and deliberately grippy.  At mu = 1.2 the solver let a 50 g cube
+# creep 80 mm out of a 10 N pinch in three seconds - twenty times the friction
+# it needed on paper, lost to the way MuJoCo trades normal impedance against
+# friction impedance.  Raising both this and the scene's impratio stops it dead:
+# 3 mm in three seconds, which is a grasp.
+GRIP_FRICTION = [3.0, 0.05, 0.005]   # sliding, torsional, rolling
 ARM_FRICTION = [0.6, 0.005, 0.0001]
 
 # Three boxes spanning the chassis, each sized to the meshes inside its own

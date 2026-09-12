@@ -159,7 +159,10 @@ HEADER = """<mujoco model="{name}">
 {include}
   <statistic center="0 0 0.8" extent="4"/>
 
-  <option impratio="10"/>
+  <!-- impratio 200: friction impedance well above normal impedance.  Without
+       it a firmly pinched object slides out of the gripper at 25 mm/s while the
+       solver reports 10 N of normal force holding it. -->
+  <option impratio="200"/>
 
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.55 0.55 0.55" specular="0.1 0.1 0.1"/>
@@ -289,7 +292,7 @@ def check_reach(model, verbose=True) -> list[str]:
                 problems.append(f"{item.name}: best IK leaves the grip site "
                                 f"{best.pos_err * 1000:.0f} mm and "
                                 f"{math.degrees(best.rot_err):.0f} deg off")
-            if item.width > MAX_GRASP_WIDTH:
+            if item.graspable and item.width > MAX_GRASP_WIDTH:
                 problems.append(f"{item.name}: {item.width * 1000:.0f} mm across "
                                 f"exceeds the {MAX_GRASP_WIDTH * 1000:.0f} mm budget")
     return problems
