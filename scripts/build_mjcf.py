@@ -17,6 +17,17 @@ reviewable:
      and inertias down at 1e-9.  We discard them and recompute from mesh volume
      at a uniform density scaled to hit TOTAL_MASS.
 
+A balancing robot only ever needed wheels-on-floor contact, so (2) stopped at
+two wheel cylinders.  Reaching for something on a table needs more:
+
+  4. Nothing but the wheels could touch anything.  The fingers passed straight
+     through whatever they closed on and the mast drove through walls.  Hands,
+     fingers, forearms and biceps get a collision copy of their visual mesh, and
+     the chassis gets three boxes measured off its own meshes.
+  5. Nowhere to aim.  There was no frame between the fingertips to drive an arm
+     to, and no mount for the sensors a map needs.  Both hands get a `grip_*`
+     site, and the chassis gets a lidar site and a head camera.
+
 Output: models/bracketbot.xml (committed, so running this is optional).
 """
 
@@ -47,6 +58,39 @@ MIMIC = {
     "right_right_gripper": "right_left_gripper",
     "left_right_gripper": "left_left_gripper",
 }
+
+# Robot collision geometry is contype 2 / conaffinity 1, so it collides with the
+# world (1/1) but never with itself.  The URDF's joint limits are boilerplate
+# +-120 degrees on every hinge, which lets the arms fold into the mast; a
+# self-contact there would be an artefact of bad limits, not of the real robot,
+# and the balancer would have to fight it.
+ROBOT_CONTYPE, ROBOT_CONAFFINITY = 2, 1
+
+# Links that get a collision copy of their visual mesh.  Grasping happens on the
+# fingers and the palm between them; the arm links are here so a badly aimed
+# reach stops at the table instead of sweeping through it.
+COLLIDING_LINKS = (
+    "hand__hand", "left_finger__left_finger", "right_finger__right_finger",
+    "forearm__forearm", "bicep__bicep",
+    "l_hand__hand", "l_left_finger__left_finger", "l_right_finger__right_finger",
+    "l_forearm__forearm", "l_bicep__bicep",
+)
+GRIP_FRICTION = [1.2, 0.02, 0.002]   # sliding, torsional, rolling
+ARM_FRICTION = [0.6, 0.005, 0.0001]
+
+# Three boxes spanning the chassis, each sized to the meshes inside its own
+# height band: drive unit, mast, head.  CLEARANCE lifts the lowest box off the
+# floor - the wheels are what the robot stands on, and a chassis box that
+# scraped the ground would quietly hold the robot up and flatter the balancer.
+CHASSIS_BANDS = (
+    ("chassis_drive", 0.00, 0.22),
+    ("chassis_mast", 0.22, 1.44),
+    ("chassis_head", 1.44, 1.75),
+)
+CHASSIS_CLEARANCE = 0.05    # m, floor to the bottom of the lowest box
+
+GRIP_OPEN = 0.5             # gripper angle the grip frame is measured at, rad
+LIDAR_HEIGHT = 0.32         # m up the mast: clears the wheels, under the arms
 
 URDF_EFFORT = 10.0          # every joint in the URDF carries effort=10 - boilerplate
 SERVO_MARGIN = 2.5          # headroom over the worst-case gravity load
@@ -206,6 +250,35 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                     g.contype, g.conaffinity, g.group = 0, 0, 2
                     chassis_geoms.append(g)
 
+        # ---- 4. arm collision: a copy of each mesh that can actually touch ----
+        # A copy, not a flag flip: the visual keeps the density that carries the
+        # link's mass, and the collider is weightless, so adding contact cannot
+        # move the CoM this model's gains are tuned around.
+        for name in COLLIDING_LINKS:
+            body = spec.body(name)
+            finger = "finger" in name or name.endswith("hand__hand")
+            visuals = [g for g in body.geoms if g.type == mujoco.mjtGeom.mjGEOM_MESH]
+            for n, g in enumerate(visuals):
+                body.add_geom(
+                    name=f"{name}_collision" + (f"_{n}" if len(visuals) > 1 else ""),
+                    type=mujoco.mjtGeom.mjGEOM_MESH,
+                    meshname=g.meshname,
+                    pos=g.pos,
+                    quat=g.quat,
+                    mass=0.0,
+                    contype=ROBOT_CONTYPE,
+                    conaffinity=ROBOT_CONAFFINITY,
+                    group=3,
+                    condim=4 if finger else 3,
+                    friction=GRIP_FRICTION if finger else ARM_FRICTION,
+                    rgba=[0.9, 0.4, 0.2, 0.35],
+                )
+
+        # the wheels join the same scheme, so a wheel cannot collide with an arm
+        for side in ("left", "right"):
+            wheel = spec.body(f"wheel_{side}").geoms[-1]
+            wheel.contype, wheel.conaffinity = ROBOT_CONTYPE, ROBOT_CONAFFINITY
+
         # ---- 3. mass: discard the export's inertials, recompute from volume ---
         for body in spec.bodies:
             body.explicitinertial = False
@@ -278,6 +351,40 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         # makes the solver satisfy the same constraint twice.  What the parser
         # does *not* do is stop us putting a servo on the follower - see MIMIC.
 
+        # ---- 5. frames to aim at, and mounts to see from ---------------------
+        # Everything from the wheels up to the head is one rigid chain, so the
+        # lidar and the head camera go on `root`: same pose as bolting them to
+        # the head, but in a frame that is axis-aligned with the world instead
+        # of the -90 degrees about x that base_plate carries.
+        root.add_site(name="lidar", pos=[0, 0, LIDAR_HEIGHT], size=[0.012, 0, 0],
+                      rgba=[0.2, 0.8, 0.3, 0.6])
+        root.add_camera(
+            name="head_cam", pos=[0.075, 0, 1.575],
+            # a MuJoCo camera looks down its own -z with +y up: -z -> +x world
+            xyaxes=[0, -1, 0, 0, 0, 1], fovy=58,
+        )
+
+        model = spec.compile()
+        for name, (centre, half) in chassis_boxes(model).items():
+            root.add_geom(
+                name=name,
+                type=mujoco.mjtGeom.mjGEOM_BOX,
+                pos=centre, size=half, mass=0.0,
+                contype=ROBOT_CONTYPE, conaffinity=ROBOT_CONAFFINITY,
+                group=3, rgba=[0.9, 0.4, 0.2, 0.25],
+            )
+
+        for side, (pos, quat) in grip_frames(model).items():
+            hand = spec.body("hand__hand" if side == "right" else "l_hand__hand")
+            hand.add_site(name=f"grip_{side}", pos=pos, quat=quat,
+                          size=[0.008, 0, 0], rgba=[0.2, 0.9, 0.9, 0.7])
+            # the site's +z is the approach direction and a camera looks down
+            # its own -z, so the camera is the grip frame spun 180 deg about x
+            flipped = np.zeros(4)
+            mujoco.mju_mulQuat(flipped, quat, np.array([0.0, 1.0, 0.0, 0.0]))
+            hand.add_camera(name=f"wrist_{side}_cam", pos=pos, quat=flipped,
+                            fovy=70)
+
         # scale density so the whole robot weighs TOTAL_MASS
         model = spec.compile()
         got = sum(model.body_mass) - 2 * total_mass * WHEEL_MASS_FRACTION
@@ -326,6 +433,107 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         w = measure_wheel(model, side)
         print(f"  wheel_{side}: r={w[0]:.4f} m  half-width={w[1]:.4f} m  "
               f"axle at y={w[2]:+.4f} z={w[3]:.4f}")
+
+
+def _mesh_points(model, data, body_ids):
+    """World-frame vertices of every mesh geom on the given bodies."""
+    out = []
+    for i in range(model.ngeom):
+        mid = model.geom_dataid[i]
+        if mid < 0 or model.geom_bodyid[i] not in body_ids:
+            continue
+        adr, num = model.mesh_vertadr[mid], model.mesh_vertnum[mid]
+        verts = model.mesh_vert[adr : adr + num]
+        out.append(verts @ data.geom_xmat[i].reshape(3, 3).T + data.geom_xpos[i])
+    return np.vstack(out) if out else np.empty((0, 3))
+
+
+def _subtree(model, root_id):
+    ids = set()
+    for b in range(model.nbody):
+        node = b
+        while node != 0:
+            if node == root_id:
+                ids.add(b)
+                break
+            node = model.body_parentid[node]
+    return ids
+
+
+def chassis_boxes(model):
+    """Boxes over the parts of the robot that are not wheels and not arms.
+
+    Sized to the meshes in each height band rather than typed in, so they track
+    the URDF.  The robot stands 1.61 m tall on a 0.19 x 0.37 m footprint, all of
+    it rigid below the shoulders - three boxes describe it closely enough for
+    navigation, and no mesh has to be tested against a wall.
+    """
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+
+    skip = _subtree(model, model.body("arm_base").id)
+    skip |= {model.body(f"wheel_{s}").id for s in ("left", "right")}
+    pts = _mesh_points(model, data, set(range(model.nbody)) - skip)
+
+    boxes = {}
+    for i, (name, lo, hi) in enumerate(CHASSIS_BANDS):
+        band = pts[(pts[:, 2] >= lo) & (pts[:, 2] < hi)]
+        if not len(band):
+            continue
+        p_lo, p_hi = band.min(0), band.max(0)
+        # In x and y the box hugs the vertices.  In z it spans its whole band -
+        # the mast extrusion only has vertices at its two ends, so trusting them
+        # would leave a 1.2 m gap - except at the two open ends, where the real
+        # geometry is what matters: the floor below and the top of the head.
+        p_lo[2] = CHASSIS_CLEARANCE if i == 0 else lo
+        p_hi[2] = p_hi[2] if i == len(CHASSIS_BANDS) - 1 else hi
+        boxes[name] = ((p_lo + p_hi) / 2, (p_hi - p_lo) / 2)
+    return boxes
+
+
+def grip_frames(model):
+    """A frame between the fingertips of each hand, in that hand's body frame.
+
+    +z points out along the fingers (the approach direction), +y is the closing
+    axis.  Drive this site to where you want the object and the object ends up
+    between the pads.  Measured at GRIP_OPEN, half way through the gripper's
+    travel, which is where a grasp actually starts.
+    """
+    data = mujoco.MjData(model)
+    hands = {
+        "right": ("hand__hand", "left_finger__left_finger",
+                  "right_finger__right_finger", "right_left_gripper"),
+        "left": ("l_hand__hand", "l_left_finger__left_finger",
+                 "l_right_finger__right_finger", "left_left_gripper"),
+    }
+    for _, _, _, leader in hands.values():
+        data.qpos[model.jnt_qposadr[model.joint(leader).id]] = GRIP_OPEN
+    mujoco.mj_forward(model, data)
+
+    out = {}
+    for side, (hand, finger_a, finger_b, _) in hands.items():
+        origin = data.body(hand).xpos
+        rot = data.body(hand).xmat.reshape(3, 3)
+
+        tips, pivots = [], []
+        for finger in (finger_a, finger_b):
+            cloud = _mesh_points(model, data, {model.body(finger).id})
+            far = np.argsort(np.linalg.norm(cloud - origin, axis=1))[-40:]
+            tips.append(cloud[far].mean(0))
+            pivots.append(data.body(finger).xpos)
+
+        centre = (tips[0] + tips[1]) / 2
+        approach = centre - (pivots[0] + pivots[1]) / 2
+        approach /= np.linalg.norm(approach)
+        closing = tips[1] - tips[0]
+        closing -= approach * (closing @ approach)      # orthogonalise
+        closing /= np.linalg.norm(closing)
+
+        axes = np.column_stack([np.cross(closing, approach), closing, approach])
+        quat = np.zeros(4)
+        mujoco.mju_mat2Quat(quat, (rot.T @ axes).flatten())
+        out[side] = (rot.T @ (centre - origin), quat)
+    return out
 
 
 def gravity_loads(model, joint_names: list[str]) -> dict[str, float]:
