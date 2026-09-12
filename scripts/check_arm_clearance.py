@@ -74,16 +74,34 @@ def chassis_geoms(model):
     return out
 
 
+def link_geoms(model, link: str) -> list[int]:
+    """Every collision geom belonging to an arm link.
+
+    Resolved by prefix rather than by assuming one `<link>_collision` mesh: the
+    fingers carry pad geoms (`<link>_pad0`) since the gripper was given real
+    pads, and a finger has more than one.
+    """
+    ids = [
+        g
+        for g in range(model.ngeom)
+        if (model.geom(g).name or "").startswith(f"{link}_")
+        and (model.geom_contype[g] or model.geom_conaffinity[g])
+    ]
+    if not ids:
+        raise KeyError(f"no collision geom found for arm link {link!r}")
+    return ids
+
+
 def clearance(model, data, side: str):
     """(min distance, arm link, chassis part) at the current qpos."""
     mujoco.mj_kinematics(model, data)
     best = (float("inf"), "", "")
     for link in J3_LINKS[side]:
-        g = model.geom(f"{link}_collision").id
-        for c, name in chassis_geoms(model):
-            d = mujoco.mj_geomDistance(model, data, g, c, 1.0, None)
-            if d < best[0]:
-                best = (float(d), link, name)
+        for g in link_geoms(model, link):
+            for c, name in chassis_geoms(model):
+                d = mujoco.mj_geomDistance(model, data, g, c, 1.0, None)
+                if d < best[0]:
+                    best = (float(d), link, name)
     return best
 
 
