@@ -30,15 +30,24 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from rlbot import BalanceController, Gains                        # noqa: E402
-from rlbot.arm import GRIPPER, SHUT, Arm, ArmIK, Gripper, down_quat  # noqa: E402
+from rlbot.arm import (GRIPPER, GRIP_SITE, SHUT, Arm, ArmIK, Gripper,  # noqa: E402
+                       down_quat)
 from rlbot.robot import ROOM, State                               # noqa: E402
-from rlbot.room import GRASP_YAWS, TABLES, grasp_pose             # noqa: E402
+from rlbot.room import TABLES, grasp_pose             # noqa: E402
 
 APPROACH = 0.12        # m above the grasp point to start from
 LIFT = 0.15            # m to raise the object
 HOLD = 1.5             # s to keep holding it before believing the grasp
 LIFTED = 0.05          # m the object has to rise to count
-APERTURE = 0.195       # m between the fingertips at full open, measured
+# Closing is stall-detected, not a fixed amount.  These blades swing rather than
+# slide, so how far past first contact the command has to go before the pads are
+# really loaded depends on the object: 0.10 rad holds a 42 mm cube and drops a
+# mug, 0.35 rad holds neither.  Instead, walk the command shut until the joint
+# stops following it - that is the pads meeting something - and then push
+# GRIP_BITE further and hold, which is a grip force of about kp * GRIP_BITE.
+STALL = 0.04           # rad of servo tracking error that counts as contact
+GRIP_BITE = 0.20       # rad of command past contact, for the squeeze
+HELD_WITHIN = 0.06     # m the object has to stay of the jaw to count as held
 
 
 @dataclass
@@ -152,21 +161,33 @@ def move(rig: Rig, arm: Arm, target, seconds=1.2, tol=0.01, patience=3.0):
 CONTINUITY = 0.8       # rad, summed over the arm's seven joints
 
 
-def squeeze(rig: Rig, arm: Arm, target: float, seconds=0.8, settle=0.6):
-    """Close the fingers at a speed the object can survive.
+def squeeze(rig: Rig, arm: Arm, floor: float = SHUT, rate: float = 0.6,
+            settle: float = 0.6) -> float:
+    """Close the fingers until they are loaded, then hold there.
 
-    The gripper is a position servo too, and commanding it shut in one go is a
-    1.0 rad step: it swings the blades in at whatever the force limit allows and
-    punts the object across the room - a 55 mm cube left at 1 m/s and landed by
-    the far wall.  Ramp the command instead and let the servo stall against the
-    object, where its residual error becomes the grip force.
+    The gripper is a position servo, and commanding it shut in one go is a 1 rad
+    step: it swings the blades in at whatever the force limit allows and punts
+    the object across the room - a 55 mm cube left at 1 m/s and landed by the far
+    wall.  So walk the command in at `rate` rad/s, watch the joint fall behind
+    it, and stop `GRIP_BITE` past where that starts.
     """
-    start = float(arm.data.ctrl[arm.grip_act])
-    steps = max(1, int(seconds / rig.model.opt.timestep))
-    for i in range(steps):
-        arm.grip(start + (target - start) * (i + 1) / steps)
+    model, data = rig.model, arm.data
+    joint = model.jnt_qposadr[model.joint(GRIPPER[arm.side]).id]
+    command = float(data.ctrl[arm.grip_act])
+    step = rate * model.opt.timestep
+    bite = None
+
+    while command > floor:
+        command = max(floor, command - step)
+        arm.grip(command)
         rig.step()
+        if bite is None and data.qpos[joint] - command > STALL:
+            bite = command - GRIP_BITE          # loaded: a little further, then hold
+        if bite is not None and command <= bite:
+            break
+
     rig.seconds(settle)
+    return float(data.qpos[joint])
 
 
 def plan_grasp(model, data, item, table, seed_from):
@@ -182,7 +203,9 @@ def plan_grasp(model, data, item, table, seed_from):
     for side in ("right", "left"):
         ik, hand = ArmIK(model, side), Gripper(model, side)
         opening = hand.opening_for(item.width)
-        for yaw in GRASP_YAWS:
+        if opening is None:            # wider than the jaw opens
+            continue
+        for yaw in item.yaws:
             quat = down_quat(dock_yaw + yaw)
             waypoint = [hand.site_target(jaws + np.array([0, 0, dz]), quat, opening)
                         for dz in (APPROACH, 0.0, LIFT)]
@@ -236,36 +259,48 @@ def attempt(item, table, balance: bool, verbose=True) -> Result:
     start_z = float(data.body(item.name).xpos[2])
     move(rig, arm, above.qpos, 1.6)        # over the object, fingers open
     gap = move(rig, arm, on.qpos, 1.0)     # down around it
-    squeeze(rig, arm, SHUT)                 # let the fingers load up
+    squeeze(rig, arm)                       # close until the pads load up
     move(rig, arm, up.qpos, 1.2)           # lift
     rig.seconds(HOLD)
 
+    hand = Gripper(model, side)
     rose = float(data.body(item.name).xpos[2]) - start_z
-    held = grasped(model, data, item.name, side)
+    held = grasped(model, data, item.name, side, hand)
     grip = model.joint(GRIPPER[side]).id
-    span = float(data.qpos[model.jnt_qposadr[grip]]) * APERTURE
+    span = float(np.interp(data.qpos[model.jnt_qposadr[grip]], hand.q, hand.gap))
     if verbose:
         flag = "ok  " if (held and rose > LIFTED) else "FAIL"
         print(f"  {flag} {item.name:<12} {side:>5} arm, wrist "
               f"{math.degrees(wrist):3.0f} deg   rose {rose * 1000:+6.1f} mm   "
-              f"fingers {span * 1000:5.1f} mm apart   "
+              f"jaw {span * 1000:5.1f} mm   "
               f"{'holding' if held else 'empty'}")
     return Result(item.name, side, score, rose, held)
 
 
-def grasped(model, data, body_name: str, side: str) -> bool:
-    """Is the object still in contact with both of that hand's fingers?"""
+def grasped(model, data, body_name: str, side: str, hand: Gripper) -> bool:
+    """Is the object still in the hand?
+
+    Not "is it touching both pads": these blades are not symmetric, so a perfectly
+    good grasp often has two contacts on one pad and one on the other, and the
+    contact set flickers between steps.  What settles it is where the object is -
+    if it is still in the jaw after the lift and the hold, the hand has it.
+    """
     prefix = "" if side == "right" else "l_"
     fingers = {model.body(f"{prefix}{f}_finger__{f}_finger").id
                for f in ("left", "right")}
     target = model.body(body_name).id
-    touching = set()
-    for c in range(data.ncon):
-        pair = {model.geom_bodyid[data.contact[c].geom1],
-                model.geom_bodyid[data.contact[c].geom2]}
-        if target in pair:
-            touching |= pair & fingers
-    return len(touching) == 2
+    if not any({model.geom_bodyid[data.contact[c].geom1],
+                model.geom_bodyid[data.contact[c].geom2]} & fingers
+               and target in {model.geom_bodyid[data.contact[c].geom1],
+                              model.geom_bodyid[data.contact[c].geom2]}
+               for c in range(data.ncon)):
+        return False
+
+    site = model.site(GRIP_SITE[side]).id
+    opening = float(data.qpos[model.jnt_qposadr[model.joint(GRIPPER[side]).id]])
+    jaw = (data.site_xpos[site]
+           + data.site_xmat[site].reshape(3, 3) @ hand.jaw_offset(opening))
+    return bool(np.linalg.norm(data.body(body_name).xpos - jaw) < HELD_WITHIN)
 
 
 def main() -> None:
