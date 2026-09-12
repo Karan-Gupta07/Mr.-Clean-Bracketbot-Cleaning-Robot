@@ -1,12 +1,14 @@
 """Watch the PD controller balance the robot.
 
-    .venv/bin/mjpython scripts/balance.py
+    .venv/bin/mjpython scripts/balance.py                 # the BracketBot
+    .venv/bin/mjpython scripts/balance.py --robot toy     # the first-principles model
 
 mjpython, not python: on macOS the window has to be created on the process main
 thread.  launch_passive routes it there; mujoco.viewer.launch() does not and
 fails with "Caught an unknown exception!".
 """
 
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -14,12 +16,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import mujoco.viewer                                    # noqa: E402
-from rlbot import Balancer, BalanceController           # noqa: E402
+from rlbot import Balancer, BalanceController, Gains    # noqa: E402
+
+ROBOTS = {
+    "bracketbot": (Balancer.bracketbot, Gains.for_bracketbot),
+    "toy": (Balancer, Gains),
+}
 
 
 def main() -> None:
-    bot = Balancer()
-    ctrl = BalanceController()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--robot", choices=sorted(ROBOTS), default="bracketbot")
+    args = ap.parse_args()
+
+    make_bot, make_gains = ROBOTS[args.robot]
+    bot = make_bot()
+    ctrl = BalanceController(make_gains())
     state = bot.reset()
 
     with mujoco.viewer.launch_passive(bot.model, bot.data) as viewer:

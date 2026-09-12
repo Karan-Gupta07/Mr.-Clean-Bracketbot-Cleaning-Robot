@@ -26,6 +26,13 @@ class Gains:
     kp_yaw: float = 0.05        # differential torque per rad/s of yaw rate
     max_pitch_ref: float = math.radians(12)
 
+    @staticmethod
+    def for_bracketbot() -> "Gains":
+        """The real robot is 12 kg with its mass 0.63 m up: m*g*h = 74 N*m/rad of
+        destabilising torque, so kp has to be an order of magnitude above the
+        toy model's."""
+        return Gains(kp_pitch=80.0, kd_pitch=15.0, kp_speed=0.010, kp_yaw=1.0)
+
 
 class BalanceController:
     def __init__(self, gains: Gains | None = None):
