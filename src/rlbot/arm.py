@@ -83,7 +83,7 @@ class ArmIK:
         return e
 
     def solve(self, data, pos, quat, seed=None, iters: int = 120,
-              damping: float = 0.08, restarts: int = 6, rng=None) -> Solution:
+              damping: float = 0.08, restarts: int = 12, rng=None) -> Solution:
         """Joint values that put the grip site at (pos, quat).
 
         Restarts from a fresh random pose whenever a run stalls, and keeps the
