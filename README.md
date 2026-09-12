@@ -19,16 +19,17 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | Step | Status |
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
-| 2. SLAM navigation | Started. There is a room with walls to map and a lidar mount on the robot. No SLAM code yet. |
-| 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. 1 of 10 objects lifts so far. No VLA model yet. |
+| 2. SLAM navigation | Started. There is a room to map, with walls, a pillar and a divider, and a lidar mount on the robot. No SLAM code yet. |
+| 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. Nothing lifts reliably yet - the gripper model is the blocker, see below. No VLA model yet. |
 
 ### What works today
 
 - **The BracketBot model.** It was converted from a URDF file into MuJoCo format by `scripts/build_mjcf.py`. The wheels spin, the robot can stand on the floor, and the mass numbers are fixed. See "How the robot model was fixed" below.
 - **Balancing.** A hand-tuned PD controller keeps the robot upright for as long as you like. It survives a 300 N shove.
-- **A room to work in.** Three tables, ten objects to pick up, and walls to map. Built by `scripts/build_room.py`.
+- **A room to work in.** A 6 x 4.5 m room with four walls, a pillar and a divider to map, and three tables: one with a ball and a crate, one with four cubes and a crate, one with a bowl, a mug and a crate. It is written twice - `models/room.xml` is the environment on its own, with no robot in it at all, and `models/room_scene.xml` is the same room with the robot added.
+- **A room the robot actually fits in.** `scripts/build_room.py` measures the robot's own footprint - 42 cm across, 1.7 m tall, read off its collision boxes - and checks the room against it before writing anything. 16.2 of the 27 m2 of floor is standable, all of it reachable from the middle, and each table's docking pose leaves 14.6 cm of daylight. It prints the map and refuses to write a room that fails.
 - **Arm control.** Inverse kinematics (IK) moves each 7-joint arm to a target pose. The arms and mast now have collision shapes, so they cannot pass through each other.
-- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along.
+- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along. Nothing currently survives the lift - see "What the room is built around".
 - **A small toy balancer.** `models/balancer.xml` is a simple two-wheeled robot. It loads in a second and is a quick way to catch controller bugs without loading the full robot.
 
 ## Setup
@@ -59,7 +60,9 @@ pip install -r requirements.txt
 # Same, but with the robot balancing on its wheels instead of bolted to the floor.
 .venv/bin/python scripts/check_grasp.py --balance
 
-# Rebuild the robot model from the URDF, or rebuild the room. Both outputs are committed, so this is optional.
+# Rebuild the robot model from the URDF, or rebuild the room. The room build also
+# prints the clearance map and checks the arms can reach every object.
+# All outputs are committed, so this is optional.
 .venv/bin/python scripts/build_mjcf.py
 .venv/bin/python scripts/build_room.py
 ```
@@ -72,11 +75,12 @@ Use `mjpython`, not `python`, for anything that opens a window. On macOS the win
 models/bracketbot/          The original URDF and its 50 mesh files. Never edited by hand.
 models/bracketbot.xml       The robot in MuJoCo format. Made by build_mjcf.py.
 models/bracketbot_scene.xml Floor, lights, and start poses. Use this to load just the robot.
-models/room_scene.xml       The room with tables and objects. Made by build_room.py.
+models/room.xml             The room on its own: walls, pillar, divider, tables, objects. No robot.
+models/room_scene.xml       The same room with the robot in it. Both made by build_room.py.
 models/balancer.xml         The small toy balancer.
 
 scripts/build_mjcf.py       Turns the URDF into MuJoCo format and fixes what is broken.
-scripts/build_room.py       Writes the room and checks the arm can reach every object.
+scripts/build_room.py       Writes the room, checks the robot fits in it, and checks the arms can reach every object.
 scripts/evaluate.py         Headless balance test with an optional shove.
 scripts/balance.py          Live viewer.
 scripts/check_grasp.py      Tries to pick up each object in the room.
@@ -110,11 +114,45 @@ The URDF we got is a shape export from Onshape, not a physics model. Six things 
 
 From a 3° lean, the robot settles in about 2 seconds and stays up. It recovers from a 300 N shove with 4.6° of lean, and from 450 N with 13.9°. A 600 N shove knocks it over.
 
+## What the room is built around
+
+Every dimension in the room answers to a measurement taken off the robot, so the
+layout cannot quietly drift away from what the robot can do.
+
+| | |
+| --- | --- |
+| Room | 6.0 x 4.5 m, walls 2.5 m. A pillar and a divider stub, so a map of it is not just a rectangle. |
+| Tables | Three, 1.0 x 0.6 m, tops at 0.70 m - the hands hang at 0.715 m. |
+| Docking | 0.24 m from the mast axis to the table edge. The robot is 0.19 m deep, so it parks with 14.6 cm to spare. |
+| Objects | 0.09 m in from the near edge, which puts them 0.33 m from the mast axis against a top-down reach that runs out around 0.36 m. |
+| Object size | 40 to 60 mm across the grasp axis. |
+
+The object sizes come from closing the real gripper on test blocks rather than
+from reading the fingertips: the tips part by 195 mm, but the fingers are hooks
+on pivots and they splay as they open, so past about half travel the two
+gripping faces stop facing each other. Hence a small bowl and a mug on the
+crockery table rather than a dinner plate - a plate is 26 mm tall, and the
+finger pads hang 22 mm below the middle of the jaw, so closing on a plate means
+closing on the table.
+
+The ball is the one object deliberately left outside that window. A smooth
+sphere is the thing this gripper cannot pick up, and it is worth keeping in the
+room as the case a better end effector has to beat.
+
+**The gripper model is the blocker, not the room.** These sizes are what the
+hand can hold once its fingers are modelled properly. As the model stands,
+MuJoCo collides each finger mesh as its convex hull, and the fingers are hooked
+claws with hollow insides - hulled, the two of them fill the jaw solid, so an
+object placed dead centre between them is already touching both and closing
+shoots it out. Until `scripts/build_mjcf.py` gives each blade a pad fitted to
+its real inner face, `check_grasp.py` reports nothing lifting, whatever is on
+the tables.
+
 ## Plan for the next steps
 
 **Step 2, SLAM navigation**
 
-- Add a lidar or depth camera to the lidar mount on the robot.
+- Add a lidar or depth camera to the lidar mount on the robot, and scan the room this PR adds.
 - Hook up a SLAM library so the robot can build a map of the room and know where it is.
 - Add a path planner so the robot can drive to a target spot while it keeps its balance.
 - Add a "dock at a table" move so the robot ends up in a good spot for the arms to reach.

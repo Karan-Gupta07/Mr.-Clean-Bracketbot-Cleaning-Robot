@@ -35,7 +35,17 @@ EDGE_INSET = 0.09              # m, table edge to the near row of objects
 # envelope that runs out around 0.36 m.  The chassis is 0.094 m deep, so the
 # robot still parks with 0.15 m of daylight between itself and the table.
 
-MAX_GRASP_WIDTH = 0.150        # m, across the grasp axis (gripper opens 0.195)
+# What the hand can actually hold, measured by closing it on test blocks rather
+# than read off the fingertips.  The fingertips part by 195 mm, but the blades
+# splay as they open: past about half travel the two gripping faces stop facing
+# each other, and the usable jaw is 40 to 60 mm.  Everything on these tables is
+# sized to that.
+MAX_GRASP_WIDTH = 0.060        # m, across the grasp axis
+
+
+# Wrist angles to try when reaching for something, relative to the table.
+GRASP_YAWS = tuple(math.radians(a) for a in (0, 30, 60, 90, 120, 150))
+SQUARE_YAWS = (0.0, math.pi / 2)
 
 
 @dataclass
@@ -49,6 +59,25 @@ class Item:
     mass: float
     rgba: tuple[float, float, float, float]
     size: dict = field(default_factory=dict)
+
+    @property
+    def yaws(self):
+        """Wrist angles worth trying, relative to the table.
+
+        `width` is measured across a face.  Close on a box across its diagonal
+        and the jaws meet 1.4 times that - 102 mm on a 72 mm cube, past what the
+        hand opens - so square objects only get square approaches.  Round ones
+        do not care, and get the full sweep.
+        """
+        return SQUARE_YAWS if self.kind in ("cube", "crate") else GRASP_YAWS
+
+    @property
+    def height(self) -> float:
+        if self.kind == "ball":
+            return 2 * self.size["r"]
+        if self.kind == "cube":
+            return self.size["s"]
+        return self.size["h"]
 
 
 @dataclass
@@ -81,30 +110,39 @@ class Table:
         return origin + along * item.at[0] + toward * inset + np.array([0, 0, TABLE_H])
 
 
-def ball(name, at, d=0.070, mass=0.12, rgba=(0.85, 0.25, 0.2, 1)):
-    return Item(name, "ball", at, d, mass, rgba, {"r": d / 2})
+def ball(name, at, d=0.055, mass=0.09, rgba=(0.85, 0.25, 0.2, 1)):
+    """A ball rolls away from a gripper closing on it, so this one is rubber:
+    rolling friction, not the frictionless marble a bare sphere geom would be."""
+    return Item(name, "ball", at, d, mass, rgba, {"r": d / 2, "condim": 6,
+                                                  "friction": (1.2, 0.05, 0.02)})
 
 
 def cube(name, at, s, mass, rgba):
     return Item(name, "cube", at, s, mass, rgba, {"s": s})
 
 
-def crate(name, at, mass=0.35, rgba=(0.55, 0.42, 0.28, 1)):
+def crate(name, at, mass=0.22, rgba=(0.55, 0.42, 0.28, 1)):
     """The open box each table's objects are meant to end up in.  Its outside is
-    140 mm across, so the gripper can also straddle and carry the crate itself."""
-    return Item(name, "crate", at, 0.140, mass, rgba,
-                {"l": 0.180, "w": 0.140, "h": 0.090, "t": 0.008})
+    55 mm across the short way, so the hand can also straddle and carry it."""
+    return Item(name, "crate", at, 0.055, mass, rgba,
+                {"l": 0.130, "w": 0.055, "h": 0.070, "t": 0.006})
 
 
-def bowl(name, at, mass=0.25, rgba=(0.92, 0.92, 0.88, 1)):
-    return Item(name, "bowl", at, 0.150, mass, rgba,
-                {"r_base": 0.045, "r_rim": 0.075, "h": 0.055, "t": 0.005})
+def bowl(name, at, mass=0.14, rgba=(0.92, 0.92, 0.88, 1)):
+    return Item(name, "bowl", at, 0.056, mass, rgba,
+                {"r_base": 0.019, "r_rim": 0.028, "h": 0.050, "t": 0.004})
 
 
-def plate(name, at, mass=0.20, rgba=(0.80, 0.84, 0.90, 1)):
-    """A rim, not a disc: a flat disc gives a parallel gripper nothing to hold."""
-    return Item(name, "plate", at, 0.145, mass, rgba,
-                {"r_base": 0.056, "r_rim": 0.0725, "h": 0.018, "t": 0.005})
+def mug(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
+    """Crockery the hand can actually take.
+
+    A plate was the obvious third thing on a table of tableware, and it does not
+    work: 26 mm tall, and the pads reach 28 mm below the middle of the jaw, so
+    closing on a plate means closing on the table.  A mug is the same idea -
+    thin-walled, open, easy to tip - at a height the hand can get hold of.
+    """
+    return Item(name, "mug", at, 0.056, mass, rgba,
+                {"r_base": 0.027, "r_rim": 0.028, "h": 0.070, "t": 0.004})
 
 
 TABLES = [
@@ -113,15 +151,15 @@ TABLES = [
         crate("crate_ball", (0.22, 0.0)),
     ]),
     Table("table_cubes", (-0.20, -1.95), math.radians(0), [
-        cube("cube_s", (-0.28, 0.03), 0.035, 0.04, (0.90, 0.55, 0.15, 1)),
-        cube("cube_m", (-0.16, -0.03), 0.045, 0.07, (0.25, 0.60, 0.85, 1)),
-        cube("cube_l", (-0.04, 0.03), 0.055, 0.11, (0.35, 0.70, 0.35, 1)),
-        cube("cube_xl", (0.08, -0.03), 0.065, 0.16, (0.75, 0.30, 0.65, 1)),
+        cube("cube_s", (-0.26, 0.03), 0.042, 0.05, (0.90, 0.55, 0.15, 1)),
+        cube("cube_m", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
+        cube("cube_l", (-0.02, 0.03), 0.054, 0.10, (0.35, 0.70, 0.35, 1)),
+        cube("cube_xl", (0.11, -0.03), 0.058, 0.13, (0.75, 0.30, 0.65, 1)),
         crate("crate_cubes", (0.27, 0.0)),
     ]),
     Table("table_ware", (-2.25, 0.90), math.radians(-90), [
         bowl("bowl", (-0.26, 0.0)),
-        plate("plate", (-0.03, 0.0)),
+        mug("mug", (-0.03, 0.0)),
         crate("crate_ware", (0.24, 0.0)),
     ]),
 ]
@@ -176,7 +214,7 @@ def item_geoms(item: Item):
             ("box", (t, w - 2 * t, h / 2), (l - t, 0, h / 2), None),
             ("box", (t, w - 2 * t, h / 2), (-(l - t), 0, h / 2), None),
         ]
-    if item.kind in ("bowl", "plate"):
+    if item.kind in ("bowl", "mug"):
         base_h = s["t"]
         geoms = [("cylinder", (s["r_base"], base_h / 2), (0, 0, base_h / 2), None)]
         for slab in cone_shell(s["r_base"], s["r_rim"], base_h, s["h"], s["t"]):
@@ -208,23 +246,16 @@ def lowest_point(geoms) -> float:
     return lo
 
 
-GRASP_YAWS = [math.radians(a) for a in (0, 30, 60, 90, 120, 150)]
-
-
-FINGERTIP_CLEARANCE = 0.008    # m the fingertips stop above the table
+PAD_REACH = 0.022      # m the pads extend below the jaw centre, plus a margin
 
 
 def grasp_pose(item: Item, table: Table):
-    """Where the grip site has to be to take this item.
+    """Where the jaws have to be to take this item.
 
-    The grip site is the *fingertip* midpoint, and the fingers are 134 mm blades
-    hinged at the hand.  Aim the site at an object's waist and the tips close on
-    it at their very ends, where the blades are thinnest and furthest from their
-    pivots: a 55 mm cube shot 200 mm sideways out of the jaws.  Aim it just above
-    the table instead and the object sits back along the pads, between the flats,
-    where closing squeezes it rather than flicking it.
-
-    Everything in this room is at most 90 mm tall, so a fixed height clears the
-    table for all of it.
+    Halfway up the object, which is where closing squeezes it instead of
+    levering it over - aiming at its lower third tipped an 85 mm cube onto its
+    face every time.  Except for anything under 56 mm tall: the pads reach
+    PAD_REACH below the middle of the jaw, and below that they close on the
+    table before they close on the object.
     """
-    return table.place(item) + np.array([0, 0, FINGERTIP_CLEARANCE])
+    return table.place(item) + np.array([0, 0, max(PAD_REACH, item.height / 2)])
