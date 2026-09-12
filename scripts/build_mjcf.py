@@ -39,6 +39,15 @@ OUT = REPO / "models" / "bracketbot.xml"
 TOTAL_MASS = 12.0          # kg, whole robot
 WHEEL_MASS_FRACTION = 0.06  # each wheel, of the total
 
+# URDF <mimic>: follower -> leader.  MuJoCo's URDF parser already emits the
+# equality constraint; what it cannot know is that the follower must not also get
+# a servo.  Give it one and the servo fights the constraint, pinning the gripper
+# shut - commanded fully open it reached -0.10 rad instead of +1.0.
+MIMIC = {
+    "right_right_gripper": "right_left_gripper",
+    "left_right_gripper": "left_left_gripper",
+}
+
 URDF_EFFORT = 10.0          # every joint in the URDF carries effort=10 - boilerplate
 SERVO_MARGIN = 2.5          # headroom over the worst-case gravity load
 
@@ -225,11 +234,14 @@ def build(total_mass: float = TOTAL_MASS) -> None:
             for j in b.joints
             if j.name
             and not j.name.startswith("wheel_")
+            and j.name not in MIMIC          # driven by its leader, not a servo
             and j.type in (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE)
         ]
         for joint in arm_joints:
             lo, hi = float(joint.range[0]), float(joint.range[1])
-            kp = 200.0 if joint.type == mujoco.mjtJoint.mjJNT_HINGE else 2000.0
+            # a P servo settles at load/kp: the 17 N carriage on kp=2000 hangs
+            # 8.6 mm low, so the slides get an order more stiffness than the hinges
+            kp = 200.0 if joint.type == mujoco.mjtJoint.mjJNT_HINGE else 20000.0
             spec.add_actuator(
                 name=joint.name,
                 target=joint.name,
@@ -261,20 +273,10 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                 objtype=mujoco.mjtObj.mjOBJ_JOINT, objname=f"wheel_{side}",
             )
 
-        # ---- mimic joints: URDF <mimic> has no MJCF equivalent ---------------
-        for follower, leader in (
-            ("right_right_gripper", "right_left_gripper"),
-            ("left_right_gripper", "left_left_gripper"),
-        ):
-            names = {j.name for j in arm_joints}
-            if follower in names and leader in names:
-                eq = spec.add_equality(
-                    name=f"{follower}_mimic",
-                    type=mujoco.mjtEq.mjEQ_JOINT,
-                    name1=follower,
-                    name2=leader,
-                )
-                eq.data[:5] = [0, 1, 0, 0, 0]
+        # No <mimic> handling needed here: MuJoCo's URDF parser already turns each
+        # one into a joint equality constraint.  Adding our own duplicates it and
+        # makes the solver satisfy the same constraint twice.  What the parser
+        # does *not* do is stop us putting a servo on the follower - see MIMIC.
 
         # scale density so the whole robot weighs TOTAL_MASS
         model = spec.compile()
@@ -297,6 +299,17 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                 continue
             limit = max(URDF_EFFORT, SERVO_MARGIN * need)
             act.forcerange = [-limit, limit]
+        # The URDF effort also lands on the *joint's* actuatorfrcrange, which
+        # clamps qfrc_actuator no matter how big the actuator's forcerange is.
+        # Raising one without the other leaves the servo asking for 43 N and
+        # getting 10, and the arms slide down the mast anyway.
+        for joint in arm_joints:
+            need = limits.get(joint.name)
+            if need is None:
+                continue
+            limit = max(URDF_EFFORT, SERVO_MARGIN * need)
+            joint.actfrcrange = [-limit, limit]
+            joint.actfrclimited = mujoco.mjtLimited.mjLIMITED_TRUE
         model = spec.compile()
 
         xml = spec.to_xml()

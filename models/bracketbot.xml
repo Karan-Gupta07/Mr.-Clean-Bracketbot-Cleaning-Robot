@@ -121,37 +121,37 @@
           </body>
           <body name="arm_base" pos="-0.0113422 0.0472371 -5.31838e-07" quat="0.707106 0.707108 1.79246e-05 1.77981e-05">
             <body name="shoulder__shoulder" pos="7.84415e-09 -0.0275 1.40573" quat="1 4.63465e-12 1.8366e-06 1.42623e-07">
-              <joint name="rj0" type="slide" range="-1.03044 0" actuatorfrcrange="-10 10"/>
+              <joint name="rj0" type="slide" range="-1.03044 0" actuatorfrcrange="-42.9765 42.9765" actuatorfrclimited="true"/>
               <geom pos="0.0112151 0.0286011 -1.35824" quat="0 1 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder__Shoulder"/>
               <body name="shoulder_cover__shoulder_cover" pos="0.0112151 0.0286011 -1.35824" quat="0 1 0 0">
                 <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Cover__Shoulder_Cover"/>
               </body>
               <body name="shoulder_knuckle__shoulder_knuckle" pos="-0.00793877 -0.0857475 -0.144638" quat="0.76632 0.608761 -1.00888e-06 -0.205336">
-                <joint name="rj1" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                <joint name="rj1" range="-2.0944 2.0944" actuatorfrcrange="-17.3715 17.3715" actuatorfrclimited="true"/>
                 <geom pos="0.285662 -1.10745 -0.425773" quat="0.608761 0.76632 0.205335 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Knuckle__Shoulder_Knuckle"/>
                 <body name="bicep__bicep" pos="-0.0345871 -0.0799863 -0.0310962" quat="0.425282 0.427297 0.563398 0.56492">
-                  <joint name="rj2" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                  <joint name="rj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
                   <geom pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep"/>
                   <body name="bicep_cover__bicep_cover" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover"/>
                   </body>
                   <body name="forearm__forearm" pos="-0.140146 -0.0763873 0.0558851" quat="0.62745 -0.367259 -0.485501 -0.485505">
-                    <joint name="rj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                    <joint name="rj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                     <geom pos="-0.000283681 -0.986812 -0.068819" quat="0.705623 0.708583 -0.00249187 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm__Forearm"/>
                     <body name="forearm_cover__forearm_cover" pos="-0.000283681 -0.986812 -0.068819" quat="0.705623 0.708583 -0.00249187 0">
                       <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Cover__Forearm_Cover"/>
                     </body>
                     <body name="forearm_rotation__forearm_rotation" pos="-0.026394 -0.12487 0.0320705" quat="0.294631 -0.264653 0.65568 0.642834">
-                      <joint name="rj4" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                      <joint name="rj4" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                       <geom pos="0.0641084 -0.0805833 -0.860955" quat="0.00516927 -0.393949 0.919118 -2.09626e-09" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Rotation__Forearm_Rotation"/>
                       <body name="wrist_knuckle__wrist_knuckle" pos="-0.0131274 -0.014875 -0.0327431" quat="0.668883 0.356813 -0.610479 0.229338">
-                        <joint name="rj5" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                        <joint name="rj5" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                         <geom pos="-0.791586 -0.264038 -0.0274632" quat="0.703518 0.141721 -0.696403 2.94367e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Wrist_Knuckle__Wrist_Knuckle"/>
                         <body name="hand__hand" pos="-0.0480111 0.0111602 -0.0199286" quat="0.504103 -0.402362 -0.581468 -0.495863">
-                          <joint name="rj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                          <joint name="rj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                           <geom pos="0.158112 -0.771279 -0.0790065" quat="0.724748 0.675251 0.137026 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Hand__Hand"/>
                           <body name="left_finger__left_finger" pos="0.0413008 -0.0450476 -0.0372147" quat="0.504688 0.364974 0.605635 0.495268">
-                            <joint name="right_left_gripper" range="0 1" actuatorfrcrange="-10 10"/>
+                            <joint name="right_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="-0.700467 -0.222749 -0.0540855" quat="0.695209 0.144141 -0.704207 1.7071e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger"/>
                           </body>
                           <body name="right_finger__right_finger" pos="0.0413009 -0.0450476 -0.00313575" quat="0.520146 0.586412 -0.395122 -0.479008">
@@ -173,37 +173,37 @@
               </body>
             </body>
             <body name="l_shoulder__shoulder" pos="-7.84415e-09 0.0275 1.40573" quat="1 2.65358e-06 1.8366e-06 1.42623e-07">
-              <joint name="lj0" type="slide" range="-1.03044 0" actuatorfrcrange="-10 10"/>
+              <joint name="lj0" type="slide" range="-1.03044 0" actuatorfrcrange="-42.9765 42.9765" actuatorfrclimited="true"/>
               <geom pos="0.0112151 -0.0286011 -1.35824" quat="0 1 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder__Shoulder_Mirrored"/>
               <body name="l_shoulder_cover__shoulder_cover" pos="0.0112151 -0.0286011 -1.35824" quat="0 -1 0 0">
                 <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Cover__Shoulder_Cover_Mirrored"/>
               </body>
               <body name="l_shoulder_knuckle__shoulder_knuckle" pos="-0.00793877 0.0857475 -0.144638" quat="0.588018 0.793353 7.74139e-07 0.15756">
-                <joint name="lj1" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                <joint name="lj1" range="-2.0944 2.0944" actuatorfrcrange="-17.3715 17.3715" actuatorfrclimited="true"/>
                 <geom pos="-0.306335 -1.10191 0.425773" quat="0.793353 0.588018 -0.157559 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Knuckle__Shoulder_Knuckle_Mirrored"/>
                 <body name="l_bicep__bicep" pos="-0.0699464 -0.0519767 0.0310962" quat="0.558556 0.557003 0.4356 0.433608">
-                  <joint name="lj2" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                  <joint name="lj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
                   <geom pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep_Mirrored"/>
                   <body name="l_bicep_cover__bicep_cover" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover_Mirrored"/>
                   </body>
                   <body name="l_forearm__forearm" pos="-0.140146 0.0763873 0.0558851" quat="-0.36555 0.625739 0.487709 0.486789">
-                    <joint name="lj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                    <joint name="lj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                     <geom pos="0.00665687 -0.98679 0.068819" quat="0.708587 0.705619 0.00248144 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm__Forearm_Mirrored"/>
                     <body name="l_forearm_cover__forearm_cover" pos="0.00665687 -0.98679 0.068819" quat="0.708587 0.705619 0.00248144 0">
                       <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Cover__Forearm_Cover_Mirrored"/>
                     </body>
                     <body name="l_forearm_rotation__forearm_rotation" pos="-0.0255151 -0.125052 -0.0320705" quat="-0.266957 0.292369 0.643866 0.654745">
-                      <joint name="lj4" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                      <joint name="lj4" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                       <geom pos="0.0641084 0.0805833 -0.860955" quat="0.00516927 0.393949 0.919118 2.09626e-09" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Rotation__Forearm_Rotation_Mirrored"/>
                       <body name="l_wrist_knuckle__wrist_knuckle" pos="-0.0131274 0.014875 -0.0327431" quat="0.668883 -0.356813 -0.610479 -0.229338">
-                        <joint name="lj5" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                        <joint name="lj5" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                         <geom pos="-0.791586 0.264038 -0.0274632" quat="0.703518 -0.141721 -0.696403 -2.94367e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Wrist_Knuckle__Wrist_Knuckle_Mirrored"/>
                         <body name="l_hand__hand" pos="-0.0480111 -0.0111602 -0.0199286" quat="0.509963 -0.592647 -0.385706 -0.489834">
-                          <joint name="lj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10"/>
+                          <joint name="lj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                           <geom pos="-0.15504 -0.771902 0.0790065" quat="0.689014 0.710272 -0.144133 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Hand__Hand_Mirrored"/>
                           <body name="l_left_finger__left_finger" pos="0.0204743 -0.0575834 0.0372147" quat="0.496119 0.414495 -0.572882 -0.503851">
-                            <joint name="left_left_gripper" range="0 1" actuatorfrcrange="-10 10"/>
+                            <joint name="left_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="0.731653 -0.070385 0.0540855" quat="0.718808 0.139409 0.681088 1.76511e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger_Mirrored"/>
                           </body>
                           <body name="l_right_finger__right_finger" pos="0.0204743 -0.0575834 0.00313575" quat="0.478128 0.593102 0.385006 0.520954">
@@ -245,14 +245,12 @@
   <equality>
     <joint joint1="right_right_gripper" joint2="right_left_gripper"/>
     <joint joint1="left_right_gripper" joint2="left_left_gripper"/>
-    <joint name="right_right_gripper_mimic" joint1="right_right_gripper" joint2="right_left_gripper"/>
-    <joint name="left_right_gripper_mimic" joint1="left_right_gripper" joint2="left_left_gripper"/>
   </equality>
 
   <actuator>
     <general name="wheel_left" joint="wheel_left" ctrlrange="-8 8" ctrllimited="true"/>
     <general name="wheel_right" joint="wheel_right" ctrlrange="-8 8" ctrllimited="true"/>
-    <general name="rj0" joint="rj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
+    <general name="rj0" joint="rj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="20000" biasprm="0 -20000 -2000"/>
     <general name="rj1" joint="rj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-17.3715 17.3715" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj2" joint="rj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-14.0072 14.0072" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj3" joint="rj3" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
@@ -260,8 +258,7 @@
     <general name="rj5" joint="rj5" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj6" joint="rj6" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="right_left_gripper" joint="right_left_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="right_right_gripper" joint="right_right_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="lj0" joint="lj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
+    <general name="lj0" joint="lj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="20000" biasprm="0 -20000 -2000"/>
     <general name="lj1" joint="lj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-17.3715 17.3715" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj2" joint="lj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-14.0072 14.0072" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj3" joint="lj3" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
@@ -269,7 +266,6 @@
     <general name="lj5" joint="lj5" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj6" joint="lj6" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="left_left_gripper" joint="left_left_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="left_right_gripper" joint="left_right_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
   </actuator>
 
   <sensor>

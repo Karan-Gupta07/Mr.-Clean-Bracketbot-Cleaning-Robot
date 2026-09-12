@@ -71,14 +71,48 @@ and every repair is reviewable:
    Anything that re-parents a geom has to compose the full chain to the world or
    it lands with y and z swapped — `world_pose()` in the build script.
 5. **`effort=10` on every joint is boilerplate**, not a spec: the URDF gives
-   every joint `effort=10` and `velocity=10` alike. 10 N cannot hold the 17 N
-   mast carriage, so the arms slide down the rail on the first step. Servo
-   limits are sized at 2.5× the worst-case gravity load instead (43 N for the
-   carriages, 17 N·m at the shoulder), keeping the URDF number as a floor.
+   every joint `effort=10` and `velocity=10` alike. 10 N cannot hold the 17.2 N
+   mast carriage, so the arms slide down the rail on the first step. Limits are
+   sized at 2.5× the worst-case gravity load instead (43 N for the carriages,
+   17 N·m at the shoulder), keeping the URDF number as a floor. Note this has to
+   be raised in **two** places — the actuator's `forcerange` *and* the joint's
+   `actuatorfrcrange`, which the URDF importer also sets from `effort` and which
+   clamps `qfrc_actuator` independently. Raise only the first and the servo asks
+   for 43 N, receives 10, and the arms still fall.
+6. **The mimic follower must not get a servo.** MuJoCo's URDF parser already
+   converts `<mimic>` into a joint equality constraint, so adding one duplicates
+   it — but nothing stops you putting a position servo on the follower, where it
+   fights the constraint. Commanded fully open, the gripper reached −0.10 rad
+   instead of +1.0. Followers are left unactuated; 18 arm joints, 16 servos.
 
-Also handled: the URDF `<mimic>` tags on the second gripper joint of each hand
-have no MJCF equivalent and become `<equality joint>` constraints, so a gripper
-stays one DOF.
+### Verified
+
+Full audit in `scripts/build_mjcf.py`'s output and the checks below:
+
+- Joint anchors sit at real hardware locations (shoulder 1.29 m, wrist 0.86 m),
+  and world-frame axes differ per joint — the link frames really do carry the
+  rotations the URDF README describes.
+- Left and right arms mirror to **0.00000 m**.
+- Every arm joint reaches both of its limits under its servo; both grippers
+  track their mimic follower to within 0.001 rad.
+- 60 s of balancing: no MuJoCo warnings, no divergence, all state finite.
+- Sensors read true: gyro ≈ 0 at rest, accelerometer +9.81 m/s² on z upright,
+  framequat ≈ identity.
+- Mass is no longer pathological — heaviest link is 25.9% of the total, down
+  from 95%, and no body is under 0.1 g.
+
+### Known gaps
+
+- **No self-collision.** Only the two wheel cylinders and the floor collide; all
+  50 meshes are visual-only. The arms will pass straight through the mast and
+  through each other. Fine for balancing, wrong for manipulation — add collision
+  primitives to the arm links before training anything that reaches.
+- **No joint damping, armature or friction on the arms** — the URDF specifies
+  none, and none has been invented. Wheels carry a small amount, set by the build.
+- Four now-empty bodies (`*_wheel_tire`, `*_wheel_cap`) remain in the tree after
+  their geoms were lifted into the hinged wheel bodies. Harmless, but clutter.
+- `root` is massless and carries the freejoint; its subtree holds the 12 kg, so
+  the dynamics are correct, but it trips naive "every body has inertia" checks.
 
 > **`TOTAL_MASS = 12.0` kg is a placeholder.** Nothing in the URDF says what
 > this robot weighs. The resulting CoM sits 0.63 m up. Wheel torque limits
@@ -103,8 +137,8 @@ just above that; the gains come from a 64-point sweep scored on drift plus
 residual wheel speed.
 
 From the `tipped` keyframe: settles in ~2 s, holds 20 s, max lean 3.00°, drift
-7 cm, peak wheel torque 4.2 N·m. Recovers from a 50 ms shove up to ~300 N
-(15 N·s); falls at 600 N.
+2 cm, peak wheel torque 4.2 N·m. A 50 ms shove of 300 N costs 4.6° of lean and
+450 N costs 13.9°, both recovered; 600 N puts it on the floor.
 
 The toy model (`--robot toy`) still balances in 20 s with 8 mm of drift — it runs
 in a second and catches controller regressions without loading 50 meshes.
