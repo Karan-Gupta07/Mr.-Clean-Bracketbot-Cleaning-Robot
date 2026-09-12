@@ -26,15 +26,15 @@
     <mesh name="Right_Wheel_Cap__Right_Wheel_Cap" file="Right_Wheel_Cap__Right_Wheel_Cap.stl"/>
     <mesh name="Right_Wheel_Tire__Right_Wheel_Tire" file="Right_Wheel_Tire__Right_Wheel_Tire.stl"/>
     <mesh name="Top_Cover_back__Top_Cover_back__Top_Cover_back__Top_Cover_back" file="Top_Cover_back__Top_Cover_back__Top_Cover_back__Top_Cover_back.stl"/>
-    <mesh name="Bicep__Bicep" file="Bicep__Bicep.stl"/>
+    <mesh name="Bicep__Bicep" content_type="model/stl" file="Bicep__Bicep.stl"/>
     <mesh name="Bicep_Cover__Bicep_Cover" file="Bicep_Cover__Bicep_Cover.stl"/>
-    <mesh name="Forearm__Forearm" file="Forearm__Forearm.stl"/>
+    <mesh name="Forearm__Forearm" content_type="model/stl" file="Forearm__Forearm.stl"/>
     <mesh name="Forearm_Cover__Forearm_Cover" file="Forearm_Cover__Forearm_Cover.stl"/>
     <mesh name="Forearm_Rotation__Forearm_Rotation" file="Forearm_Rotation__Forearm_Rotation.stl"/>
-    <mesh name="Hand__Hand" file="Hand__Hand.stl"/>
+    <mesh name="Hand__Hand" content_type="model/stl" file="Hand__Hand.stl"/>
     <mesh name="Hand_Motor_Mount__Hand_Motor_Mount" file="Hand_Motor_Mount__Hand_Motor_Mount.stl"/>
-    <mesh name="Left_Finger__Left_Finger" file="Left_Finger__Left_Finger.stl"/>
-    <mesh name="Right_Finger__Right_Finger" file="Right_Finger__Right_Finger.stl"/>
+    <mesh name="Left_Finger__Left_Finger" content_type="model/stl" file="Left_Finger__Left_Finger.stl"/>
+    <mesh name="Right_Finger__Right_Finger" content_type="model/stl" file="Right_Finger__Right_Finger.stl"/>
     <mesh name="Shoulder__Shoulder" file="Shoulder__Shoulder.stl"/>
     <mesh name="Shoulder_Cover__Shoulder_Cover" file="Shoulder_Cover__Shoulder_Cover.stl"/>
     <mesh name="Shoulder_Knuckle__Shoulder_Knuckle" file="Shoulder_Knuckle__Shoulder_Knuckle.stl"/>
@@ -42,15 +42,15 @@
     <mesh name="Wrist_Knuckle__Wrist_Knuckle" file="Wrist_Knuckle__Wrist_Knuckle.stl"/>
     <mesh name="Shoulder__Shoulder_Mirrored" file="Shoulder__Shoulder_Mirrored.stl"/>
     <mesh name="Shoulder_Knuckle__Shoulder_Knuckle_Mirrored" file="Shoulder_Knuckle__Shoulder_Knuckle_Mirrored.stl"/>
-    <mesh name="Bicep__Bicep_Mirrored" file="Bicep__Bicep_Mirrored.stl"/>
-    <mesh name="Forearm__Forearm_Mirrored" file="Forearm__Forearm_Mirrored.stl"/>
+    <mesh name="Bicep__Bicep_Mirrored" content_type="model/stl" file="Bicep__Bicep_Mirrored.stl"/>
+    <mesh name="Forearm__Forearm_Mirrored" content_type="model/stl" file="Forearm__Forearm_Mirrored.stl"/>
     <mesh name="Forearm_Rotation__Forearm_Rotation_Mirrored" file="Forearm_Rotation__Forearm_Rotation_Mirrored.stl"/>
     <mesh name="Wrist_Knuckle__Wrist_Knuckle_Mirrored" file="Wrist_Knuckle__Wrist_Knuckle_Mirrored.stl"/>
-    <mesh name="Hand__Hand_Mirrored" file="Hand__Hand_Mirrored.stl"/>
+    <mesh name="Hand__Hand_Mirrored" content_type="model/stl" file="Hand__Hand_Mirrored.stl"/>
     <mesh name="Wrist_Cam__Wrist_Cam_Mirrored" file="Wrist_Cam__Wrist_Cam_Mirrored.stl"/>
     <mesh name="Hand_Motor_Mount__Hand_Motor_Mount_Mirrored" file="Hand_Motor_Mount__Hand_Motor_Mount_Mirrored.stl"/>
-    <mesh name="Right_Finger__Right_Finger_Mirrored" file="Right_Finger__Right_Finger_Mirrored.stl"/>
-    <mesh name="Left_Finger__Left_Finger_Mirrored" file="Left_Finger__Left_Finger_Mirrored.stl"/>
+    <mesh name="Right_Finger__Right_Finger_Mirrored" content_type="model/stl" file="Right_Finger__Right_Finger_Mirrored.stl"/>
+    <mesh name="Left_Finger__Left_Finger_Mirrored" content_type="model/stl" file="Left_Finger__Left_Finger_Mirrored.stl"/>
     <mesh name="Forearm_Cover__Forearm_Cover_Mirrored" file="Forearm_Cover__Forearm_Cover_Mirrored.stl"/>
     <mesh name="Bicep_Cover__Bicep_Cover_Mirrored" file="Bicep_Cover__Bicep_Cover_Mirrored.stl"/>
     <mesh name="Shoulder_Cover__Shoulder_Cover_Mirrored" file="Shoulder_Cover__Shoulder_Cover_Mirrored.stl"/>
@@ -59,7 +59,12 @@
   <worldbody>
     <body name="root">
       <joint name="root" type="free"/>
+      <geom name="chassis_drive" size="0.0935995 0.18575 0.085" pos="3.94786e-05 7.21939e-07 0.135" type="box" contype="2" group="3" rgba="0.9 0.4 0.2 0.25" mass="0"/>
+      <geom name="chassis_mast" size="0.0508603 0.0475 0.61" pos="0.000892764 9.96421e-07 0.83" type="box" contype="2" group="3" rgba="0.9 0.4 0.2 0.25" mass="0"/>
+      <geom name="chassis_head" size="0.0587263 0.0654754 0.0856884" pos="0.015572 1.2642e-05 1.52569" type="box" contype="2" group="3" rgba="0.9 0.4 0.2 0.25" mass="0"/>
       <site name="imu" size="0.01" pos="0 0 0.2"/>
+      <site name="lidar" size="0.012" pos="0 0 0.32" rgba="0.2 0.8 0.3 0.6"/>
+      <camera name="head_cam" quat="-0.5 -0.5 0.5 0.5" pos="0.075 0 1.575" fovy="58"/>
       <body name="base_plate__base_plate" pos="0.0113398 6.4516e-07 0.0776294" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05">
         <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Base_Plate__Base_Plate"/>
         <body name="bottom_cover_front__bottom_cover_front__bottom_cover_front__bottom_cover_front" pos="0.004 0.0272667 0.000135341" quat="1 0 0 0">
@@ -132,12 +137,14 @@
                 <body name="bicep__bicep" pos="-0.0345871 -0.0799863 -0.0310962" quat="0.425282 0.427297 0.563398 0.56492">
                   <joint name="rj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
                   <geom pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep"/>
+                  <geom name="bicep__bicep_collision" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.621e-12" type="mesh" contype="2" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep"/>
                   <body name="bicep_cover__bicep_cover" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover"/>
                   </body>
                   <body name="forearm__forearm" pos="-0.140146 -0.0763873 0.0558851" quat="0.62745 -0.367259 -0.485501 -0.485505">
                     <joint name="rj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                     <geom pos="-0.000283681 -0.986812 -0.068819" quat="0.705623 0.708583 -0.00249187 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm__Forearm"/>
+                    <geom name="forearm__forearm_collision" pos="-0.000283681 -0.986812 -0.068819" quat="0.705623 0.708583 -0.00249187 0" type="mesh" contype="2" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Forearm__Forearm"/>
                     <body name="forearm_cover__forearm_cover" pos="-0.000283681 -0.986812 -0.068819" quat="0.705623 0.708583 -0.00249187 0">
                       <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Cover__Forearm_Cover"/>
                     </body>
@@ -150,13 +157,18 @@
                         <body name="hand__hand" pos="-0.0480111 0.0111602 -0.0199286" quat="0.504103 -0.402362 -0.581468 -0.495863">
                           <joint name="rj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                           <geom pos="0.158112 -0.771279 -0.0790065" quat="0.724748 0.675251 0.137026 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Hand__Hand"/>
+                          <geom name="hand__hand_collision" pos="0.158112 -0.771279 -0.0790065" quat="0.724748 0.675251 0.137026 0" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Hand__Hand"/>
+                          <site name="grip_right" size="0.008" pos="0.0584182 -0.145642 -0.0477247" quat="0.605916 0.791026 0.0678557 0.0503915" rgba="0.2 0.9 0.9 0.7"/>
+                          <camera name="wrist_right_cam" quat="-0.791026 0.605916 0.0503915 -0.0678557" pos="0.0584182 -0.145642 -0.0477247" fovy="70"/>
                           <body name="left_finger__left_finger" pos="0.0413008 -0.0450476 -0.0372147" quat="0.504688 0.364974 0.605635 0.495268">
                             <joint name="right_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="-0.700467 -0.222749 -0.0540855" quat="0.695209 0.144141 -0.704207 1.7071e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger"/>
+                            <geom name="left_finger__left_finger_collision" pos="-0.700467 -0.222749 -0.0540855" quat="0.695209 0.144141 -0.704207 1.7071e-08" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Left_Finger__Left_Finger"/>
                           </body>
                           <body name="right_finger__right_finger" pos="0.0413009 -0.0450476 -0.00313575" quat="0.520146 0.586412 -0.395122 -0.479008">
                             <joint name="right_right_gripper" range="0 1" actuatorfrcrange="-10 10"/>
                             <geom pos="0.736527 0.0353731 0.0544735" quat="0.718808 -0.139409 0.681088 1.76495e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Right_Finger__Right_Finger"/>
+                            <geom name="right_finger__right_finger_collision" pos="0.736527 0.0353731 0.0544735" quat="0.718808 -0.139409 0.681088 1.76495e-08" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Right_Finger__Right_Finger"/>
                           </body>
                           <body name="wrist_cam__wrist_cam" pos="0.158112 -0.771279 -0.0790065" quat="0.724748 0.675251 0.137026 0">
                             <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="0.792157 0.819608 0.933333 1" density="393.025" mesh="Wrist_Cam__Wrist_Cam"/>
@@ -184,12 +196,14 @@
                 <body name="l_bicep__bicep" pos="-0.0699464 -0.0519767 0.0310962" quat="0.558556 0.557003 0.4356 0.433608">
                   <joint name="lj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
                   <geom pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep_Mirrored"/>
+                  <geom name="l_bicep__bicep_collision" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.621e-12" type="mesh" contype="2" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep_Mirrored"/>
                   <body name="l_bicep_cover__bicep_cover" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover_Mirrored"/>
                   </body>
                   <body name="l_forearm__forearm" pos="-0.140146 0.0763873 0.0558851" quat="-0.36555 0.625739 0.487709 0.486789">
                     <joint name="lj3" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                     <geom pos="0.00665687 -0.98679 0.068819" quat="0.708587 0.705619 0.00248144 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm__Forearm_Mirrored"/>
+                    <geom name="l_forearm__forearm_collision" pos="0.00665687 -0.98679 0.068819" quat="0.708587 0.705619 0.00248144 0" type="mesh" contype="2" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Forearm__Forearm_Mirrored"/>
                     <body name="l_forearm_cover__forearm_cover" pos="0.00665687 -0.98679 0.068819" quat="0.708587 0.705619 0.00248144 0">
                       <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Forearm_Cover__Forearm_Cover_Mirrored"/>
                     </body>
@@ -202,13 +216,18 @@
                         <body name="l_hand__hand" pos="-0.0480111 -0.0111602 -0.0199286" quat="0.509963 -0.592647 -0.385706 -0.489834">
                           <joint name="lj6" range="-2.0944 2.0944" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                           <geom pos="-0.15504 -0.771902 0.0790065" quat="0.689014 0.710272 -0.144133 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Hand__Hand_Mirrored"/>
+                          <geom name="l_hand__hand_collision" pos="-0.15504 -0.771902 0.0790065" quat="0.689014 0.710272 -0.144133 0" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Hand__Hand_Mirrored"/>
+                          <site name="grip_left" size="0.008" pos="-0.00297424 -0.156893 0.0477247" quat="0.0908133 -0.0711154 -0.603835 0.78872" rgba="0.2 0.9 0.9 0.7"/>
+                          <camera name="wrist_left_cam" quat="0.0711154 0.0908133 0.78872 0.603835" pos="-0.00297424 -0.156893 0.0477247" fovy="70"/>
                           <body name="l_left_finger__left_finger" pos="0.0204743 -0.0575834 0.0372147" quat="0.496119 0.414495 -0.572882 -0.503851">
                             <joint name="left_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="0.731653 -0.070385 0.0540855" quat="0.718808 0.139409 0.681088 1.76511e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger_Mirrored"/>
+                            <geom name="l_left_finger__left_finger_collision" pos="0.731653 -0.070385 0.0540855" quat="0.718808 0.139409 0.681088 1.76511e-08" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Left_Finger__Left_Finger_Mirrored"/>
                           </body>
                           <body name="l_right_finger__right_finger" pos="0.0204743 -0.0575834 0.00313575" quat="0.478128 0.593102 0.385006 0.520954">
                             <joint name="left_right_gripper" range="0 1" actuatorfrcrange="-10 10"/>
                             <geom pos="-0.691192 0.25686 -0.0544735" quat="0.695209 -0.144141 -0.704207 1.70707e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Right_Finger__Right_Finger_Mirrored"/>
+                            <geom name="l_right_finger__right_finger_collision" pos="-0.691192 0.25686 -0.0544735" quat="0.695209 -0.144141 -0.704207 1.70707e-08" type="mesh" contype="2" condim="4" group="3" friction="1.2 0.02 0.002" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Right_Finger__Right_Finger_Mirrored"/>
                           </body>
                           <body name="l_wrist_cam__wrist_cam" pos="-0.15504 -0.771902 0.0790065" quat="0.689014 0.710272 -0.144133 0">
                             <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="0.792157 0.819608 0.933333 1" density="393.025" mesh="Wrist_Cam__Wrist_Cam_Mirrored"/>
@@ -231,13 +250,13 @@
         <joint name="wheel_left" armature="0.005" damping="0.01" axis="0 1 0"/>
         <geom name="Left_Wheel_Tire__Left_Wheel_Tire_visual" pos="0.0113398 -0.1611 -0.00696855" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_Wheel_Tire__Left_Wheel_Tire"/>
         <geom name="Left_wheel_cap__Left_wheel_cap_visual" pos="0.0113398 -0.1611 -0.00696855" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_wheel_cap__Left_wheel_cap"/>
-        <geom name="wheel_left_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
+        <geom name="wheel_left_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" contype="2" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
       </body>
       <body name="wheel_right" pos="0 -0.161099 0.0845987">
         <joint name="wheel_right" armature="0.005" damping="0.01" axis="0 1 0"/>
         <geom name="Right_Wheel_Tire__Right_Wheel_Tire_visual" pos="0.0113398 0.1611 -0.00696931" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Tire__Right_Wheel_Tire"/>
         <geom name="Right_Wheel_Cap__Right_Wheel_Cap_visual" pos="0.0113398 0.1611 -0.00696931" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Cap__Right_Wheel_Cap"/>
-        <geom name="wheel_right_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
+        <geom name="wheel_right_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" contype="2" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
       </body>
     </body>
   </worldbody>
