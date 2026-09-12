@@ -38,12 +38,13 @@ class BalanceController:
     def __init__(self, gains: Gains | None = None):
         self.gains = gains or Gains()
 
-    def __call__(self, s: State, yaw_rate_ref: float = 0.0) -> tuple[float, float]:
+    def __call__(self, s: State, yaw_rate_ref: float = 0.0,
+                 wheel_speed_ref: float = 0.0) -> tuple[float, float]:
         g = self.gains
 
         # outer loop: wheels running forward -> ask for a backward lean
         pitch_ref = max(
-            -g.max_pitch_ref, min(g.max_pitch_ref, -g.kp_speed * s.wheel_speed)
+            -g.max_pitch_ref, min(g.max_pitch_ref, -g.kp_speed * (s.wheel_speed - wheel_speed_ref))
         )
 
         # inner loop: PD on lean.  +ve pitch (tipped toward +x) needs +ve wheel
@@ -51,5 +52,6 @@ class BalanceController:
         # under the mass.
         torque = g.kp_pitch * (s.pitch - pitch_ref) + g.kd_pitch * s.pitch_rate
 
-        steer = g.kp_yaw * (s.yaw_rate - yaw_rate_ref)
+        # Left wheel is at +y: more right-wheel forward torque turns +yaw.
+        steer = g.kp_yaw * (yaw_rate_ref - s.yaw_rate)
         return torque - steer, torque + steer

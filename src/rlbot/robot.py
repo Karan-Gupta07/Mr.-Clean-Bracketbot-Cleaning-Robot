@@ -75,8 +75,9 @@ class Balancer:
         d, chassis = self.data, self.data.body(self.chassis)
         R = chassis.xmat.reshape(3, 3)
 
-        # body +z tilted within the world xz-plane -> pitch about the wheel axis
-        pitch = math.atan2(R[0, 2], R[2, 2])
+        # Extract local pitch independently of world heading. Using R[0, 2]
+        # makes the balance feedback disappear/reverse as the robot turns.
+        pitch = math.atan2(-R[2, 0], math.hypot(R[0, 0], R[1, 0]))
         yaw = math.atan2(R[1, 0], R[0, 0])
 
         gyro = d.sensordata[self._imu : self._imu + 3]      # body frame

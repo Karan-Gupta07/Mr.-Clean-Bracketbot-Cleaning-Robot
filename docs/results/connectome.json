@@ -1,0 +1,398 @@
+{
+  "policy": "connectome",
+  "seed": 7,
+  "ppo_steps": 8192,
+  "imitation_updates": 800,
+  "graph": "out/flywire/graph_512.npz",
+  "resume_imitation": "out\\rl\\connectome\\imitation.zip",
+  "rehearsal_updates_per_ppo_rollout": 32,
+  "graph_sha256": "e561650067d66eb8c8e8fd79e1a637a6f17bd6b9e734aba93b0b57c02f9089c8",
+  "graph_gain_change_during_ppo_l2": 0.32287123799324036,
+  "before_ppo": {
+    "episodes": 20,
+    "successes": 20,
+    "falls": 0,
+    "mean_return": 24.9006341223974,
+    "mean_distance": 0.07035132336812677,
+    "runs": [
+      {
+        "seed": 1000,
+        "success": true,
+        "fell": false,
+        "distance": 0.07506254280856788,
+        "return": 24.543506776710814,
+        "max_pitch_deg": 1.807072241943272,
+        "seconds": 4.899999999999682
+      },
+      {
+        "seed": 1001,
+        "success": true,
+        "fell": false,
+        "distance": 0.08376566868245387,
+        "return": 19.65805531245232,
+        "max_pitch_deg": 1.5695167411137367,
+        "seconds": 6.449999999999512
+      },
+      {
+        "seed": 1002,
+        "success": true,
+        "fell": false,
+        "distance": 0.08425654263183235,
+        "return": 27.91985216411398,
+        "max_pitch_deg": 1.7803100936703264,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 1003,
+        "success": true,
+        "fell": false,
+        "distance": 0.07353767824854188,
+        "return": 24.73546244731717,
+        "max_pitch_deg": 1.3964568915865367,
+        "seconds": 5.249999999999644
+      },
+      {
+        "seed": 1004,
+        "success": true,
+        "fell": false,
+        "distance": 0.08410325551951663,
+        "return": 19.411045797456644,
+        "max_pitch_deg": 1.5930688578459709,
+        "seconds": 5.549999999999611
+      },
+      {
+        "seed": 1005,
+        "success": true,
+        "fell": false,
+        "distance": 0.022438679535218675,
+        "return": 25.113213263658977,
+        "max_pitch_deg": 1.7647543324431019,
+        "seconds": 13.00000000000101
+      },
+      {
+        "seed": 1006,
+        "success": true,
+        "fell": false,
+        "distance": 0.052749836083693,
+        "return": 22.627047930968253,
+        "max_pitch_deg": 1.782702863106669,
+        "seconds": 4.799999999999693
+      },
+      {
+        "seed": 1007,
+        "success": true,
+        "fell": false,
+        "distance": 0.05121921893605445,
+        "return": 26.744963321468187,
+        "max_pitch_deg": 1.4520232300659224,
+        "seconds": 6.299999999999528
+      },
+      {
+        "seed": 1008,
+        "success": true,
+        "fell": false,
+        "distance": 0.03398327675607663,
+        "return": 22.635910815250206,
+        "max_pitch_deg": 1.774545463988851,
+        "seconds": 8.449999999999491
+      },
+      {
+        "seed": 1009,
+        "success": true,
+        "fell": false,
+        "distance": 0.08265789229367626,
+        "return": 18.984561548100142,
+        "max_pitch_deg": 1.574791157783522,
+        "seconds": 3.9499999999997866
+      },
+      {
+        "seed": 1010,
+        "success": true,
+        "fell": false,
+        "distance": 0.0956519712544178,
+        "return": 29.99304632178424,
+        "max_pitch_deg": 1.8667747718122873,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 1011,
+        "success": true,
+        "fell": false,
+        "distance": 0.0629823481844572,
+        "return": 21.40687557145414,
+        "max_pitch_deg": 1.7812442376386035,
+        "seconds": 4.449999999999732
+      },
+      {
+        "seed": 1012,
+        "success": true,
+        "fell": false,
+        "distance": 0.028577934836177234,
+        "return": 23.80118330753519,
+        "max_pitch_deg": 1.79317981797571,
+        "seconds": 8.499999999999508
+      },
+      {
+        "seed": 1013,
+        "success": true,
+        "fell": false,
+        "distance": 0.07384718169291235,
+        "return": 26.48749831515073,
+        "max_pitch_deg": 1.2804515445799498,
+        "seconds": 6.749999999999479
+      },
+      {
+        "seed": 1014,
+        "success": true,
+        "fell": false,
+        "distance": 0.09523102596178588,
+        "return": 29.75007811515566,
+        "max_pitch_deg": 1.8655394225663242,
+        "seconds": 5.599999999999605
+      },
+      {
+        "seed": 1015,
+        "success": true,
+        "fell": false,
+        "distance": 0.08632194157320841,
+        "return": 26.569414944866434,
+        "max_pitch_deg": 1.8423991725126316,
+        "seconds": 5.149999999999655
+      },
+      {
+        "seed": 1016,
+        "success": true,
+        "fell": false,
+        "distance": 0.08836068396875124,
+        "return": 22.809246347597774,
+        "max_pitch_deg": 1.8103729636821198,
+        "seconds": 4.549999999999721
+      },
+      {
+        "seed": 1017,
+        "success": true,
+        "fell": false,
+        "distance": 0.052520255638507325,
+        "return": 31.122341393258544,
+        "max_pitch_deg": 1.357951434613525,
+        "seconds": 6.699999999999484
+      },
+      {
+        "seed": 1018,
+        "success": true,
+        "fell": false,
+        "distance": 0.09366888876989715,
+        "return": 29.413698033184755,
+        "max_pitch_deg": 1.8671173515702542,
+        "seconds": 5.599999999999605
+      },
+      {
+        "seed": 1019,
+        "success": true,
+        "fell": false,
+        "distance": 0.08608964398678924,
+        "return": 24.285680720463873,
+        "max_pitch_deg": 1.7963649933572372,
+        "seconds": 4.849999999999688
+      }
+    ]
+  },
+  "after_ppo": {
+    "episodes": 20,
+    "successes": 17,
+    "falls": 0,
+    "mean_return": 25.175247315182894,
+    "mean_distance": 0.03228761732492681,
+    "runs": [
+      {
+        "seed": 1000,
+        "success": true,
+        "fell": false,
+        "distance": 0.01915642706101461,
+        "return": 25.702864747787537,
+        "max_pitch_deg": 1.7764656272459804,
+        "seconds": 4.849999999999688
+      },
+      {
+        "seed": 1001,
+        "success": true,
+        "fell": false,
+        "distance": 0.07305973878231747,
+        "return": 19.71542722812261,
+        "max_pitch_deg": 1.0594376139580812,
+        "seconds": 6.799999999999473
+      },
+      {
+        "seed": 1002,
+        "success": true,
+        "fell": false,
+        "distance": 0.02488631964639264,
+        "return": 29.097142267260224,
+        "max_pitch_deg": 1.7818974630474538,
+        "seconds": 5.549999999999611
+      },
+      {
+        "seed": 1003,
+        "success": true,
+        "fell": false,
+        "distance": 0.03653637121405702,
+        "return": 25.466800715489654,
+        "max_pitch_deg": 1.4626849608256651,
+        "seconds": 5.299999999999638
+      },
+      {
+        "seed": 1004,
+        "success": true,
+        "fell": false,
+        "distance": 0.06986871160839185,
+        "return": 19.658916172436697,
+        "max_pitch_deg": 1.044228029878064,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 1005,
+        "success": false,
+        "fell": false,
+        "distance": 0.05130378332699477,
+        "return": 19.364251424056473,
+        "max_pitch_deg": 1.6029867722761273,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 1006,
+        "success": true,
+        "fell": false,
+        "distance": 0.0231422181312679,
+        "return": 23.236350303729402,
+        "max_pitch_deg": 1.7567059695940719,
+        "seconds": 4.799999999999693
+      },
+      {
+        "seed": 1007,
+        "success": false,
+        "fell": false,
+        "distance": 0.03300115274608814,
+        "return": 24.89271883063718,
+        "max_pitch_deg": 1.3364586981466293,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 1008,
+        "success": false,
+        "fell": false,
+        "distance": 0.028848173433221658,
+        "return": 20.43853532661576,
+        "max_pitch_deg": 1.287064228928084,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 1009,
+        "success": true,
+        "fell": false,
+        "distance": 0.05086170678967199,
+        "return": 19.629882612505796,
+        "max_pitch_deg": 1.811383463987503,
+        "seconds": 3.9499999999997866
+      },
+      {
+        "seed": 1010,
+        "success": true,
+        "fell": false,
+        "distance": 0.017368296093287463,
+        "return": 31.54505894163831,
+        "max_pitch_deg": 1.8564081663645144,
+        "seconds": 5.699999999999594
+      },
+      {
+        "seed": 1011,
+        "success": true,
+        "fell": false,
+        "distance": 0.028279983494655422,
+        "return": 22.170644115397792,
+        "max_pitch_deg": 1.7766640552222008,
+        "seconds": 4.349999999999743
+      },
+      {
+        "seed": 1012,
+        "success": true,
+        "fell": false,
+        "distance": 0.039437715959391655,
+        "return": 22.951045778612773,
+        "max_pitch_deg": 1.1618615608368432,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 1013,
+        "success": true,
+        "fell": false,
+        "distance": 0.036982875253332215,
+        "return": 27.21754823208265,
+        "max_pitch_deg": 0.7900129220953633,
+        "seconds": 6.799999999999473
+      },
+      {
+        "seed": 1014,
+        "success": true,
+        "fell": false,
+        "distance": 0.012765401781507153,
+        "return": 31.386217659718618,
+        "max_pitch_deg": 1.853016454647358,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 1015,
+        "success": true,
+        "fell": false,
+        "distance": 0.01368700096043606,
+        "return": 28.037477465657098,
+        "max_pitch_deg": 1.7878605465147241,
+        "seconds": 5.149999999999655
+      },
+      {
+        "seed": 1016,
+        "success": true,
+        "fell": false,
+        "distance": 0.022808980288977772,
+        "return": 24.089003444748815,
+        "max_pitch_deg": 1.8418562938041434,
+        "seconds": 4.64999999999971
+      },
+      {
+        "seed": 1017,
+        "success": true,
+        "fell": false,
+        "distance": 0.019256962008952223,
+        "return": 32.520649411232014,
+        "max_pitch_deg": 1.2390918441787255,
+        "seconds": 6.849999999999468
+      },
+      {
+        "seed": 1018,
+        "success": true,
+        "fell": false,
+        "distance": 0.01888291009473173,
+        "return": 30.897556570205793,
+        "max_pitch_deg": 1.8322068149485227,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 1019,
+        "success": true,
+        "fell": false,
+        "distance": 0.025617617823846313,
+        "return": 25.486855055722692,
+        "max_pitch_deg": 1.8347213956354382,
+        "seconds": 4.899999999999682
+      }
+    ]
+  },
+  "elapsed_seconds": 237.9839999997057,
+  "torch": "2.14.0+cpu",
+  "limitations": [
+    "One training seed",
+    "Privileged MuJoCo state",
+    "Obstacle-free point goals",
+    "PD stabilization",
+    "Finite graph propagation, not biological spikes or cross-step neural memory"
+  ]
+}

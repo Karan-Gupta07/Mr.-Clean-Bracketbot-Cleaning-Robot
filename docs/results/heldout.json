@@ -1,0 +1,758 @@
+{
+  "out\\rl\\connectome_final\\imitation.zip": {
+    "episodes": 20,
+    "successes": 20,
+    "falls": 0,
+    "mean_return": 25.517093077401377,
+    "mean_distance": 0.0711951571911197,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": true,
+        "fell": false,
+        "distance": 0.03758351280478864,
+        "return": 20.53674122112966,
+        "max_pitch_deg": 1.6561495595806703,
+        "seconds": 4.849999999999688
+      },
+      {
+        "seed": 2001,
+        "success": true,
+        "fell": false,
+        "distance": 0.07596459371939322,
+        "return": 24.296154021579767,
+        "max_pitch_deg": 1.3428561296771215,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 2002,
+        "success": true,
+        "fell": false,
+        "distance": 0.03270839943490978,
+        "return": 28.06657939984948,
+        "max_pitch_deg": 1.2527311812800168,
+        "seconds": 7.6499999999993795
+      },
+      {
+        "seed": 2003,
+        "success": true,
+        "fell": false,
+        "distance": 0.034465510060095766,
+        "return": 27.33244488923468,
+        "max_pitch_deg": 1.3291680433637254,
+        "seconds": 6.849999999999468
+      },
+      {
+        "seed": 2004,
+        "success": true,
+        "fell": false,
+        "distance": 0.07917343818115685,
+        "return": 30.132404601677685,
+        "max_pitch_deg": 1.6902628179977661,
+        "seconds": 5.999999999999561
+      },
+      {
+        "seed": 2005,
+        "success": true,
+        "fell": false,
+        "distance": 0.09424451674878323,
+        "return": 28.54825957725707,
+        "max_pitch_deg": 1.8672683152141143,
+        "seconds": 5.449999999999622
+      },
+      {
+        "seed": 2006,
+        "success": true,
+        "fell": false,
+        "distance": 0.07627345020562096,
+        "return": 22.344344360108582,
+        "max_pitch_deg": 1.7887794722026829,
+        "seconds": 4.549999999999721
+      },
+      {
+        "seed": 2007,
+        "success": true,
+        "fell": false,
+        "distance": 0.08392826177806953,
+        "return": 21.11323068155272,
+        "max_pitch_deg": 1.793523446594995,
+        "seconds": 4.2999999999997485
+      },
+      {
+        "seed": 2008,
+        "success": true,
+        "fell": false,
+        "distance": 0.07646566522312087,
+        "return": 29.367700117211776,
+        "max_pitch_deg": 1.7536386157771529,
+        "seconds": 5.699999999999594
+      },
+      {
+        "seed": 2009,
+        "success": true,
+        "fell": false,
+        "distance": 0.09606490951198336,
+        "return": 30.88716864824909,
+        "max_pitch_deg": 1.8649164029656156,
+        "seconds": 5.749999999999589
+      },
+      {
+        "seed": 2010,
+        "success": true,
+        "fell": false,
+        "distance": 0.06669983111496892,
+        "return": 22.7461461023876,
+        "max_pitch_deg": 1.787046153053437,
+        "seconds": 4.64999999999971
+      },
+      {
+        "seed": 2011,
+        "success": true,
+        "fell": false,
+        "distance": 0.07253742948877825,
+        "return": 27.182257671853506,
+        "max_pitch_deg": 1.487767523098009,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 2012,
+        "success": true,
+        "fell": false,
+        "distance": 0.08086164148948953,
+        "return": 22.163096944930107,
+        "max_pitch_deg": 1.485467801705229,
+        "seconds": 6.299999999999528
+      },
+      {
+        "seed": 2013,
+        "success": true,
+        "fell": false,
+        "distance": 0.0827965098966105,
+        "return": 20.712500415176113,
+        "max_pitch_deg": 1.524941377624221,
+        "seconds": 4.599999999999715
+      },
+      {
+        "seed": 2014,
+        "success": true,
+        "fell": false,
+        "distance": 0.03038574189065702,
+        "return": 23.585649664370226,
+        "max_pitch_deg": 1.5741770619287765,
+        "seconds": 5.299999999999638
+      },
+      {
+        "seed": 2015,
+        "success": true,
+        "fell": false,
+        "distance": 0.07220109505963883,
+        "return": 28.281598206861283,
+        "max_pitch_deg": 1.4201543390515194,
+        "seconds": 5.949999999999567
+      },
+      {
+        "seed": 2016,
+        "success": true,
+        "fell": false,
+        "distance": 0.07670629443255343,
+        "return": 21.726158891472004,
+        "max_pitch_deg": 1.6312660089448425,
+        "seconds": 4.449999999999732
+      },
+      {
+        "seed": 2017,
+        "success": true,
+        "fell": false,
+        "distance": 0.09499861253111094,
+        "return": 28.67385411111448,
+        "max_pitch_deg": 1.8668397341922998,
+        "seconds": 5.449999999999622
+      },
+      {
+        "seed": 2018,
+        "success": true,
+        "fell": false,
+        "distance": 0.072220773946449,
+        "return": 30.00821887755375,
+        "max_pitch_deg": 1.3167121883235353,
+        "seconds": 6.399999999999517
+      },
+      {
+        "seed": 2019,
+        "success": true,
+        "fell": false,
+        "distance": 0.08762295630421538,
+        "return": 22.63735314445795,
+        "max_pitch_deg": 1.8089435495390667,
+        "seconds": 4.549999999999721
+      }
+    ]
+  },
+  "out\\rl\\connectome_final\\policy.zip": {
+    "episodes": 20,
+    "successes": 17,
+    "falls": 0,
+    "mean_return": 25.836065711417508,
+    "mean_distance": 0.030925904764836965,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": true,
+        "fell": false,
+        "distance": 0.03179536898502953,
+        "return": 20.597201623164146,
+        "max_pitch_deg": 1.5908457154858826,
+        "seconds": 4.599999999999715
+      },
+      {
+        "seed": 2001,
+        "success": true,
+        "fell": false,
+        "distance": 0.0404862174517616,
+        "return": 25.024138070341372,
+        "max_pitch_deg": 1.1631161374836523,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 2002,
+        "success": false,
+        "fell": false,
+        "distance": 0.04205453252504987,
+        "return": 23.541790512001825,
+        "max_pitch_deg": 1.3777941835144396,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 2003,
+        "success": false,
+        "fell": false,
+        "distance": 0.0518085349953938,
+        "return": 24.043814585174456,
+        "max_pitch_deg": 1.354749636395425,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 2004,
+        "success": true,
+        "fell": false,
+        "distance": 0.027091110532540534,
+        "return": 31.189826289400337,
+        "max_pitch_deg": 1.6723058413636176,
+        "seconds": 5.999999999999561
+      },
+      {
+        "seed": 2005,
+        "success": true,
+        "fell": false,
+        "distance": 0.018095447970341745,
+        "return": 30.059442585095304,
+        "max_pitch_deg": 1.8262731895850417,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 2006,
+        "success": true,
+        "fell": false,
+        "distance": 0.023552082713089183,
+        "return": 23.443898144878702,
+        "max_pitch_deg": 1.7776745383001717,
+        "seconds": 4.499999999999726
+      },
+      {
+        "seed": 2007,
+        "success": true,
+        "fell": false,
+        "distance": 0.02431364434986263,
+        "return": 22.303070834839353,
+        "max_pitch_deg": 1.8361762274147775,
+        "seconds": 4.349999999999743
+      },
+      {
+        "seed": 2008,
+        "success": true,
+        "fell": false,
+        "distance": 0.015405595769840895,
+        "return": 30.651488678895866,
+        "max_pitch_deg": 1.6722753901907643,
+        "seconds": 5.599999999999605
+      },
+      {
+        "seed": 2009,
+        "success": true,
+        "fell": false,
+        "distance": 0.012141380385281668,
+        "return": 32.52640256333226,
+        "max_pitch_deg": 1.8589839007271307,
+        "seconds": 5.849999999999578
+      },
+      {
+        "seed": 2010,
+        "success": true,
+        "fell": false,
+        "distance": 0.025001671301723195,
+        "return": 23.648143354076133,
+        "max_pitch_deg": 1.767884684104748,
+        "seconds": 4.549999999999721
+      },
+      {
+        "seed": 2011,
+        "success": true,
+        "fell": false,
+        "distance": 0.03247709147147527,
+        "return": 27.976157316269816,
+        "max_pitch_deg": 1.513574731585522,
+        "seconds": 5.699999999999594
+      },
+      {
+        "seed": 2012,
+        "success": true,
+        "fell": false,
+        "distance": 0.04875316601324439,
+        "return": 22.820652264937067,
+        "max_pitch_deg": 0.9482290238473382,
+        "seconds": 6.299999999999528
+      },
+      {
+        "seed": 2013,
+        "success": true,
+        "fell": false,
+        "distance": 0.04933673800472119,
+        "return": 21.394378193704892,
+        "max_pitch_deg": 1.3278144367081768,
+        "seconds": 4.599999999999715
+      },
+      {
+        "seed": 2014,
+        "success": false,
+        "fell": false,
+        "distance": 0.03660932179012494,
+        "return": 20.954996864705357,
+        "max_pitch_deg": 1.4675575340039002,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 2015,
+        "success": true,
+        "fell": false,
+        "distance": 0.03212462131220144,
+        "return": 29.07771761145092,
+        "max_pitch_deg": 1.380533371179032,
+        "seconds": 5.999999999999561
+      },
+      {
+        "seed": 2016,
+        "success": true,
+        "fell": false,
+        "distance": 0.03652112547331802,
+        "return": 22.51811645730516,
+        "max_pitch_deg": 1.801506206675726,
+        "seconds": 4.499999999999726
+      },
+      {
+        "seed": 2017,
+        "success": true,
+        "fell": false,
+        "distance": 0.016415020248361004,
+        "return": 30.233289325605867,
+        "max_pitch_deg": 1.8331042222893164,
+        "seconds": 5.499999999999616
+      },
+      {
+        "seed": 2018,
+        "success": true,
+        "fell": false,
+        "distance": 0.03111645828443476,
+        "return": 30.80088276095319,
+        "max_pitch_deg": 1.1647717721036357,
+        "seconds": 6.499999999999506
+      },
+      {
+        "seed": 2019,
+        "success": true,
+        "fell": false,
+        "distance": 0.023418965718943675,
+        "return": 23.915906192218102,
+        "max_pitch_deg": 1.8451873558132383,
+        "seconds": 4.599999999999715
+      }
+    ]
+  },
+  "out\\rl\\mlp_final\\imitation.zip": {
+    "episodes": 20,
+    "successes": 18,
+    "falls": 0,
+    "mean_return": 23.44931683582484,
+    "mean_distance": 0.08718833396477882,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": true,
+        "fell": false,
+        "distance": 0.07505239059247654,
+        "return": 17.87826647646173,
+        "max_pitch_deg": 1.3870546548556084,
+        "seconds": 5.899999999999572
+      },
+      {
+        "seed": 2001,
+        "success": true,
+        "fell": false,
+        "distance": 0.04829040919297426,
+        "return": 24.586586019782516,
+        "max_pitch_deg": 1.395926298900457,
+        "seconds": 6.09999999999955
+      },
+      {
+        "seed": 2002,
+        "success": true,
+        "fell": false,
+        "distance": 0.06546361012758549,
+        "return": 25.489984271267183,
+        "max_pitch_deg": 0.6597129784343524,
+        "seconds": 8.749999999999591
+      },
+      {
+        "seed": 2003,
+        "success": true,
+        "fell": false,
+        "distance": 0.0661799582226728,
+        "return": 25.700183105048282,
+        "max_pitch_deg": 0.9169695944812069,
+        "seconds": 8.099999999999374
+      },
+      {
+        "seed": 2004,
+        "success": true,
+        "fell": false,
+        "distance": 0.11701761774518094,
+        "return": 29.481223955132577,
+        "max_pitch_deg": 1.8622084167806465,
+        "seconds": 7.7499999999993685
+      },
+      {
+        "seed": 2005,
+        "success": true,
+        "fell": false,
+        "distance": 0.11449932567853033,
+        "return": 27.527927853449835,
+        "max_pitch_deg": 1.8672396577252859,
+        "seconds": 7.4499999999994015
+      },
+      {
+        "seed": 2006,
+        "success": true,
+        "fell": false,
+        "distance": 0.10628265248062607,
+        "return": 20.826832775299444,
+        "max_pitch_deg": 1.8306477996126185,
+        "seconds": 6.349999999999523
+      },
+      {
+        "seed": 2007,
+        "success": false,
+        "fell": false,
+        "distance": 0.07473036472557536,
+        "return": 8.404792038970983,
+        "max_pitch_deg": 1.786376959219802,
+        "seconds": 15.000000000001679
+      },
+      {
+        "seed": 2008,
+        "success": true,
+        "fell": false,
+        "distance": 0.09701104221266477,
+        "return": 28.07762663669252,
+        "max_pitch_deg": 1.8632692049021948,
+        "seconds": 7.4499999999994015
+      },
+      {
+        "seed": 2009,
+        "success": true,
+        "fell": false,
+        "distance": 0.10694604331778558,
+        "return": 29.66123560681354,
+        "max_pitch_deg": 1.8655959541176332,
+        "seconds": 7.7499999999993685
+      },
+      {
+        "seed": 2010,
+        "success": true,
+        "fell": false,
+        "distance": 0.10157227760580317,
+        "return": 21.183956095001847,
+        "max_pitch_deg": 1.8163472758767663,
+        "seconds": 6.349999999999523
+      },
+      {
+        "seed": 2011,
+        "success": true,
+        "fell": false,
+        "distance": 0.09494653352217403,
+        "return": 27.411603072658032,
+        "max_pitch_deg": 1.6457654121762009,
+        "seconds": 7.499999999999396
+      },
+      {
+        "seed": 2012,
+        "success": true,
+        "fell": false,
+        "distance": 0.0761021067597071,
+        "return": 22.006108857880445,
+        "max_pitch_deg": 0.7575082079511269,
+        "seconds": 6.899999999999462
+      },
+      {
+        "seed": 2013,
+        "success": true,
+        "fell": false,
+        "distance": 0.05267627101722326,
+        "return": 21.031515863344165,
+        "max_pitch_deg": 1.4084584113650098,
+        "seconds": 5.249999999999644
+      },
+      {
+        "seed": 2014,
+        "success": true,
+        "fell": false,
+        "distance": 0.06880382299805304,
+        "return": 21.06423322080599,
+        "max_pitch_deg": 1.4452003059013723,
+        "seconds": 6.449999999999512
+      },
+      {
+        "seed": 2015,
+        "success": true,
+        "fell": false,
+        "distance": 0.09413432027009047,
+        "return": 28.54647518803573,
+        "max_pitch_deg": 1.6237311542476953,
+        "seconds": 7.7499999999993685
+      },
+      {
+        "seed": 2016,
+        "success": true,
+        "fell": false,
+        "distance": 0.0925641794994383,
+        "return": 21.99587218028094,
+        "max_pitch_deg": 1.646745178251313,
+        "seconds": 6.499999999999506
+      },
+      {
+        "seed": 2017,
+        "success": true,
+        "fell": false,
+        "distance": 0.1104825095955531,
+        "return": 27.352018640427218,
+        "max_pitch_deg": 1.8671197872002212,
+        "seconds": 7.4499999999994015
+      },
+      {
+        "seed": 2018,
+        "success": true,
+        "fell": false,
+        "distance": 0.09264494570809646,
+        "return": 30.30207502234734,
+        "max_pitch_deg": 1.5641248014996167,
+        "seconds": 8.199999999999408
+      },
+      {
+        "seed": 2019,
+        "success": false,
+        "fell": false,
+        "distance": 0.08836629802336533,
+        "return": 10.45781983679647,
+        "max_pitch_deg": 1.8654593798112158,
+        "seconds": 15.000000000001679
+      }
+    ]
+  },
+  "out\\rl\\mlp_final\\policy.zip": {
+    "episodes": 20,
+    "successes": 20,
+    "falls": 0,
+    "mean_return": 26.345083494608815,
+    "mean_distance": 0.01665404435945097,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": true,
+        "fell": false,
+        "distance": 0.02082739576481087,
+        "return": 19.7702567727978,
+        "max_pitch_deg": 1.5064723258360313,
+        "seconds": 4.2999999999997485
+      },
+      {
+        "seed": 2001,
+        "success": true,
+        "fell": false,
+        "distance": 0.030321985716883878,
+        "return": 25.00257391584857,
+        "max_pitch_deg": 1.2646424460363284,
+        "seconds": 5.999999999999561
+      },
+      {
+        "seed": 2002,
+        "success": true,
+        "fell": false,
+        "distance": 0.011636400007801546,
+        "return": 27.26709435671833,
+        "max_pitch_deg": 0.7048698229859836,
+        "seconds": 7.349999999999413
+      },
+      {
+        "seed": 2003,
+        "success": true,
+        "fell": false,
+        "distance": 0.012387711474657817,
+        "return": 27.48020373172978,
+        "max_pitch_deg": 0.8399967945149936,
+        "seconds": 6.699999999999484
+      },
+      {
+        "seed": 2004,
+        "success": true,
+        "fell": false,
+        "distance": 0.00978511911370564,
+        "return": 31.506334215766735,
+        "max_pitch_deg": 1.6595833046726716,
+        "seconds": 6.09999999999955
+      },
+      {
+        "seed": 2005,
+        "success": true,
+        "fell": false,
+        "distance": 0.01178330348403293,
+        "return": 30.13054029096381,
+        "max_pitch_deg": 1.867204484046454,
+        "seconds": 5.6499999999996
+      },
+      {
+        "seed": 2006,
+        "success": true,
+        "fell": false,
+        "distance": 0.007070232053239664,
+        "return": 23.70537210728583,
+        "max_pitch_deg": 1.8038471411387447,
+        "seconds": 4.64999999999971
+      },
+      {
+        "seed": 2007,
+        "success": true,
+        "fell": false,
+        "distance": 0.006702031011243875,
+        "return": 22.61373993455507,
+        "max_pitch_deg": 1.785683562875217,
+        "seconds": 4.449999999999732
+      },
+      {
+        "seed": 2008,
+        "success": true,
+        "fell": false,
+        "distance": 0.011551147965362094,
+        "return": 30.644638272285505,
+        "max_pitch_deg": 1.8176850265930076,
+        "seconds": 5.799999999999583
+      },
+      {
+        "seed": 2009,
+        "success": true,
+        "fell": false,
+        "distance": 0.01193505871852876,
+        "return": 32.45503364155941,
+        "max_pitch_deg": 1.8655900999577835,
+        "seconds": 6.049999999999556
+      },
+      {
+        "seed": 2010,
+        "success": true,
+        "fell": false,
+        "distance": 0.006897756945085197,
+        "return": 23.942624035501595,
+        "max_pitch_deg": 1.7885233076606737,
+        "seconds": 4.699999999999704
+      },
+      {
+        "seed": 2011,
+        "success": true,
+        "fell": false,
+        "distance": 0.01228808571677613,
+        "return": 28.278803517847813,
+        "max_pitch_deg": 1.4722186375372943,
+        "seconds": 5.949999999999567
+      },
+      {
+        "seed": 2012,
+        "success": true,
+        "fell": false,
+        "distance": 0.06329745719215982,
+        "return": 22.262520315166746,
+        "max_pitch_deg": 0.6954068230779069,
+        "seconds": 6.899999999999462
+      },
+      {
+        "seed": 2013,
+        "success": true,
+        "fell": false,
+        "distance": 0.040971922803811026,
+        "return": 21.31806652570663,
+        "max_pitch_deg": 1.3709387941373379,
+        "seconds": 5.149999999999655
+      },
+      {
+        "seed": 2014,
+        "success": true,
+        "fell": false,
+        "distance": 0.01816449496460465,
+        "return": 22.78270426348105,
+        "max_pitch_deg": 1.501299357362799,
+        "seconds": 5.049999999999666
+      },
+      {
+        "seed": 2015,
+        "success": true,
+        "fell": false,
+        "distance": 0.012100602425021416,
+        "return": 29.374682949433833,
+        "max_pitch_deg": 1.411849927926713,
+        "seconds": 6.249999999999534
+      },
+      {
+        "seed": 2016,
+        "success": true,
+        "fell": false,
+        "distance": 0.013467437888633887,
+        "return": 22.832613287855064,
+        "max_pitch_deg": 1.607310392978306,
+        "seconds": 4.849999999999688
+      },
+      {
+        "seed": 2017,
+        "success": true,
+        "fell": false,
+        "distance": 0.01129314141118688,
+        "return": 30.257376524916694,
+        "max_pitch_deg": 1.8671414928114933,
+        "seconds": 5.699999999999594
+      },
+      {
+        "seed": 2018,
+        "success": true,
+        "fell": false,
+        "distance": 0.011779809701170551,
+        "return": 31.105692567036385,
+        "max_pitch_deg": 1.3064071605994965,
+        "seconds": 6.699999999999484
+      },
+      {
+        "seed": 2019,
+        "success": true,
+        "fell": false,
+        "distance": 0.00881979283030273,
+        "return": 24.170798665719637,
+        "max_pitch_deg": 1.8204647050936982,
+        "seconds": 4.699999999999704
+      }
+    ]
+  }
+}

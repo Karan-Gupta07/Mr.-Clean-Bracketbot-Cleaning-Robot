@@ -34,6 +34,22 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 
 ## Setup
 
+### Fly-connectivity controller and demo
+
+A separate RL prototype now drives the BracketBot toward point goals using a
+512-neuron graph built from measured FlyWire connections. It includes imitation
+and PPO training, an MLP comparison, and a synchronized robot/neuron replay.
+The trained graph reached 17 of 20 separate evaluation goals with no falls;
+the MLP reached 20 of 20. This is a simulator-state pilot, with PD balance, not
+SLAM or a biological brain simulation. The full graph is prepared but untrained.
+
+See [setup, demo commands, and measured results](docs/brain_demo.md). On the
+development machine, open `out/demo/index.html` for the generated interactive
+demo. Generated data/checkpoints stay in ignored `out/` and must be regenerated
+on a fresh checkout. The linked guide includes the tested Windows commands.
+
+### Base simulation
+
 You need macOS (Apple Silicon is fine) and Python 3.10 or newer.
 
 ```bash

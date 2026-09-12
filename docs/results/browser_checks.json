@@ -1,0 +1,11 @@
+{
+  "restarted": true,
+  "paused": true,
+  "scrubbed": true,
+  "frames": 154,
+  "nodes": 512,
+  "terminalSuccess": true,
+  "finiteActivity": true,
+  "robotLoaded": true,
+  "nonemptyCanvas": true
+}

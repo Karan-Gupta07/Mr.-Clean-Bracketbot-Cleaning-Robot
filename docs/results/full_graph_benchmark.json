@@ -1,0 +1,19 @@
+{
+  "graph": "out/flywire/graph_full.npz",
+  "graph_sha256": "60eb9669cf43038d2ee774387fd7f7483392b645ae7d9ccc4cf7e38ac730ec06",
+  "neurons": 139255,
+  "edges": 2700513,
+  "trainable_feature_parameters": 2117656,
+  "batch_size": 1,
+  "cpu_threads": 2,
+  "rounds": 4,
+  "width": 4,
+  "forward_ms": 1205.9879399836063,
+  "backward_ms": 1358.8233400136232,
+  "finite_output": true,
+  "input_gradient_norm": 0.014444295316934586,
+  "gain_gradient_norm": 0.0014882462564855814,
+  "torch": "2.14.0+cpu",
+  "trained": false,
+  "note": "Random initialized feature extractor only; excludes policy head and physics. Batch 1 does not establish training throughput."
+}
