@@ -65,6 +65,16 @@ pip install -r requirements.txt
 # All outputs are committed, so this is optional.
 .venv/bin/python scripts/build_mjcf.py
 .venv/bin/python scripts/build_room.py
+
+# Check the arm IK: recover random reachable poses cold, then reach every object in the room.
+.venv/bin/python scripts/validate_ik.py
+
+# Check how close the arm gets to the robot's own mast and base along the grasp paths.
+.venv/bin/python scripts/check_arm_clearance.py
+
+# Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
+docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
+    python3 src/rlbot/hybrid_ik.py /path/to/libhybrid_ik_lib.so models/bracketbot/chopped_urdf_v2.urdf right_eef
 ```
 
 Use `mjpython`, not `python`, for anything that opens a window. On macOS the window must be made on the main thread, and `mjpython` takes care of that. Plain `python` will fail with `RuntimeError: Caught an unknown exception!`.
@@ -84,11 +94,14 @@ scripts/build_room.py       Writes the room, checks the robot fits in it, and ch
 scripts/evaluate.py         Headless balance test with an optional shove.
 scripts/balance.py          Live viewer.
 scripts/check_grasp.py      Tries to pick up each object in the room.
+scripts/validate_ik.py      Proves the arm IK: round-trip on random poses, then every object in the room.
+scripts/check_arm_clearance.py  Measures arm-to-chassis clearance along the grasp paths (the sim filters self-collision).
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
 src/rlbot/arm.py            Arm inverse kinematics and the grasp sequence.
 src/rlbot/room.py           What is in the room and where. Shared by the builder and the grasp test.
+src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' libhybrid_ik_lib.so, set up the way their daemon uses it.
 ```
 
 ## How the robot model was fixed
