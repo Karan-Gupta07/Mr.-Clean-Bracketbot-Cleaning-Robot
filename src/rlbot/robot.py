@@ -9,7 +9,11 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "balancer.xml"
+MODELS = Path(__file__).resolve().parents[2] / "models"
+
+TOY = MODELS / "balancer.xml"                    # first-principles sanity model
+BRACKETBOT = MODELS / "bracketbot_scene.xml"     # the real robot, built from the URDF
+ROOM = MODELS / "room_scene.xml"                 # the robot in a room, with things to pick up
 
 
 @dataclass
@@ -26,15 +30,35 @@ class State:
 
 
 class Balancer:
-    def __init__(self, model_path: Path | str = MODEL_PATH):
+    """Any two-wheeled model exposing wheel_left / wheel_right joints, motors of
+    the same name, and gyro / vel_left / vel_right sensors."""
+
+    def __init__(
+        self,
+        model_path: Path | str = TOY,
+        chassis: str = "chassis",
+        keyframe: str = "tipped",
+    ):
         self.model = mujoco.MjModel.from_xml_path(str(model_path))
         self.data = mujoco.MjData(self.model)
+        self.chassis = chassis
+        self.default_keyframe = keyframe
         self._imu = self.model.sensor("gyro").adr[0]
         self._vel_l = self.model.sensor("vel_left").adr[0]
         self._vel_r = self.model.sensor("vel_right").adr[0]
+        self._wheels = [
+            self.model.actuator(f"wheel_{s}").id for s in ("left", "right")
+        ]
         self.reset()
 
-    def reset(self, keyframe: str | None = "tipped") -> State:
+    @classmethod
+    def bracketbot(cls, keyframe: str = "tipped") -> "Balancer":
+        """The BracketBot built from chopped_urdf_v2 by scripts/build_mjcf.py."""
+        return cls(BRACKETBOT, chassis="root", keyframe=keyframe)
+
+    def reset(self, keyframe: str | None = ...) -> State:  # type: ignore[assignment]
+        if keyframe is ...:
+            keyframe = self.default_keyframe
         mujoco.mj_resetData(self.model, self.data)
         if keyframe is not None:
             mujoco.mj_resetDataKeyframe(
@@ -48,7 +72,7 @@ class Balancer:
         return self.model.opt.timestep
 
     def state(self) -> State:
-        d, chassis = self.data, self.data.body("chassis")
+        d, chassis = self.data, self.data.body(self.chassis)
         R = chassis.xmat.reshape(3, 3)
 
         # body +z tilted within the world xz-plane -> pitch about the wheel axis
@@ -72,8 +96,11 @@ class Balancer:
         )
 
     def step(self, torque_left: float, torque_right: float) -> State:
-        lo, hi = self.model.actuator_ctrlrange.T
-        self.data.ctrl[:] = np.clip([torque_left, torque_right], lo, hi)
+        """Drive the wheels.  Any other actuators (the arms) hold whatever
+        command they were last given."""
+        for act, torque in zip(self._wheels, (torque_left, torque_right)):
+            lo, hi = self.model.actuator_ctrlrange[act]
+            self.data.ctrl[act] = min(max(torque, lo), hi)
         mujoco.mj_step(self.model, self.data)
         return self.state()
 

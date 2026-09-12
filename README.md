@@ -18,21 +18,18 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 
 | Step | Status |
 | --- | --- |
-| 1. BracketBot in sim | In progress. A simple two-wheeled balancer works on `main`. The full BracketBot model is in pull request #1. |
-| 2. SLAM navigation | Not started. |
-| 3. VLA pick and place | Not started. |
+| 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
+| 2. SLAM navigation | Started. There is a room with walls to map and a lidar mount on the robot. No SLAM code yet. |
+| 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. 1 of 10 objects lifts so far. No VLA model yet. |
 
 ### What works today
 
-- A small two-wheeled robot model (`models/balancer.xml`) that balances using a hand-tuned PD controller.
-- A headless test that checks if the robot stays up for 20 seconds and how far it drifts.
-- A live viewer so you can watch the robot balance.
-
-### What is in pull request #1
-
-- The real BracketBot model, converted from its URDF file into MuJoCo format.
-- Wheels that actually spin, collision shapes so the robot can stand on the floor, and fixed mass numbers.
-- A balance controller tuned for the bigger, heavier robot.
+- **The BracketBot model.** It was converted from a URDF file into MuJoCo format by `scripts/build_mjcf.py`. The wheels spin, the robot can stand on the floor, and the mass numbers are fixed. See "How the robot model was fixed" below.
+- **Balancing.** A hand-tuned PD controller keeps the robot upright for as long as you like. It survives a 300 N shove.
+- **A room to work in.** Three tables, ten objects to pick up, and walls to map. Built by `scripts/build_room.py`.
+- **Arm control.** Inverse kinematics (IK) moves each 7-joint arm to a target pose. The arms and mast now have collision shapes, so they cannot pass through each other.
+- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along.
+- **A small toy balancer.** `models/balancer.xml` is a simple two-wheeled robot. It loads in a second and is a quick way to catch controller bugs without loading the full robot.
 
 ## Setup
 
@@ -47,11 +44,24 @@ pip install -r requirements.txt
 ## How to run
 
 ```bash
-# Headless test. Does the robot stay up? Does it drift?
+# Headless balance test. Does the robot stay up? Does it drift?
 .venv/bin/python scripts/evaluate.py
+
+# Same test, but shove the robot with 300 N halfway through.
+.venv/bin/python scripts/evaluate.py --push 300
 
 # Live viewer. Watch the robot balance in real time.
 .venv/bin/mjpython scripts/balance.py
+
+# Try to pick up every object in the room.
+.venv/bin/python scripts/check_grasp.py
+
+# Same, but with the robot balancing on its wheels instead of bolted to the floor.
+.venv/bin/python scripts/check_grasp.py --balance
+
+# Rebuild the robot model from the URDF, or rebuild the room. Both outputs are committed, so this is optional.
+.venv/bin/python scripts/build_mjcf.py
+.venv/bin/python scripts/build_room.py
 ```
 
 Use `mjpython`, not `python`, for anything that opens a window. On macOS the window must be made on the main thread, and `mjpython` takes care of that. Plain `python` will fail with `RuntimeError: Caught an unknown exception!`.
@@ -59,22 +69,59 @@ Use `mjpython`, not `python`, for anything that opens a window. On macOS the win
 ## Folder layout
 
 ```
-models/       Robot and scene files for MuJoCo (XML format)
-scripts/      Things you run: evaluate.py (test), balance.py (viewer)
-src/rlbot/    The Python code: load the robot, read its state, step the sim, control it
+models/bracketbot/          The original URDF and its 50 mesh files. Never edited by hand.
+models/bracketbot.xml       The robot in MuJoCo format. Made by build_mjcf.py.
+models/bracketbot_scene.xml Floor, lights, and start poses. Use this to load just the robot.
+models/room_scene.xml       The room with tables and objects. Made by build_room.py.
+models/balancer.xml         The small toy balancer.
+
+scripts/build_mjcf.py       Turns the URDF into MuJoCo format and fixes what is broken.
+scripts/build_room.py       Writes the room and checks the arm can reach every object.
+scripts/evaluate.py         Headless balance test with an optional shove.
+scripts/balance.py          Live viewer.
+scripts/check_grasp.py      Tries to pick up each object in the room.
+
+src/rlbot/robot.py          Load the robot, read its state, step the sim.
+src/rlbot/control.py        The PD balance controller.
+src/rlbot/arm.py            Arm inverse kinematics and the grasp sequence.
+src/rlbot/room.py           What is in the room and where. Shared by the builder and the grasp test.
 ```
+
+## How the robot model was fixed
+
+The URDF we got is a shape export from Onshape, not a physics model. Six things had to be fixed before MuJoCo could simulate it. All fixes live in `scripts/build_mjcf.py`, so the original URDF stays untouched and every fix can be reviewed in one place.
+
+1. **The wheels could not spin.** They were welded on. The build script gives them real hinge joints.
+2. **Nothing could touch the floor.** There were no collision shapes at all. Each wheel now has one.
+3. **The mass numbers were wrong.** The whole robot weighed 0.29 kg in the file. Mass is now computed from the mesh volumes and scaled to a total.
+4. **One frame high up the tree was rotated.** Anything that moves a part has to account for it, or the part lands sideways.
+5. **Every joint had the same fake strength limit.** 10 N cannot hold the arm carriage up, so the arms slid down the rail. Limits are now sized from the real gravity load.
+6. **The second gripper finger was getting its own motor.** It should only follow the first finger. The extra motor was removed.
+
+## Numbers
+
+| | |
+| --- | --- |
+| Joints | 26 = 6 for the floating base + 2 wheels + 18 in the arms and grippers |
+| Motors | 2 wheel motors (±8 N·m) + 16 arm servos |
+| Sensors | Gyro, accelerometer, and orientation on the `imu` site. Wheel speeds. |
+| Mass | 12.0 kg, center of mass 0.63 m up. **This is a placeholder.** |
+| Balance gains | `kp_pitch=80, kd_pitch=15, kp_speed=0.010` |
+
+From a 3° lean, the robot settles in about 2 seconds and stays up. It recovers from a 300 N shove with 4.6° of lean, and from 450 N with 13.9°. A 600 N shove knocks it over.
 
 ## Plan for the next steps
 
 **Step 2, SLAM navigation**
 
-- Build a room scene in MuJoCo with walls, furniture, and objects on the floor.
-- Add a camera and a depth sensor (or a lidar) to the robot model.
-- Hook up a SLAM library so the robot can build a map and know where it is.
+- Add a lidar or depth camera to the lidar mount on the robot.
+- Hook up a SLAM library so the robot can build a map of the room and know where it is.
 - Add a path planner so the robot can drive to a target spot while it keeps its balance.
+- Add a "dock at a table" move so the robot ends up in a good spot for the arms to reach.
 
 **Step 3, VLA pick and place**
 
+- Get more than 1 of 10 objects to lift with the scripted grasp.
 - Add a wrist camera on each arm and a head camera.
 - Collect demo data in the sim: the robot picks up an object and puts it somewhere.
 - Fine-tune a VLA model on that data so it can follow text commands like "pick up the cup".
@@ -82,5 +129,6 @@ src/rlbot/    The Python code: load the robot, read its state, step the sim, con
 
 ## Things to know
 
-- The BracketBot's real weight and motor limits are not known yet. The sim uses placeholder numbers. We will need to weigh the robot and check the motor specs before trusting any force or torque numbers from the sim.
-- The simple balancer model is kept around on purpose. It loads in a second and is a quick way to catch bugs in the controller without loading the full robot.
+- **The robot's weight and motor limits are guesses.** The URDF does not say what the robot weighs. We will need to weigh the real robot and check the motor specs before trusting any force or torque numbers from the sim. Then re-run `build_mjcf.py --total-mass` and re-tune the gains.
+- **The arms have no damping or friction.** The URDF does not give any, and none was made up.
+- **The grasp test bolts the robot to the floor by default.** That way a failed grasp is the grasp's fault, not the balancer's. Use `--balance` to run it the honest way, on the wheels.
