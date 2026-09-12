@@ -1,4 +1,4 @@
-# Cleanup
+# RL-BOT
 
 A robot that cleans up a room, built and tested in simulation first.
 
