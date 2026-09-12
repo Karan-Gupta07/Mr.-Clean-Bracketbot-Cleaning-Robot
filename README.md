@@ -19,7 +19,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | Step | Status |
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
-| 2. SLAM navigation | Started. There is a room to map, with walls, a pillar and a divider, and a lidar mount on the robot. No SLAM code yet. |
+| 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Manual mapping works; Nav2 navigation is not implemented. |
 | 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. Nothing lifts reliably yet - the gripper model is the blocker, see below. No VLA model yet. |
 
 ### What works today
@@ -78,6 +78,83 @@ docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
 ```
 
 Use `mjpython`, not `python`, for anything that opens a window. On macOS the window must be made on the main thread, and `mjpython` takes care of that. Plain `python` will fail with `RuntimeError: Caught an unknown exception!`.
+
+## Local SLAM inputs (no ROS required)
+
+The local recorder and checks run independently of ROS. They produce sensor/odometry data, not maps. No additional packages or graphics context are needed for these commands. The ROS mapping entry point is described below.
+
+```bash
+.venv/bin/python scripts/check_slam_inputs.py
+.venv/bin/python scripts/record_slam_inputs.py --output out/slam_inputs.npz
+.venv/bin/python scripts/record_slam_inputs.py --push 300 --output out/slam_inputs_push.npz
+```
+
+The recorder balances the robot in the room, collecting wheel/IMU samples and odometry at the 500 Hz physics rate, and instantaneous 360-ray LiDAR scans at 10 Hz. Use `--seconds`, `--scan-hz`, `--beams`, and `--range-max` to adjust capture. It runs without a viewer, holds samples in memory until saving, and refuses to overwrite existing output.
+
+The NumPy archive can be opened with `np.load(path, allow_pickle=False)`. It contains:
+
+- `time`, `wheel_angles` (left/right, unwrapped radians), `imu_gyro` (rad/s), and `imu_accel` (m/s²).
+- `odom_pose` (x/y/yaw), `odom_twist` (forward speed/yaw rate), and `odom_roll_pitch`. The pose tracks the wheel-axle midpoint projected onto the ground, relative to its initial odom frame. Body axes are +x forward, +y left, +z up; distances are metres and angles radians.
+- `scan_time`, `scan_angles`, and `scan_ranges`, plus range limits, rate, frame names, wheel calibration, and static LiDAR/IMU mounting transforms relative to the model's `root` body. Scan times are synchronized to physics samples; all beams in one scan share a timestamp.
+- `truth_pose`, the simulator's world-frame axle projection, strictly for evaluation. Replaying the estimator requires only timestamps, wheel angles, gyro readings, and calibration, not this reference.
+
+**Limits that matter:**
+
+- The existing LiDAR site is inside the mast. Ray casting masks only the robot's rigid mounting assembly, without changing the asset or physics. Moving robot links still occlude: their returns and too-close measurements are `NaN`, not free space. Out-of-range/no-return readings are `+inf`. `Lidar(..., mask_mount=False)` exposes mounting occlusion for diagnostics. The physical mount still needs validation.
+- Raw rays follow chassis roll/pitch and retain real floor hits. The ROS bridge separately projects real returns into a fixed `lidar_planar` frame using gyro-estimated tilt and mounting geometry. It rejects tilt above 2 degrees, returns outside a 0.12-0.52 m height band, and scans with fewer than half the beams usable. It does not fill missing rays. This conservative projection passes local geometry checks and is exercised by the Ubuntu/Docker SLAM integration test; wider poses and hardware still need validation.
+- Odometry adds gyro pitch rate to relative wheel rotation and blends wheel/gyro yaw increments. It assumes an upright start unless initial tilt is supplied, does not consume simulator orientation, and does not integrate accelerometer readings. Wheel calibration, gyro bias, signs, and yaw blend are configurable; drift, wheel slip, and gyro tilt drift remain. This is not a covariance-estimating filter.
+- Local checks cover analytic scans/odometry, projection, timestamps, recording replay, simulated balancing, forward/reverse commands, a command watchdog, and a driven loop. Turning required fixing the yaw feedback sign and making both balance state readers measure pitch independently of heading. The separate ROS integration check below passes inside the Linux Docker runtime on this Mac.
+
+## ROS 2 Jazzy mapping in Docker
+
+This follows the original stack: Ubuntu 24.04, ROS 2 Jazzy, and SLAM Toolbox. The colcon package lives in `ros2_ws/src/rlbot_bridge/`. SLAM Toolbox owns scan matching, loop closure, `/map`, and `map -> odom`; it does not receive the room's known geometry or simulator truth. The Dockerfile builds the package and installs the matching Python dependencies. The cameras and robot assets are unchanged.
+
+On this Mac, Docker runs in the dedicated `colima-rlbot` context. Build the image from the repository root:
+
+```bash
+colima start rlbot
+DOCKER_CONTEXT=colima-rlbot docker-buildx build --load -t rlbot:jazzy .
+```
+
+On a Linux Docker host or Docker Desktop, use `docker build -t rlbot:jazzy .` and omit `--context colima-rlbot` from the commands below. Do not copy a macOS virtual environment into Linux; the image creates its own Python 3.12 environment.
+
+Start mapping:
+
+```bash
+docker --context colima-rlbot run --rm -it --name rlbot-mapping -v "$PWD/out:/artifacts" rlbot:jazzy
+```
+
+From another terminal, publish a slow forward command. Stop the publisher with Ctrl+C; the 0.5-second command watchdog ramps the robot back to zero-speed balance. Use `'{angular: {z: 0.2}}'` instead to turn. These are manual mapping commands, not autonomous obstacle avoidance.
+
+```bash
+docker --context colima-rlbot exec -it rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}}'
+```
+
+After stopping travel, save the occupancy map and serialized SLAM state. Choose a new output directory each time; existing data is not overwritten:
+
+```bash
+docker --context colima-rlbot exec rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge save_map /artifacts/room_1
+```
+
+This writes `out/room_1/map.yaml`, `map.pgm`, `map.posegraph`, and `map.data`. Stop the mapping container, then restart in localization mode using the saved map stem (no extension):
+
+```bash
+docker --context colima-rlbot run --rm -it --name rlbot-localize -v "$PWD/out:/artifacts" rlbot:jazzy ros2 launch rlbot_bridge mapping.launch.py mode:=localization map_file:=/artifacts/room_1/map
+```
+
+The initial map-pose guess defaults to x/y/yaw = 0. Launch arguments `x:=... y:=... yaw:=...` change that localization guess, not the simulator spawn; the bridge currently starts at the room's `start` keyframe. `mode:=mapping` with `map_file:=...` resumes mapping instead of localization.
+
+Run the real integration check in a fresh output directory:
+
+```bash
+docker --context colima-rlbot run --rm -v "$PWD/out:/artifacts" rlbot:jazzy python scripts/check_ros_mapping.py --output /artifacts/mapping_check_1
+```
+
+It launches actual ROS nodes in a separate ROS domain, checks a nonempty SLAM map, drives a loop, saves all four map files, restarts the stack in localization mode, and checks pose error against a separately published simulator reference. Logs, maps and a machine-readable `result.json` remain in `out/mapping_check_1/`. This test, not a successful image build or the local sensor checks, is the end-to-end mapping acceptance gate.
+
+The bridge integrates wheel/gyro odometry and controls physics at 500 Hz; ROS odometry, IMU, joint states, TF and clock are published at 50 Hz, and scans at 10 Hz. `/scan_raw` contains the original measurements; `/scan` contains tilt-gated projected measurements in `lidar_planar`; `/scan_valid` reports acceptance. Invalid projected bins are sent below `range_min`, not as free space. The TF chain is `map -> odom -> base_footprint -> base_link -> imu/lidar`, with a fixed `base_footprint -> lidar_planar` projection frame. Odometry covariance defaults are configurable conservative placeholders, not a calibrated filter. Ground-truth publication is off unless explicitly enabled for testing.
+
+The physical LiDAR mount and hardware calibration remain unvalidated. Low scans miss tabletop overhangs, so this does not make the robot ready for autonomous navigation. No Nav2 planner or object CV has been added. To release the VM resources when finished, run `colima stop rlbot`.
 
 ## Folder layout
 
@@ -165,7 +242,7 @@ the tables.
 
 **Step 2, SLAM navigation**
 
-- Add a lidar or depth camera to the lidar mount on the robot, and scan the room this PR adds.
+- Validate the LiDAR mount and tilted-scan projection, then publish the tested sensor/odometry inputs through ROS 2.
 - Hook up a SLAM library so the robot can build a map of the room and know where it is.
 - Add a path planner so the robot can drive to a target spot while it keeps its balance.
 - Add a "dock at a table" move so the robot ends up in a good spot for the arms to reach.

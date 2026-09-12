@@ -5,3 +5,6 @@ __pycache__/
 out/
 *.png
 *.mp4
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

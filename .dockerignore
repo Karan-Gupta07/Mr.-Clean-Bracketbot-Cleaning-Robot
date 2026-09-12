@@ -1,0 +1,11 @@
+.git
+.devin
+.venv
+.env*
+out
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+ros2_ws/build
+ros2_ws/install
+ros2_ws/log
