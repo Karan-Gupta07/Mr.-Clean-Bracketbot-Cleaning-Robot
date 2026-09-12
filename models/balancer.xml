@@ -1,0 +1,61 @@
+<mujoco model="balancer">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" integrator="implicitfast"/>
+
+  <default>
+    <default class="wheel">
+      <joint type="hinge" axis="0 1 0" damping="0.0005" armature="0.0005"/>
+      <geom type="cylinder" size="0.05 0.015" zaxis="0 1 0" mass="0.1"
+            condim="3" friction="1.5 0.005 0.0001" rgba="0.15 0.15 0.18 1"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1=".2 .3 .4" rgb2=".1 .15 .2"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance=".1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 2.5" dir="0 0 -1" diffuse=".8 .8 .8"/>
+    <geom name="floor" type="plane" size="10 10 0.05" material="grid"
+          condim="3" friction="1.5 0.005 0.0001"/>
+
+    <body name="chassis" pos="0 0 0.05">
+      <freejoint name="root"/>
+      <!-- mass held high: that is what makes it an inverted pendulum -->
+      <geom name="body" type="box" pos="0 0 0.10" size="0.035 0.045 0.10" mass="0.8"
+            rgba="0.85 0.45 0.2 1"/>
+      <geom name="deck" type="box" pos="0 0 0.005" size="0.05 0.06 0.005" mass="0.1"
+            rgba="0.6 0.6 0.65 1"/>
+      <site name="imu" pos="0 0 0.10" size="0.008" rgba="0 1 0 1"/>
+
+      <body name="wheel_left" pos="0 0.075 0">
+        <joint name="wheel_left" class="wheel"/>
+        <geom name="wheel_left" class="wheel"/>
+      </body>
+      <body name="wheel_right" pos="0 -0.075 0">
+        <joint name="wheel_right" class="wheel"/>
+        <geom name="wheel_right" class="wheel"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="wheel_left"  joint="wheel_left"  ctrlrange="-1 1" gear="1"/>
+    <motor name="wheel_right" joint="wheel_right" ctrlrange="-1 1" gear="1"/>
+  </actuator>
+
+  <sensor>
+    <gyro          name="gyro"    site="imu"/>
+    <accelerometer name="accel"   site="imu"/>
+    <framequat     name="orient"  objtype="site" objname="imu"/>
+    <jointvel      name="vel_left"  joint="wheel_left"/>
+    <jointvel      name="vel_right" joint="wheel_right"/>
+  </sensor>
+
+  <keyframe>
+    <!-- start tipped 5 degrees forward: qpos = xyz + quat(w,x,y,z) + 2 wheel angles -->
+    <key name="tipped" qpos="0 0 0.05 0.99904 0 0.04362 0 0 0"/>
+  </keyframe>
+</mujoco>
