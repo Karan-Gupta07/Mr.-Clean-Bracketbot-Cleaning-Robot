@@ -229,14 +229,14 @@
       </body>
       <body name="wheel_left" pos="0 0.161101 0.0845979">
         <joint name="wheel_left" armature="0.005" damping="0.01" axis="0 1 0"/>
-        <geom name="Left_Wheel_Tire__Left_Wheel_Tire_visual" pos="0 -0.161101 -0.0845979" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_Wheel_Tire__Left_Wheel_Tire"/>
-        <geom name="Left_wheel_cap__Left_wheel_cap_visual" pos="0 -0.161101 -0.0845979" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_wheel_cap__Left_wheel_cap"/>
+        <geom name="Left_Wheel_Tire__Left_Wheel_Tire_visual" pos="0.0113398 -0.1611 -0.00696855" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_Wheel_Tire__Left_Wheel_Tire"/>
+        <geom name="Left_wheel_cap__Left_wheel_cap_visual" pos="0.0113398 -0.1611 -0.00696855" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Left_wheel_cap__Left_wheel_cap"/>
         <geom name="wheel_left_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
       </body>
       <body name="wheel_right" pos="0 -0.161099 0.0845987">
         <joint name="wheel_right" armature="0.005" damping="0.01" axis="0 1 0"/>
-        <geom name="Right_Wheel_Tire__Right_Wheel_Tire_visual" pos="0 0.161099 -0.0845987" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Tire__Right_Wheel_Tire"/>
-        <geom name="Right_Wheel_Cap__Right_Wheel_Cap_visual" pos="0 0.161099 -0.0845987" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Cap__Right_Wheel_Cap"/>
+        <geom name="Right_Wheel_Tire__Right_Wheel_Tire_visual" pos="0.0113398 0.1611 -0.00696931" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Tire__Right_Wheel_Tire"/>
+        <geom name="Right_Wheel_Cap__Right_Wheel_Cap_visual" pos="0.0113398 0.1611 -0.00696931" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05" type="mesh" contype="0" conaffinity="0" group="2" rgba="0.301961 0.301961 0.301961 1" mass="0" mesh="Right_Wheel_Cap__Right_Wheel_Cap"/>
         <geom name="wheel_right_collision" size="0.0845979 0.0226258" quat="0.707107 -0.707107 0 0" type="cylinder" group="3" friction="1.5" rgba="0.1 0.1 0.12 1" mass="0.72"/>
       </body>
     </body>
@@ -252,18 +252,18 @@
   <actuator>
     <general name="wheel_left" joint="wheel_left" ctrlrange="-8 8" ctrllimited="true"/>
     <general name="wheel_right" joint="wheel_right" ctrlrange="-8 8" ctrllimited="true"/>
-    <general name="rj0" joint="rj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
-    <general name="rj1" joint="rj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="rj2" joint="rj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
+    <general name="rj0" joint="rj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
+    <general name="rj1" joint="rj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-17.3715 17.3715" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
+    <general name="rj2" joint="rj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-14.0072 14.0072" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj3" joint="rj3" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj4" joint="rj4" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj5" joint="rj5" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="rj6" joint="rj6" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="right_left_gripper" joint="right_left_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="right_right_gripper" joint="right_right_gripper" ctrlrange="0 1" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="lj0" joint="lj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
-    <general name="lj1" joint="lj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
-    <general name="lj2" joint="lj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
+    <general name="lj0" joint="lj0" ctrlrange="-1.03044 0" ctrllimited="true" forcelimited="true" forcerange="-42.9765 42.9765" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"/>
+    <general name="lj1" joint="lj1" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-17.3715 17.3715" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
+    <general name="lj2" joint="lj2" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-14.0072 14.0072" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj3" joint="lj3" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj4" joint="lj4" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>
     <general name="lj5" joint="lj5" ctrlrange="-2.0944 2.0944" ctrllimited="true" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="200" biasprm="0 -200 -20"/>

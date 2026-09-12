@@ -65,6 +65,17 @@ and every repair is reviewable:
    mass is recomputed from mesh volume at a uniform density, scaled to hit
    `TOTAL_MASS`.
 
+4. **A rotated frame 14 bodies up.** The whole robot hangs off
+   `base_plate__base_plate`, which carries a −90° rotation about x
+   (`quat = 0.7071 −0.7071 0 0`); every other body in that chain is identity.
+   Anything that re-parents a geom has to compose the full chain to the world or
+   it lands with y and z swapped — `world_pose()` in the build script.
+5. **`effort=10` on every joint is boilerplate**, not a spec: the URDF gives
+   every joint `effort=10` and `velocity=10` alike. 10 N cannot hold the 17 N
+   mast carriage, so the arms slide down the rail on the first step. Servo
+   limits are sized at 2.5× the worst-case gravity load instead (43 N for the
+   carriages, 17 N·m at the shoulder), keeping the URDF number as a floor.
+
 Also handled: the URDF `<mimic>` tags on the second gripper joint of each hand
 have no MJCF equivalent and become `<equality joint>` constraints, so a gripper
 stays one DOF.
@@ -79,7 +90,7 @@ stays one DOF.
 | | |
 | --- | --- |
 | DOF | 26 = 6 root + 2 wheels + 18 arm/gripper |
-| Actuators | 2 wheel torque motors (±8 N·m) + 18 position servos (±10 N·m, URDF effort) |
+| Actuators | 2 wheel torque motors (±8 N·m) + 18 position servos, limits sized from gravity load |
 | Sensors | gyro, accelerometer, framequat on the `imu` site; wheel velocities |
 | Mass / CoM | 12.0 kg / 0.63 m (placeholder, see above) |
 | Keyframes | `home` (upright), `tipped` (3° forward) |

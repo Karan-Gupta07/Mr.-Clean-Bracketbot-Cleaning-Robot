@@ -39,6 +39,9 @@ OUT = REPO / "models" / "bracketbot.xml"
 TOTAL_MASS = 12.0          # kg, whole robot
 WHEEL_MASS_FRACTION = 0.06  # each wheel, of the total
 
+URDF_EFFORT = 10.0          # every joint in the URDF carries effort=10 - boilerplate
+SERVO_MARGIN = 2.5          # headroom over the worst-case gravity load
+
 WHEEL_MESHES = {
     "left": ("Left_Wheel_Tire__Left_Wheel_Tire", "Left_wheel_cap__Left_wheel_cap"),
     "right": ("Right_Wheel_Tire__Right_Wheel_Tire", "Right_Wheel_Cap__Right_Wheel_Cap"),
@@ -49,6 +52,34 @@ MUJOCO_BLOCK = """<robot name="chopped_urdf_v2">
         <compiler meshdir="bracketbot/meshes/" strippath="true" discardvisual="false"
                   balanceinertia="true" fusestatic="false"/>
     </mujoco>"""
+
+
+def _compose(pos_a, quat_a, pos_b, quat_b):
+    """Frame A applied to frame B, both (pos, quat)."""
+    rotated = np.zeros(3)
+    mujoco.mju_rotVecQuat(rotated, np.asarray(pos_b, dtype=float), np.asarray(quat_a, dtype=float))
+    quat = np.zeros(4)
+    mujoco.mju_mulQuat(quat, np.asarray(quat_a, dtype=float), np.asarray(quat_b, dtype=float))
+    return np.asarray(pos_a, dtype=float) + rotated, quat
+
+
+def world_pose(body):
+    """Walk a spec body up to the world, composing frames.
+
+    The wheels sit 14 bodies deep under `base_plate__base_plate`, which carries a
+    -90 degree rotation about x.  Every other body in that chain is identity, so
+    dropping this one transform is easy to do and lands the wheels with y and z
+    swapped - which is exactly what it looks like.
+    """
+    pos, quat = np.zeros(3), np.array([1.0, 0.0, 0.0, 0.0])
+    chain = []
+    node = body
+    while node is not None and node.name != "world":
+        chain.append(node)
+        node = node.parent
+    for node in reversed(chain):
+        pos, quat = _compose(pos, quat, node.pos, node.quat)
+    return pos, quat
 
 
 def _urdf_with_compiler(tmpdir: Path) -> Path:
@@ -122,14 +153,19 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                 damping=0.01,
                 armature=0.005,
             )
+            axle = np.array([0.0, centre[1], centre[2]])
             for mesh_name in meshes:
-                for _body, old in by_mesh.get(mesh_name, []):
+                for parent, old in by_mesh.get(mesh_name, []):
+                    # the geom's pose in the world, then expressed in the new
+                    # (axis-aligned) wheel body - not the parent-relative pose,
+                    # which silently loses the base_plate rotation
+                    gpos, gquat = _compose(*world_pose(parent), old.pos, old.quat)
                     wheel.add_geom(
                         name=f"{mesh_name}_visual",
                         type=mujoco.mjtGeom.mjGEOM_MESH,
                         meshname=mesh_name,
-                        pos=[p - c for p, c in zip(old.pos, [0.0, centre[1], centre[2]])],
-                        quat=old.quat,
+                        pos=gpos - axle,
+                        quat=gquat,
                         rgba=old.rgba,
                         contype=0,
                         conaffinity=0,
@@ -249,6 +285,20 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                 g.density = 1000.0 * scale
         model = spec.compile()
 
+        # Size the servos to hold their own limb up.  The URDF gives every
+        # single joint effort=10 and velocity=10 - boilerplate, not a spec - and
+        # 10 N cannot hold the 17 N mast carriage, so the arms slide down the
+        # rail on the first step.  Size from the gravity load instead and keep
+        # the URDF number as a floor.
+        limits = gravity_loads(model, [j.name for j in arm_joints])
+        for act in spec.actuators:
+            need = limits.get(act.name)
+            if need is None:
+                continue
+            limit = max(URDF_EFFORT, SERVO_MARGIN * need)
+            act.forcerange = [-limit, limit]
+        model = spec.compile()
+
         xml = spec.to_xml()
         OUT.write_text(xml)
 
@@ -263,6 +313,36 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         w = measure_wheel(model, side)
         print(f"  wheel_{side}: r={w[0]:.4f} m  half-width={w[1]:.4f} m  "
               f"axle at y={w[2]:+.4f} z={w[3]:.4f}")
+
+
+def gravity_loads(model, joint_names: list[str]) -> dict[str, float]:
+    """Worst-case gravity load each arm joint has to hold.
+
+    For a slide joint that is the weight of everything below it; for a hinge,
+    that weight times the longest lever arm in its subtree.  An upper bound, which
+    is what we want for sizing a limit.
+    """
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+
+    out = {}
+    for name in joint_names:
+        jid = model.joint(name).id
+        bid = model.jnt_bodyid[jid]
+        weight = float(model.body_subtreemass[bid]) * 9.81
+        if model.jnt_type[jid] == mujoco.mjtJoint.mjJNT_SLIDE:
+            out[name] = weight
+            continue
+        anchor = data.xanchor[jid]
+        lever = 0.0
+        for b in range(model.nbody):
+            root = b
+            while root != 0 and root != bid:
+                root = model.body_parentid[root]
+            if root == bid and model.body_mass[b] > 0:
+                lever = max(lever, float(np.linalg.norm(data.xipos[b] - anchor)))
+        out[name] = weight * lever
+    return out
 
 
 def measure_wheel(model, side):
