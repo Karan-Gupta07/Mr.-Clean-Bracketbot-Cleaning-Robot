@@ -371,3 +371,24 @@ second PR, tested by hand in Docker.
   replan cannot reach 10 cm, that is the next design, not this one.
 - Raising the speed limits. Done together with Rababb if the sim check says
   the balancer has headroom.
+
+## Amendments during planning
+
+1. **Docks are inside the inflation.** `Table.dock` puts the mast axis 0.24 m
+   from the table edge; the planner inflates by 0.26 m. So a route has up to
+   four segments: a straight run out of the start along its heading (in
+   reverse when the free space is behind), a turn in place if the corridor
+   leaves more than 45° off the heading, the curve, and a straight run along
+   the goal's axis into the goal. The straight segments are checked against
+   the robot's oriented rectangle on the raw grid, the curve against its
+   circle on the inflated grid. The robot stops between segments; it does
+   not stop anywhere along the curve.
+2. **Angular acceleration is reported, not asserted.** `omega = v * kappa`,
+   so at the start of a bend `d omega / dt = a * kappa`, which exceeds
+   0.3 rad/s² whenever the bend is tighter than 3 m at full acceleration.
+   The profile scales the speed cap down at those samples, up to ten times;
+   whatever residual is left, the `DriveController` ramp absorbs, and the
+   next replan corrects. `plan_path.py` prints the peak.
+3. **No `map_offset` parameter on the ROS node.** The bridge always spawns
+   at the `start` keyframe, so the map frame is the world frame. The
+   parameter can be added the day someone maps from somewhere else.
