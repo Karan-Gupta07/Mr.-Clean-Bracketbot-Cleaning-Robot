@@ -31,19 +31,20 @@ class Gains:
         """The real robot is 12 kg with its mass 0.63 m up: m*g*h = 74 N*m/rad of
         destabilising torque, so kp has to be an order of magnitude above the
         toy model's."""
-        return Gains(kp_pitch=80.0, kd_pitch=15.0, kp_speed=0.010, kp_yaw=1.0)
+        return Gains(kp_pitch=80.0, kd_pitch=15.0, kp_speed=0.010, kp_yaw=5.0)
 
 
 class BalanceController:
     def __init__(self, gains: Gains | None = None):
         self.gains = gains or Gains()
 
-    def __call__(self, s: State, yaw_rate_ref: float = 0.0) -> tuple[float, float]:
+    def __call__(self, s: State, yaw_rate_ref: float = 0.0,
+                 wheel_speed_ref: float = 0.0) -> tuple[float, float]:
         g = self.gains
 
         # outer loop: wheels running forward -> ask for a backward lean
         pitch_ref = max(
-            -g.max_pitch_ref, min(g.max_pitch_ref, -g.kp_speed * s.wheel_speed)
+            -g.max_pitch_ref, min(g.max_pitch_ref, -g.kp_speed * (s.wheel_speed - wheel_speed_ref))
         )
 
         # inner loop: PD on lean.  +ve pitch (tipped toward +x) needs +ve wheel
@@ -51,5 +52,40 @@ class BalanceController:
         # under the mass.
         torque = g.kp_pitch * (s.pitch - pitch_ref) + g.kd_pitch * s.pitch_rate
 
-        steer = g.kp_yaw * (s.yaw_rate - yaw_rate_ref)
+        steer = g.kp_yaw * (yaw_rate_ref - s.yaw_rate)
         return torque - steer, torque + steer
+
+
+class DriveController:
+    """Bound and ramp velocity commands; stale commands return to zero-speed balance."""
+
+    def __init__(self, wheel_radius: float, gains: Gains | None = None,
+                 max_speed=0.15, max_yaw_rate=0.3, linear_accel=0.1,
+                 angular_accel=0.3, timeout=0.5):
+        if not all(math.isfinite(v) and v > 0 for v in
+                   (wheel_radius, max_speed, max_yaw_rate, linear_accel, angular_accel, timeout)):
+            raise ValueError("wheel radius, velocity/acceleration limits and timeout must be positive")
+        self.balance = BalanceController(gains)
+        self.radius, self.timeout = wheel_radius, timeout
+        self.limits, self.acceleration = (max_speed, max_yaw_rate), (linear_accel, angular_accel)
+        self.reference = [0.0, 0.0]
+        self._target = [0.0, 0.0]
+        self._stamp = None
+
+    def command(self, speed: float, yaw_rate: float, stamp: float) -> None:
+        if not all(math.isfinite(v) for v in (speed, yaw_rate, stamp)) or stamp < 0:
+            self._target, self._stamp = [0.0, 0.0], None
+            raise ValueError("velocity commands and timestamps must be finite; time must be nonnegative")
+        self._target = [max(-limit, min(limit, value)) for limit, value in
+                        zip(self.limits, (speed, yaw_rate))]
+        self._stamp = stamp
+
+    def __call__(self, state: State, now: float, dt: float) -> tuple[float, float]:
+        if not math.isfinite(now) or not math.isfinite(dt) or dt <= 0:
+            raise ValueError("require finite time and a positive step")
+        target = self._target if self._stamp is not None and 0 <= now - self._stamp <= self.timeout else (0, 0)
+        for i in range(2):
+            change = self.acceleration[i] * dt
+            self.reference[i] += max(-change, min(change, target[i] - self.reference[i]))
+        return self.balance(state, yaw_rate_ref=self.reference[1],
+                            wheel_speed_ref=self.reference[0] / self.radius - state.pitch_rate)
