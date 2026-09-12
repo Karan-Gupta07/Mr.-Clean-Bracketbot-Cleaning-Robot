@@ -44,10 +44,11 @@ def check_grid():
     assert fat.occupied.sum() > g.occupied.sum()
     assert not fat.free(0.3, 0.5) and fat.free(0.2, 0.2)
     assert not fat.free(0.0, 0.5), "the border inflates inward"
+    assert not g.inflate(0.10).free(0.3, 0.5), "inflation reaches exactly its radius"
 
     assert g.rect_free(0.2, 0.2, 0.0, 0.05, 0.05)
-    assert not g.rect_free(0.35, 0.5, 0.0, 0.10, 0.05), "a rectangle reaching the post"
-    assert g.rect_free(0.25, 0.5, math.pi / 2, 0.10, 0.05), "the same rectangle turned side-on"
+    assert not g.rect_free(0.32, 0.5, 0.0, 0.10, 0.05), "a rectangle reaching the post"
+    assert g.rect_free(0.32, 0.5, math.pi / 2, 0.10, 0.05), "the same rectangle turned side-on"
 
     np.testing.assert_allclose(g.clearance([(0.2, 0.5), (0.9, 0.9)]),
                                [0.2, math.hypot(0.3, 0.3)], atol=1e-9)

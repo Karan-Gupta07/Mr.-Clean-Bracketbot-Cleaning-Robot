@@ -36,7 +36,7 @@ def robot_footprint():
 
     Not a number typed in here: `build_mjcf.py` measures three boxes over the
     chassis off the meshes, and this is what they come to - a 0.19 x 0.37 m
-    footprint, 1.70 m tall.  Returns (radius, height, half-extents).
+    footprint, 1.61 m tall.  Returns (radius, height, half-extents).
     """
     model = mujoco.MjModel.from_xml_path(str(ROBOT_MODEL))
     half = np.zeros(2)
@@ -129,7 +129,7 @@ class OccupancyGrid:
         c, s = math.cos(yaw), math.sin(yaw)
         dx, dy = gx - x, gy - y
         local_x, local_y = c * dx + s * dy, -s * dx + c * dy
-        self.occupied |= (np.abs(local_x) <= half_x) & (np.abs(local_y) <= half_y)
+        self.occupied |= (np.abs(local_x) <= half_x + 1e-9) & (np.abs(local_y) <= half_y + 1e-9)
 
     # ---- queries ---------------------------------------------------------
     def cell(self, x, y) -> tuple[int, int]:
@@ -175,7 +175,7 @@ class OccupancyGrid:
         c, s = math.cos(yaw), math.sin(yaw)
         dx, dy = gx - x, gy - y
         local_x, local_y = c * dx + s * dy, -s * dx + c * dy
-        inside = (np.abs(local_x) <= half_x) & (np.abs(local_y) <= half_y)
+        inside = (np.abs(local_x) <= half_x + 1e-9) & (np.abs(local_y) <= half_y + 1e-9)
         return not bool((inside & self.occupied).any())
 
     def clearance(self, points) -> np.ndarray:
