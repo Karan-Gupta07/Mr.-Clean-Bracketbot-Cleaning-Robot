@@ -13,6 +13,7 @@ MODELS = Path(__file__).resolve().parents[2] / "models"
 
 TOY = MODELS / "balancer.xml"                    # first-principles sanity model
 BRACKETBOT = MODELS / "bracketbot_scene.xml"     # the real robot, built from the URDF
+ROOM = MODELS / "room_scene.xml"                 # the robot in a room, with things to pick up
 
 
 @dataclass
