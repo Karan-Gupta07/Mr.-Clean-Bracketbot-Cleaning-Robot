@@ -77,6 +77,12 @@ pip install -r requirements.txt
 # Check how close the arm gets to the robot's own mast and base along the grasp paths.
 .venv/bin/python scripts/check_arm_clearance.py
 
+# Drive one arm by hand and record pick-and-place demonstrations for the VLA.
+.venv/bin/mjpython scripts/teleop.py --cube m
+
+# Put the camera frames back onto recorded demonstrations, and preview them.
+.venv/bin/python scripts/render_demos.py out/demos/cubes --preview
+
 # Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
 docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
     python3 src/rlbot/hybrid_ik.py /path/to/libhybrid_ik_lib.so models/bracketbot/chopped_urdf_v2.urdf right_eef
@@ -103,6 +109,8 @@ scripts/validate_ik.py      Proves the arm IK: round-trip on random poses, then 
 scripts/check_arm_clearance.py  Measures arm-to-chassis clearance along the grasp paths (the sim filters self-collision).
 scripts/room.py             Live viewer you can drive the robot around the room in.
 scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed policy.
+scripts/teleop.py           Keyboard teleop of one arm, recording demonstrations for the VLA.
+scripts/render_demos.py     Renders the cameras for recorded demonstrations, after the fact.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
@@ -113,6 +121,7 @@ src/rlbot/sensing.py        The lidar and the wheel odometry.
 src/rlbot/grasp.py          The motions a pick is made of, shared by the harness and the agent.
 src/rlbot/skills.py         The robot as an agent sees it: typed skills, symbolic scene.
 src/rlbot/filming.py        Records a run to an mp4.
+src/rlbot/teleop.py         The jog controller and the demonstration recorder behind teleop.py.
 ```
 
 ## How the robot model was fixed
@@ -230,6 +239,50 @@ to the crate: the grasp survives a straight lift and about half the carries. The
 ball cannot be picked up at all - flat rigid pads have nothing to bite on a
 sphere. This is a gripper problem, not an agent problem, and the `sweep` planner
 exists precisely so the two can be told apart.
+
+## Collecting demonstrations
+
+The VLA needs examples of the task being done. `scripts/teleop.py` parks the
+robot at the cubes table, base welded, and puts one arm under the keyboard:
+
+```
+W / S      jaws forward / back (toward the table)    SPACE   close / open the hand
+A / D      jaws left / right                         1-4     which cube the task is about
+R / F      jaws up / down                            X       swap arms
+Q / E      wrist counter-clockwise / clockwise       H       home: reset the scene
+[ / ]      finer / coarser steps                     ENTER   start / stop recording
+C          cancel the recording                      P       print where things are
+```
+
+The operator commands where the *jaws* go, not joints. Each press moves the
+target 1 cm or 5 degrees, the hand always pointing down, and IK continues from
+the servos' current command. A press that would need the arm to swing into a
+different configuration is refused. The command chases the target at 0.15 m/s,
+or 0.05 m/s with something in the hand, so holding a key down gives a smooth
+move at that speed rather than a burst of steps - which matters, because a cube
+in this hand is held by two pads and friction and a stepped carry shakes it
+out. Closing the hand is the same stall-detected squeeze the grasp harness
+uses. While the hand is open and at rest, the controller measures how far the
+servos sag below their command (2 to 5 mm, and a cube leaves 6 mm either side
+of the pads) and trims the command to cancel it.
+
+Press ENTER, do the task, press ENTER again. The episode is scored - is the
+cube inside the crate and out of the hand - and written to `out/demos/cubes/`
+as one `.npz`: at 20 Hz, the full `qpos`, `qvel` and `ctrl`, both arms' joints
+and gripper commands, the jaw pose, the jaw target and wrist yaw, whether the
+hand is closed and what it holds, and every object's pose; plus the task text,
+the key presses, and the success flag. Camera frames are not recorded. They are
+a function of `qpos`, so `scripts/render_demos.py` renders them afterwards from
+the head and both wrist cameras at whatever size the model wants.
+
+`--jitter 0.02` scatters the cubes by up to 2 cm on each reset, for variety.
+`--balance` runs the same thing on the wheels with the station keeper.
+
+Driven by a script rather than a hand, the same controller picks and crates
+every cube on the table with either arm, at key-repeat rate and at tap rate.
+The two outer cubes sit at the edge of the wrist's range: the last centimetre
+across to them gets refused at a wrist yaw of 90 degrees, and turning the wrist
+gets it back.
 
 ## Plan for the next steps
 

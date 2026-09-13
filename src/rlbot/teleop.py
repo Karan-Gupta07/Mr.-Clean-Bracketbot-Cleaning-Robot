@@ -43,14 +43,19 @@ CONTINUITY = 0.4           # rad, summed over the arm; more than this on a nudge
                            # swing through the table to get there
 CONTROL_HZ = 20            # rows per second in a demonstration
 
-# Held keys repeat at about 30 a second, which at 1 cm a press is 0.3 m/s, and
-# the servos cannot follow that: the arm lags its command by 2 cm and carries on
-# for those 2 cm after the operator lets go - into the cube.  So a nudge only
-# goes through when the jaws are within reach of the last one.  Holding
-# something the limit is tighter, because what keeps a cube in this hand is two
-# pads and friction, and each nudge is a step in the command that shakes it.
-LAG_MAX = 0.015            # m the jaws may trail the target, hand empty
-LAG_MAX_HOLDING = 0.004    # m, with something in the hand
+# A nudge moves the target a step, and the command *chases* the target at a
+# set speed rather than jumping to it.  Two reasons.  Held keys repeat at about
+# 30 a second, which at 1 cm a press is 0.3 m/s, and the servos cannot follow
+# that: the arm lags its command by 2 cm and carries on for those 2 cm after
+# the operator lets go - into the cube.  And what keeps a cube in this hand is
+# two pads and friction: a command that steps 1 cm shakes it, and a carry made
+# of thirty such steps a second loses it every time.  So the command ramps, at
+# a speed that drops with something in the hand, and a key held down queues at
+# most a couple of steps ahead of where the arm has got to.
+SPEED = 0.15               # m/s the jaws move, hand empty
+SPEED_HOLDING = 0.05       # m/s with something in the hand
+TURN_RATE = math.radians(45)   # rad/s the wrist turns
+QUEUE = 2                  # nudges that may be pending before the next is refused
 
 # The servos sag.  They carry kv = 0.1 kp and 10 N.m at the wrist, so a hand
 # held out over the table settles 2-5 mm below and short of where it was sent,
@@ -92,7 +97,9 @@ class Jog:
         self.step_size = NUDGE
         self.closed = False
         self._bite: float | None = None
-        self._ramp: deque[np.ndarray] = deque()
+        self._ramp: deque[np.ndarray] = deque()   # servo commands still to send
+        self._segments: deque[int] = deque()      # how many of those per nudge
+        self._going = False                       # a `go` is in progress
         self.target = self.jaws.copy()      # world, where the jaws are sent
         self.yaw = math.pi / 2              # relative to the dock: across the table
         self.trim = np.zeros(3)             # what the command is shifted by, for sag
@@ -176,45 +183,65 @@ class Jog:
     def nudge(self, ahead=0.0, across=0.0, up=0.0, turn=0.0) -> str | None:
         """Move the target one step in the docking frame.
 
-        Returns None when it went through, "lag" when the arm has not caught
-        up with the last one yet (try again in a moment), or "reach" when IK
+        Returns None when it went through, "lag" when the arm is still working
+        through earlier nudges (try again in a moment), or "reach" when IK
         cannot get there without swinging the arm through another configuration.
         """
-        limit = LAG_MAX_HOLDING if self.closed else LAG_MAX
-        if np.linalg.norm(self.target - self.jaws) > limit:
+        if self._going or len(self._segments) >= QUEUE:
             return "lag"
         c, s = math.cos(self.yaw0), math.sin(self.yaw0)
         delta = self.step_size * np.array([c * ahead - s * across,
                                            s * ahead + c * across, up])
         target = self.target + delta
         yaw = self.yaw + turn * TURN
-        seed = self.data.ctrl[self.arm.acts].copy()
+        # continue from where the command will be, not where it is now
+        seed = (self._ramp[-1] if self._ramp
+                else self.data.ctrl[self.arm.acts]).copy()
         got = self.solve(target, yaw, seed, restarts=1, iters=60)
         if not got.ok or float(np.abs(got.qpos - seed).sum()) > CONTINUITY:
             self.refused += 1
             return "reach"
-        self._ramp.clear()
+        speed = SPEED_HOLDING if self.closed else SPEED
+        seconds = (float(np.linalg.norm(delta)) / speed if np.any(delta)
+                   else abs(turn) * TURN / TURN_RATE)
+        self._queue(seed, got.qpos, seconds)
         self.target, self.yaw = target, yaw
-        self.arm.hold(got.qpos)
         return None
 
-    def go(self, target, yaw: float, seconds: float = RAMP) -> bool:
-        """Send the arm somewhere far: solve freely, then ramp the servos."""
+    def _queue(self, start, end, seconds: float) -> None:
+        n = max(1, int(seconds / self.model.opt.timestep))
+        self._ramp.extend(start + (end - start) * (i + 1) / n for i in range(n))
+        self._segments.append(n)
+
+    def go(self, target, yaw: float, seconds: float | None = None,
+           **kw) -> bool:
+        """Send the arm somewhere far in one ramped move.
+
+        Solved from the current command - freely by default, or with
+        `restarts=1` to stay in the arm's present configuration, which is what
+        a carry wants - and ramped over `seconds`, or if that is not given over
+        long enough that no joint has to hurry: the harness found 2.5 s per
+        radian of travel is what keeps a held object in the hand.
+        """
         seed = self.data.ctrl[self.arm.acts].copy()
         self.trim[:] = 0.0
-        got = self.solve(np.asarray(target, dtype=float), yaw, seed)
+        got = self.solve(np.asarray(target, dtype=float), yaw, seed, **kw)
         if not got.ok:
             return False
-        n = max(1, int(seconds / self.model.opt.timestep))
-        self._ramp = deque(seed + (got.qpos - seed) * (i + 1) / n
-                           for i in range(n))
+        travel = float(np.abs(got.qpos - seed).sum())
+        if seconds is None:
+            seconds = max(RAMP, 2.5 * travel)
+        self._ramp.clear()
+        self._segments.clear()
+        self._queue(seed, got.qpos, seconds)
+        self._going = True
         self.target, self.yaw = np.asarray(target, dtype=float), yaw
         return True
 
     def ready(self) -> bool:
         ahead, across, up = READY
         return self.go(self.local(ahead, across if self.side == "left"
-                                  else -across, up), math.pi / 2)
+                                  else -across, up), math.pi / 2, RAMP)
 
     def toggle_grip(self) -> None:
         self.closed = not self.closed
@@ -229,6 +256,11 @@ class Jog:
         """
         if self._ramp:
             self.arm.hold(self._ramp.popleft())
+            self._segments[0] -= 1
+            if self._segments[0] == 0:
+                self._segments.popleft()
+            if not self._ramp:
+                self._going = False
         self._count += 1
         if (not self._ramp and not self.closed and self.still
                 and self._count % self._trim_every == 0):
@@ -247,7 +279,8 @@ class Jog:
 
     @property
     def busy(self) -> bool:
-        return bool(self._ramp)
+        """Mid-`go`: nudges are refused until the arm has arrived."""
+        return self._going
 
 
 @dataclass

@@ -147,7 +147,7 @@ class Session:
             elif code == SPACE:
                 self.jog.toggle_grip()
                 self.recorder.event("close" if self.jog.closed else "open")
-            elif name in "1234" and int(name) <= len(self.cubes):
+            elif name and name in "1234" and int(name) <= len(self.cubes):
                 self.choose(self.cubes[int(name) - 1])
             elif name == "X":
                 self.swap_arm()

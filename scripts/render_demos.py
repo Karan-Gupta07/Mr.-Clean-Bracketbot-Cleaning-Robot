@@ -100,6 +100,11 @@ def main() -> None:
                              f"the model has {robot.model.nq} - was the room "
                              f"rebuilt since this was recorded?")
 
+        # The crate is furniture with no joint, so its position is not in
+        # qpos.  Collected episodes move it; put it back where it was.
+        crate_pos = meta.get("layout", {}).get("crate_pos")
+        if crate_pos is not None:
+            robot.model.body_pos[robot.model.body(robot.crate).id][:2] = crate_pos
         frames = render(robot, arrays["qpos"], args.size, args.cameras)
         np.savez_compressed(out, **frames)
         print(f"{path.name}: {len(arrays['qpos'])} rows x {len(frames)} cameras "

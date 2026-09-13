@@ -64,7 +64,6 @@
       <geom name="ball_0" type="sphere" size="0.0275" pos="0 0 0.0275" mass="0.09" condim="6" friction="1.2 0.05 0.02" solimp="0.95 0.99 0.001" material="mat_ball"/>
     </body>
     <body name="crate_ball" pos="2.04 -1.1 0.7">
-      <freejoint/>
       <geom name="crate_ball_0" type="box" size="0.11 0.08 0.003" pos="0 0 0.003" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ball"/>
       <geom name="crate_ball_1" type="box" size="0.11 0.003 0.04" pos="0 0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ball"/>
       <geom name="crate_ball_2" type="box" size="0.11 0.003 0.04" pos="0 -0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ball"/>
@@ -96,7 +95,6 @@
       <geom name="cube_xl_0" type="box" size="0.0285 0.0285 0.0285" pos="0 0 0.0285" mass="0.12" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_cube_xl"/>
     </body>
     <body name="crate_cubes" pos="-0.2 -1.74 0.7">
-      <freejoint/>
       <geom name="crate_cubes_0" type="box" size="0.11 0.08 0.003" pos="0 0 0.003" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_cubes"/>
       <geom name="crate_cubes_1" type="box" size="0.11 0.003 0.04" pos="0 0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_cubes"/>
       <geom name="crate_cubes_2" type="box" size="0.11 0.003 0.04" pos="0 -0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_cubes"/>
@@ -168,7 +166,6 @@
       <geom name="cup_24" type="box" size="0.002 0.00344528 0.025894" pos="0.0226993 -0.00608225 0.0295" quat="-0.987666 -0.0864789 0.0113852 0.130029" mass="0.0052" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_cup"/>
     </body>
     <body name="crate_ware" pos="-2.04 0.9 0.7">
-      <freejoint/>
       <geom name="crate_ware_0" type="box" size="0.11 0.08 0.003" pos="0 0 0.003" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ware"/>
       <geom name="crate_ware_1" type="box" size="0.11 0.003 0.04" pos="0 0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ware"/>
       <geom name="crate_ware_2" type="box" size="0.11 0.003 0.04" pos="0 -0.077 0.04" mass="0.08" condim="4" friction="1 0.02 0.001" solimp="0.95 0.99 0.001" material="mat_crate_ware"/>

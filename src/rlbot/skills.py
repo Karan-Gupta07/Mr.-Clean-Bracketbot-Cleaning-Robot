@@ -36,7 +36,7 @@ import numpy as np
 
 from .arm import Arm, Gripper, down_quat
 from .grasp import (APPROACH, LIFT, Rig, StationDriver, hold_everything, in_hand,
-                    move, plan_waypoints, squeeze, welded_at)
+                    move, plan_waypoints, set_grip, squeeze, welded_at)
 from .robot import ROOM
 from .room import TABLES, grasp_pose
 
@@ -53,6 +53,7 @@ RELEASE_OPEN = 0.30    # rad the jaws open to let go
 RELEASE_SECONDS = 1.0  # s taken to open them
 CLEAR_ABOVE = 0.20     # m above the crate to lift to before folding up
 NEAR_MAST = 0.10       # m in front of the mast to retract to first
+STOW_RAIL = -0.45      # m down the rail for the arm that is not working
 RETRY_CAP = 2          # times the harness will let the agent re-ask for the same thing
 
 # The one spot on the table both arms can reach.  It exists because this robot's
@@ -63,6 +64,10 @@ RETRY_CAP = 2          # times the harness will let the agent re-ask for the sam
 HANDOVER = "handover_spot"
 HANDOVER_REACH = 0.32  # m in front of the mast, in the near row
 HANDOVER_DROP = 0.03   # m to drop from when setting something down
+
+
+def other(side: str) -> str:
+    return "left" if side == "right" else "right"
 
 
 @dataclass
@@ -234,14 +239,15 @@ class Robot:
             plan = plan_waypoints(self.model, mujoco.MjData(self.model),
                                   self.jaw_target(obj), item.width, yaws,
                                   self.dock_yaw, self.data.qpos.copy(),
-                                  sides=(side,))
+                                  sides=(side,), avoid=(self.crate,))
             if plan is None:
                 continue
             reached = True
             _, side, used_yaw, opening, (above, on, up) = plan
 
+            self.stow(other(side))
             hand = self.arms[side]
-            hand.grip(opening)
+            set_grip(self.rig, hand, opening)
             self.rig.seconds(0.3)
             move(self.rig, hand, above.qpos, 1.6)
             move(self.rig, hand, on.qpos, 1.0)
@@ -259,7 +265,7 @@ class Robot:
             # rest pose from down among the objects is how a failed grasp at one
             # cube knocks the next two onto the floor - and then the agent is
             # chasing a table it wrecked itself.
-            hand.grip(opening)
+            set_grip(self.rig, hand, opening)
             move(self.rig, hand, above.qpos, 1.0)
 
         if not reached:
@@ -377,10 +383,7 @@ class Robot:
         # Let go gently.  Commanding the jaws 0.35 rad open in one step is a
         # flick: the blades accelerate off the object and throw it clear of the
         # crate.  Heavy things survive it, 50 g cubes do not.
-        for i in range(int(RELEASE_SECONDS / self.model.opt.timestep)):
-            hand.grip(opening + RELEASE_OPEN * (i + 1)
-                      / int(RELEASE_SECONDS / self.model.opt.timestep))
-            self.rig.step()
+        set_grip(self.rig, hand, min(1.0, opening + RELEASE_OPEN))
         self.rig.seconds(1.0)
         self.holding[side] = None
         self.grasp_quat[side] = None
@@ -456,6 +459,25 @@ class Robot:
 
             move(self.rig, hand, np.zeros(len(here)), 1.8)
         return self.out(True, "arms back at zero")
+
+    def stow(self, side: str) -> None:
+        """Drop the idle arm's carriage below the table, out of the way.
+
+        The two shoulders are 0.2 m apart on one mast, so an arm parked at zero
+        sits directly in the other one's working volume.  With arm-on-arm
+        collision switched on that is not a detail: the reaching arm jams
+        against the idle one and the grasp fails with the fingers nowhere near
+        the object.  A real robot would stow the arm it is not using, and the
+        rail is exactly the joint for it.
+        """
+        if self.holding[side]:
+            return
+        stowed = self.data.qpos[self.arms[side].ik.qadr].copy()
+        if abs(stowed[0] - STOW_RAIL) < 0.02:
+            return
+        stowed[1:] = 0.0
+        stowed[0] = STOW_RAIL
+        move(self.rig, self.arms[side], stowed, 1.4)
 
     def across_of(self, side: str) -> float:
         """How far out to the side that hand sits when the arm hangs at zero."""

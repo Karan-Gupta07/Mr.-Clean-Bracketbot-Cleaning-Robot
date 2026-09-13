@@ -77,6 +77,14 @@ class Item:
         return SQUARE_YAWS if self.kind in ("cube", "crate") else GRASP_YAWS
 
     @property
+    def fixed(self) -> bool:
+        """Furniture is bolted down.  A crate light enough for the solver to
+        shove is a crate the arm nudges out from under the object it is about
+        to drop, and then the placement misses something that was in the right
+        place when it was planned."""
+        return self.kind == "crate"
+
+    @property
     def graspable(self) -> bool:
         """Crates are furniture: the robot puts things in them, not carries
         them.  Everything else on a table is meant to be picked up."""
