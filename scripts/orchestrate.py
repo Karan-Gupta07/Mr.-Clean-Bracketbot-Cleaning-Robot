@@ -1,0 +1,126 @@
+import argparse
+from dataclasses import asdict
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT/'src'))
+
+from rlbot.orchestration import Dispatcher, Recognition, Target, ToolResult, route_for, station_at
+
+
+def prepare_fable(planner, view=False):
+    if planner == 'fable':
+        if importlib.util.find_spec('anthropic') is None:
+            raise RuntimeError('Install requirements-agent.txt to run the Fable API planner')
+        if not os.environ.get('ANTHROPIC_API_KEY'):
+            raise RuntimeError('Set ANTHROPIC_API_KEY locally to run Fable, or explicitly select --planner sweep for offline skill validation')
+    from agent import Harness, Robot, fable_planner, sweep_planner, watch
+
+    def execute():
+        robot = Robot('cubes')
+        harness = Harness(robot)
+        job = (lambda: fable_planner(harness, 'cubes', 'high')) if planner == 'fable' else lambda: sweep_planner(harness)
+        if view:
+            watch(robot, job, 1.)
+        else:
+            job()
+        loose = [n for n, item in robot.items.items() if item.graspable]
+        placed = [n for n in loose if robot.where(n) == 'in the crate']
+        return ToolResult(len(placed) == len(loose), dict(planner=planner, placed=placed,
+                                                        expected=loose, calls=harness.calls))
+    return execute
+
+
+def prepare_flybrain(checkpoint, seed, view=False):
+    import hashlib
+    import torch
+    from stable_baselines3 import PPO
+    from rlbot.arm_env import ArmEnv, validate_arm_config
+
+    checkpoint = Path(checkpoint)
+    if not checkpoint.is_file():
+        raise RuntimeError(f'Flybrain checkpoint missing: {checkpoint}; run scripts/train_arm.py first')
+    report_path = checkpoint.parent/'validation/report.json'
+    if not report_path.is_file():
+        raise RuntimeError('Flybrain has no validation report; run scripts/run_arm.py --episodes 20 --seed 3000 --output out/rl/arm_integrated/validation')
+    report = json.loads(report_path.read_text())
+    if (report.get('episodes',0) < 20 or report.get('successes') != report['episodes']
+            or report.get('checkpoint_sha256') != hashlib.sha256(checkpoint.read_bytes()).hexdigest()):
+        raise RuntimeError('Flybrain checkpoint has not passed its recorded evaluation; use scripts/run_arm.py for diagnostics')
+    torch.set_num_threads(2)
+    env = ArmEnv(gripper='padded', station='pick')
+    policy = PPO.load(checkpoint, device='cpu')
+    validate_arm_config(getattr(policy, 'arm_config', None), env.configuration)
+    validate_arm_config(report.get('environment'), env.configuration)
+
+    def execute():
+        import contextlib
+        import mujoco.viewer
+        observation, _ = env.reset(seed=seed)
+        window = mujoco.viewer.launch_passive(env.model, env.data) if view else contextlib.nullcontext()
+        with window as viewer:
+            started = time.monotonic()
+            for _ in range(env.horizon):
+                if viewer is not None and not viewer.is_running():
+                    return ToolResult(False, {'reason':'viewer closed before completion'})
+                action, _ = policy.predict(observation, deterministic=True)
+                observation, _, terminated, truncated, info = env.step(action)
+                if viewer is not None:
+                    viewer.sync()
+                    time.sleep(max(0, env.data.time-(time.monotonic()-started)))
+                if terminated or truncated:
+                    break
+        env.close()
+        return ToolResult(info['success'], dict(seed=seed, **info))
+    return execute
+
+
+def navigate_to(station, view=False):
+    from navigate import drive
+    from rlbot.navmap import OccupancyGrid
+    result = drive(f'start-{station}', 'start', station, OccupancyGrid.from_room(), 10, view)
+    details = asdict(result)
+    details['touched'] = sorted(result.touched)
+    return ToolResult(result.ok, details)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Route a supplied recognition to Fable, ACT, or Flybrain. No VLM or camera detector is used here.')
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument('--station', choices=['ball','cubes','pick'])
+    target.add_argument('--spot', type=float, nargs=2, metavar=('X','Y'))
+    parser.add_argument('--recognized', required=True, choices=[t.value for t in Target])
+    parser.add_argument('--confidence', type=float, default=1.)
+    parser.add_argument('--execute', action='store_true', help='Run navigation, then a separate fixed-base manipulation simulation')
+    parser.add_argument('--planner', choices=['fable','sweep'], default='fable')
+    parser.add_argument('--checkpoint', type=Path, default=ROOT/'out/rl/arm_integrated/policy.zip')
+    parser.add_argument('--seed', type=int, default=3000)
+    parser.add_argument('--view', action='store_true')
+    args = parser.parse_args()
+    try:
+        station = args.station or station_at(args.spot)
+        now = time.monotonic()
+        recognition = Recognition(Target(args.recognized), args.confidence, now)
+        call = route_for(station, recognition, now=now)
+        print(json.dumps(dict(call=asdict(call), recognition_source='user_provided_label',
+                              simulation_mode='navigation_then_separate_fixed_base_manipulation'), indent=2), flush=True)
+        if not args.execute:
+            return 0
+        dispatcher = Dispatcher(lambda station: navigate_to(station, args.view), {
+            'run_fable':lambda: prepare_fable(args.planner, args.view),
+            'run_flybrain':lambda: prepare_flybrain(args.checkpoint, args.seed, args.view),
+        })
+        result = dispatcher.run(station, recognition, now=now)
+    except (ValueError, RuntimeError, FileNotFoundError) as error:
+        parser.exit(2, f'{error}\n')
+    print(json.dumps(asdict(result), indent=2))
+    return 0 if result.ok else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

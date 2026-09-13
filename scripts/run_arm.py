@@ -13,7 +13,7 @@ from stable_baselines3 import PPO
 from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'src'))
-from rlbot.arm_env import ArmEnv
+from rlbot.arm_env import ArmEnv, validate_arm_config
 from pick_place import camera, jpeg
 
 
@@ -50,7 +50,7 @@ def graph_payload(graph_path):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--checkpoint',default='out/rl/arm_original/policy.zip')
+    p.add_argument('--checkpoint',default='out/rl/arm_integrated/policy.zip')
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--seed',type=int,default=2000)
     p.add_argument('--episodes',type=int,default=1)
@@ -64,9 +64,13 @@ def main():
     torch.set_num_threads(2)
     policy=PPO.load(a.checkpoint,device='cpu')
     config=getattr(policy,'arm_config',None)
-    if a.gripper=='padded' and (not config or config.get('control_version')!=2 or config.get('gripper')!=a.gripper):
-        p.error('This checkpoint was not trained for the current original-gripper controls. Train scripts/train_arm.py first.')
     env=ArmEnv(gripper=a.gripper,station=a.station)
+    try:
+        validate_arm_config(config,env.configuration)
+    except ValueError as error:
+        p.error(str(error))
+    if a.episodes < 1:
+        p.error('--episodes must be positive')
     frames=[]; gifs=[]; reports=[]
     options=mujoco.MjvOption(); options.geomgroup[3]=0
     yaw_degrees=float(np.degrees(env.frame_yaw))
@@ -140,6 +144,7 @@ def main():
         gifs[0].save(a.output/'demo.gif',save_all=True,append_images=gifs[1:],duration=100,loop=0)
         gifs[-1].save(a.output/'preview.png')
         if a.open: webbrowser.open((a.output/'index.html').resolve().as_uri())
+    return 0 if report['successes']==a.episodes else 1
 
 
-if __name__=='__main__': main()
+if __name__=='__main__': sys.exit(main())

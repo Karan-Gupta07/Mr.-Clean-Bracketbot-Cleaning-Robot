@@ -119,7 +119,7 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 <p class="note" style="margin-top:10px">Bars show each type's mean activation at the current frame, relative to the strongest type's episode peak. Links are summed absolute model weights between types, not measured synapse counts.</p></section>
 
 <section class="tab" id="pane-input" role="tabpanel" aria-labelledby="tab-input" hidden><h2>What the policy sees</h2>
-<p class="note">The actual 20-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×20; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
+<p class="note">The actual 20-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×<span id="jawScale">20</span>; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
 <h3>Control path</h3><p class="note">Simulator state → learned input adapter → 4 graph propagation rounds → actor → XYZ increments and jaw opening → <span class="term" tabindex="0" data-term="inverse kinematics">inverse kinematics</span> → joint servos.</p>
 <p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; wrist orientation is fixed downward.</p><p class="note" id="jawMapping"></p>
 <p class="note">The <b id="ioCount"></b> mapped nodes are engineering interfaces. Those roles do not mean the biological neurons encode robot coordinates.</p></section>
@@ -127,8 +127,8 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 <section class="tab" id="pane-science" role="tabpanel" aria-labelledby="tab-science" hidden><h2>What was measured</h2>
 <p class="note">Results from the loaded checkpoint's training report, with <span id="trainingSteps"></span> PPO environment actions. Success includes lift, transfer, release, and withdrawal.</p>
 <table class="sci"><tr><th>Checkpoint</th><th>Success</th></tr>
-<tr><td>Before PPO (validation seeds 1000?1004)</td><td id="beforeScore"></td></tr>
-<tr><td>After PPO + rehearsal (seeds 2000?2009)</td><td id="afterScore"></td></tr></table>
+<tr><td>Before PPO (validation seeds 1000–1004)</td><td id="beforeScore"></td></tr>
+<tr><td>After PPO + rehearsal (seeds 2000–2009)</td><td id="afterScore"></td></tr></table>
 <p class="note">These use different evaluation starts. Neither score is a general hardware success rate.</p>
 <div class="caveat">PPO always ran alongside demonstration rehearsal, so this comparison does not separate reinforcement learning from the extra imitation updates.</div>
 <h3>Does the fly wiring help?</h3>

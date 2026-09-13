@@ -108,6 +108,15 @@ def xml_table(table: Table, indent="    "):
                 f'size="{fmt((LEG / 2, LEG / 2, (TABLE_H - TOP_T) / 2))}" '
                 f'pos="{x:.4f} {y:.4f} {(TABLE_H - TOP_T) / 2:.4f}" '
                 f'material="mat_wood"/>')
+    if table.name == "table_pick":
+        for axis in range(2):
+            for sign in (-1, 1):
+                pos = [0.03, 0.24, TABLE_H + .002]
+                pos[axis] += sign * .038
+                size = [.038, .038, .001]
+                size[axis] = .001
+                lines.append(f'{indent}  <site name="pick_target_{axis}_{sign}" type="box" '
+                             f'pos="{fmt(pos)}" size="{fmt(size)}" rgba="0.2 1 0.6 1"/>')
     lines.append(f"{indent}</body>")
     return "\n".join(lines)
 
@@ -162,6 +171,9 @@ HEADER = """<mujoco model="{name}">
 {include}
   <statistic center="0 0 0.8" extent="4"/>
 
+  <!-- Manipulation models select impratio 200 for a firm pinch. The shared
+       navigation scene keeps impratio 10 so grasp tuning does not change
+       wheel contact dynamics. -->
   <option impratio="10"/>
 
   <visual>
@@ -292,7 +304,7 @@ def check_reach(model, verbose=True) -> list[str]:
                 problems.append(f"{item.name}: best IK leaves the grip site "
                                 f"{best.pos_err * 1000:.0f} mm and "
                                 f"{math.degrees(best.rot_err):.0f} deg off")
-            if item.width > MAX_GRASP_WIDTH:
+            if item.graspable and item.width > MAX_GRASP_WIDTH:
                 problems.append(f"{item.name}: {item.width * 1000:.0f} mm across "
                                 f"exceeds the {MAX_GRASP_WIDTH * 1000:.0f} mm budget")
     return problems

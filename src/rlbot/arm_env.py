@@ -1,4 +1,5 @@
 """Continuous arm control. No teacher, clock or phase is used to select actions."""
+import hashlib
 import math
 import gymnasium as gym
 from gymnasium import spaces
@@ -7,6 +8,12 @@ import numpy as np
 from .manipulation import make_model, hand_for
 from .arm import Arm, ArmIK, down_quat, GRIPPER, FOLLOWER, OPEN
 from .room import TABLES
+from .robot import ROOM
+
+
+def validate_arm_config(actual, expected):
+    if actual != expected:
+        raise ValueError('Arm checkpoint/demonstrations do not match this gripper, station, or model. Collect and train again.')
 
 # Fully-open jaw command, and the factor that normalizes it for the observation.
 # "urdf" is the supplied gripper as exported. "parallel" reproduces the sliding-jaw
@@ -19,7 +26,9 @@ class ArmEnv(gym.Env):
     def __init__(self, gripper='padded', station='pick'):
         self.gripper = gripper
         self.station = station
-        table_index = 0 if station == 'pick' else 1
+        if station not in ('pick', 'cubes'):
+            raise ValueError("station must be 'pick' or 'cubes'")
+        table_index = next(i for i, t in enumerate(TABLES) if t.name == f'table_{station}')
         self.object_name = 'pick_cube' if station == 'pick' else 'cube_m'
         table = TABLES[table_index]
         self.frame_yaw = table.yaw
@@ -83,7 +92,21 @@ class ArmEnv(gym.Env):
         self.jaw_shift = shift
         self.action_space = spaces.Box(-1., 1., (4,), np.float32)
         self.observation_space = spaces.Box(-np.inf, np.inf, (20,), np.float32)
-        self.horizon = 400
+        self.horizon = 480
+
+    @property
+    def configuration(self):
+        physics = hashlib.sha256()
+        for values in (self.model.geom_size, self.model.geom_pos, self.model.geom_quat,
+                       self.model.geom_friction, self.model.geom_condim,
+                       self.model.geom_contype, self.model.geom_conaffinity,
+                       self.model.body_mass, self.model.actuator_forcerange):
+            physics.update(values.tobytes())
+        return dict(control_version=3, gripper=self.gripper, station=self.station,
+                    horizon=self.horizon, cube_width=self.cube_width,
+                    impratio=float(self.model.opt.impratio), physics_sha256=physics.hexdigest(),
+                    scene_sha256=hashlib.sha256(ROOM.read_bytes()).hexdigest(),
+                    robot_sha256=hashlib.sha256((ROOM.parent/'bracketbot.xml').read_bytes()).hexdigest())
 
     def to_world(self, point):
         return self.frame_origin + self.frame_rotation @ (np.asarray(point)-self.reference_origin)
@@ -158,7 +181,10 @@ class ArmEnv(gym.Env):
         return -3*reach + 2*lift + 4*(.17-distance)
 
     def step(self, action):
-        action = np.clip(np.asarray(action), -1, 1)
+        action = np.asarray(action, dtype=float)
+        if action.shape != (4,) or not np.isfinite(action).all():
+            raise ValueError('Arm actions must contain four finite values')
+        action = np.clip(action, -1, 1)
         # the box bounds where the jaws may go, so it means the same for any gripper
         self.target = np.clip(self.target + action[:3]*.004,
                               [-.42,-1.79,.731], [-.09,-1.63,.94])

@@ -1,7 +1,7 @@
 """Explicit parallel-jaw simulation variant; not the supplied hooked gripper."""
 import mujoco
 import numpy as np
-from .arm import GRIPPER, FOLLOWER, GRIP_SITE, Gripper
+from .arm import GRIPPER, FOLLOWER, GRIP_SITE, MeshGripper as Gripper
 
 
 def visual_rgba(body, fallback=(1., 1., 1., 1.)):

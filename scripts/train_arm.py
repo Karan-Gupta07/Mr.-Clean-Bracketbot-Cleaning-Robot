@@ -8,7 +8,7 @@ import torch
 from stable_baselines3 import PPO
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'src'))
-from rlbot.arm_env import ArmEnv
+from rlbot.arm_env import ArmEnv, validate_arm_config
 from rlbot.connectome import ConnectomeFeatures
 from train_connectome import RehearsalPPO, Progress
 
@@ -61,6 +61,9 @@ def main():
     p.add_argument('--updates',type=int,default=3000)
     p.add_argument('--bc-lr',type=float,default=5e-4)
     p.add_argument('--episodes',type=int,default=20)
+    p.add_argument('--dagger-rounds',type=int,default=0)
+    p.add_argument('--dagger-episodes',type=int,default=5)
+    p.add_argument('--dagger-updates',type=int,default=1000)
     p.add_argument('--demonstrations',type=Path,help='Reuse a collected demonstration dataset')
     p.add_argument('--resume',type=Path,help='Initialize from an existing arm checkpoint')
     p.add_argument('--correct-release',action='store_true',help='Collect training-only corrections on resumed policy states')
@@ -68,7 +71,7 @@ def main():
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--gripper',choices=['padded','urdf','parallel'],default='padded',
         help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
-    p.add_argument('--output',type=Path,default=Path('out/rl/arm_original'))
+    p.add_argument('--output',type=Path,default=Path('out/rl/arm_integrated'))
     a=p.parse_args()
     torch.set_num_threads(2)
     env=ArmEnv(gripper=a.gripper,station=a.station)
@@ -95,21 +98,26 @@ def main():
         if not kept:
             raise RuntimeError('No successful demonstrations to imitate')
         print(f'kept {kept}/{a.episodes} demonstrations, {len(observations)} transitions',flush=True)
-        np.savez_compressed(demos,observations=observations,actions=actions,gripper=a.gripper,control_version=2)
-    d=np.load(demos)
-    if a.gripper=='padded' and ('control_version' not in d or int(d['control_version'])!=2 or str(d['gripper'])!=a.gripper):
-        raise ValueError('Collect new demonstrations for the bounded original-gripper action mapping')
+        np.savez_compressed(demos,observations=observations,actions=actions,
+                            configuration=json.dumps(env.configuration,sort_keys=True))
+    d=np.load(demos,allow_pickle=False)
+    validate_arm_config(json.loads(str(d['configuration'])) if 'configuration' in d else None,
+                        env.configuration)
     obs=torch.tensor(d['observations']); actions=torch.tensor(d['actions'])
     if a.resume and (a.resume.parent/'release_corrections.npz').exists():
-        previous=np.load(a.resume.parent/'release_corrections.npz')
+        previous=np.load(a.resume.parent/'release_corrections.npz',allow_pickle=False)
+        validate_arm_config(json.loads(str(previous['configuration'])) if 'configuration' in previous else None,
+                            env.configuration)
         obs=torch.cat([obs,torch.tensor(previous['observations']).repeat(8,1)])
         actions=torch.cat([actions,torch.tensor(previous['actions']).repeat(8,1)])
     model=RehearsalPPO('MlpPolicy',env,policy_kwargs=dict(features_extractor_class=ConnectomeFeatures,
         net_arch=dict(pi=[128,128],vf=[128,128]),ortho_init=False),learning_rate=1e-5,
         n_steps=512,batch_size=128,n_epochs=3,vf_coef=.01,ent_coef=0.,seed=7,verbose=0)
     if a.resume:
-        model.policy.load_state_dict(PPO.load(a.resume,device='cpu').policy.state_dict())
-    model.arm_config=dict(gripper=a.gripper,station=a.station,control_version=2)
+        prior=PPO.load(a.resume,device='cpu')
+        validate_arm_config(getattr(prior,'arm_config',None),env.configuration)
+        model.policy.load_state_dict(prior.policy.state_dict())
+    model.arm_config=env.configuration
     if a.correct_release:
         if not a.resume:
             p.error('--correct-release requires --resume')
@@ -130,7 +138,8 @@ def main():
                 if t or tr: break
         if not extra_obs:
             raise RuntimeError('No release correction states reached')
-        np.savez_compressed(a.output/'release_corrections.npz',observations=extra_obs,actions=extra_actions)
+        np.savez_compressed(a.output/'release_corrections.npz',observations=extra_obs,actions=extra_actions,
+                            configuration=json.dumps(env.configuration,sort_keys=True))
         obs=torch.cat([obs,torch.tensor(np.array(extra_obs)).repeat(8,1)])
         actions=torch.cat([actions,torch.tensor(np.array(extra_actions)).repeat(8,1)])
         print('Release correction states',len(extra_obs),flush=True)
@@ -141,6 +150,30 @@ def main():
         loss=(model.policy.get_distribution(obs[ids]).distribution.mean-actions[ids]).square().mean()
         optimizer.zero_grad(); loss.backward(); optimizer.step()
         if (i+1)%250==0: print('BC',i+1,float(loss.detach()),flush=True)
+    dagger=[]
+    rng=np.random.default_rng(7)
+    for round_index in range(a.dagger_rounds):
+        extra_obs=[]; extra_actions=[]
+        for seed in range(100+round_index*a.dagger_episodes,100+(round_index+1)*a.dagger_episodes):
+            state,_=env.reset(seed=seed); teacher=Teacher()
+            for _ in range(env.horizon):
+                expert=teacher.action(env)
+                learned=model.predict(state,deterministic=True)[0]
+                extra_obs.append(state.copy()); extra_actions.append(expert)
+                action=expert if rng.random()<.5/(round_index+1) else learned
+                state,_,t,tr,info=env.step(action)
+                if t or tr: break
+            print('DAgger rollout',round_index,seed,info,flush=True)
+        obs=torch.cat([obs,torch.tensor(np.array(extra_obs))])
+        actions=torch.cat([actions,torch.tensor(np.array(extra_actions))])
+        for _ in range(a.dagger_updates):
+            ids=torch.randint(len(obs),(256,))
+            loss=(model.policy.get_distribution(obs[ids]).distribution.mean-actions[ids]).square().mean()
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
+        score=evaluate(model,env,3)
+        dagger.append(score)
+        print('DAgger validation',round_index,score,flush=True)
+        model.save(a.output/f'dagger_{round_index}')
     model.save(a.output/'imitation')
     before=evaluate(model,env,5)
     print('Before PPO',before,flush=True)
@@ -151,7 +184,7 @@ def main():
     model.save(a.output/'policy')
     after=evaluate(model,env,10,2000)
     report=dict(ppo_steps=model.num_timesteps,imitation_updates=a.updates,before_ppo=before,after_ppo=after,
-                environment=model.arm_config,
+                environment=model.arm_config,dagger=dagger,
                 resume=str(a.resume) if a.resume else None,bc_learning_rate=a.bc_lr,
                 release_corrections=a.correct_release,training_examples=len(obs),
                 graph_sha256=model.policy.features_extractor.graph_sha256,

@@ -43,9 +43,14 @@ EDGE_INSET = 0.09              # m, table edge to the near row of objects
 MAX_GRASP_WIDTH = 0.060        # m, across the grasp axis
 
 
-# Wrist angles to try when reaching for something, relative to the table.
-GRASP_YAWS = tuple(math.radians(a) for a in (0, 30, 60, 90, 120, 150))
-SQUARE_YAWS = (0.0, math.pi / 2)
+# Wrist angles to try when reaching for something, relative to the table, best
+# first.  Across the table beats along it, and not by a little: closing the jaws
+# along the robot's own forward axis fails on objects that the same hand at the
+# same spot holds easily turned 90 degrees.  The arm reaches the table from one
+# side, so at 0 degrees the wrist is folded back on itself and the blades come
+# together at a worse angle than the pad fit assumes.
+GRASP_YAWS = tuple(math.radians(a) for a in (90, 60, 120, 30, 150, 0))
+SQUARE_YAWS = (math.pi / 2, 0.0)
 
 
 @dataclass
@@ -70,6 +75,12 @@ class Item:
         do not care, and get the full sweep.
         """
         return SQUARE_YAWS if self.kind in ("cube", "crate") else GRASP_YAWS
+
+    @property
+    def graspable(self) -> bool:
+        """Crates are furniture: the robot puts things in them, not carries
+        them.  Everything else on a table is meant to be picked up."""
+        return self.kind != "crate"
 
     @property
     def height(self) -> float:
@@ -121,47 +132,81 @@ def cube(name, at, s, mass, rgba):
     return Item(name, "cube", at, s, mass, rgba, {"s": s})
 
 
-def crate(name, at, mass=0.22, rgba=(0.55, 0.42, 0.28, 1)):
-    """The open box each table's objects are meant to end up in.  Its outside is
-    55 mm across the short way, so the hand can also straddle and carry it."""
-    return Item(name, "crate", at, 0.055, mass, rgba,
-                {"l": 0.130, "w": 0.055, "h": 0.070, "t": 0.006})
+def crate(name, at, mass=0.40, rgba=(0.55, 0.42, 0.28, 1)):
+    """The open box each table's objects are meant to end up in.
+
+    Sized to what has to go in it, not to what the hand can carry: 208 x 148 mm
+    of clear interior takes any of these objects with room to miss by a couple
+    of centimetres.  An earlier version was 55 mm across the outside so the
+    gripper could straddle the crate itself - which left a 43 mm interior, too
+    narrow for three of the four cubes meant to go in it.  The crate is
+    furniture; it does not need to be pickable.
+    """
+    return Item(name, "crate", at, 0.220, mass, rgba,
+                {"l": 0.220, "w": 0.160, "h": 0.080, "t": 0.006})
 
 
 def bowl(name, at, mass=0.14, rgba=(0.92, 0.92, 0.88, 1)):
-    return Item(name, "bowl", at, 0.056, mass, rgba,
-                {"r_base": 0.019, "r_rim": 0.028, "h": 0.050, "t": 0.004})
+    """Tapered, and 56 mm tall because that is what the hand can hold.
+
+    At 50 mm - the obvious dinner-service proportion - the pads take it 38 mm up
+    instead of 43, and it is picked up every time and dropped every time.  The
+    band either side of 56 mm is narrow: 54, 55 and 58 mm all fail.
+    """
+    return Item(name, "bowl", at, 0.058, mass, rgba,
+                {"r_base": 0.020, "r_rim": 0.029, "h": 0.056, "t": 0.004})
 
 
-def mug(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
+def cup(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
     """Crockery the hand can actually take.
 
-    A plate was the obvious third thing on a table of tableware, and it does not
-    work: 26 mm tall, and the pads reach 28 mm below the middle of the jaw, so
-    closing on a plate means closing on the table.  A mug is the same idea -
-    thin-walled, open, easy to tip - at a height the hand can get hold of.
+    Two shapes were tried here and dropped.  A plate is 26 mm tall, and the pads
+    reach 22 mm below the middle of the jaw, so closing on a plate means closing
+    on the table.  A straight-sided mug is worse: a tall, round, thin-walled
+    tube touches two flat pads at two points on a curve, and rolled out of the
+    jaw on every carry.  Grip heights from 24 to 58 mm, four taper-and-height
+    combinations, carries from 2 to 8 seconds and more grip force all failed it.
+
+    A tapered cup works, because the pads close under the flare rather than on a
+    parallel wall.  These proportions are the ones that survived the sweep.
     """
-    return Item(name, "mug", at, 0.056, mass, rgba,
-                {"r_base": 0.027, "r_rim": 0.028, "h": 0.070, "t": 0.004})
+    return Item(name, "cup", at, 0.056, mass, rgba,
+                {"r_base": 0.019, "r_rim": 0.028, "h": 0.055, "t": 0.004})
 
 
 TABLES = [
-    Table("table_pick", (2.25, -1.10), math.radians(90), [
-        cube("pick_cube", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
+    Table("table_ball", (2.25, -1.10), math.radians(90), [
+        ball("ball", (-0.24, 0.0)),
+        crate("crate_ball", (0.00, 0.0)),
     ]),
     Table("table_cubes", (-0.20, -1.95), math.radians(0), [
-        cube("cube_s", (-0.26, 0.03), 0.042, 0.05, (0.90, 0.55, 0.15, 1)),
-        cube("cube_m", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
-        cube("cube_l", (-0.02, 0.03), 0.054, 0.10, (0.35, 0.70, 0.35, 1)),
-        cube("cube_xl", (0.11, -0.03), 0.058, 0.13, (0.75, 0.30, 0.65, 1)),
-        crate("crate_cubes", (0.27, 0.0)),
+        # Sizes and positions are both measured, not chosen.  Sweeping a cube
+        # from 54 to 58 mm across four positions: 54 and 55 mm are picked at
+        # some spots and not others, 56, 57 and 58 mm are picked and crated at
+        # every one of them.  Sweeping position: nothing within 0.12 m of the
+        # centreline works at all, which is fine, because that is where the
+        # crate is.  So: 56-58 mm, out at +-0.14 and +-0.26 m.
+        cube("cube_s", (-0.26, 0.0), 0.056, 0.11, (0.90, 0.55, 0.15, 1)),
+        cube("cube_m", (-0.14, 0.0), 0.057, 0.12, (0.25, 0.60, 0.85, 1)),
+        cube("cube_l", (0.14, 0.0), 0.058, 0.13, (0.35, 0.70, 0.35, 1)),
+        cube("cube_xl", (0.26, 0.0), 0.057, 0.12, (0.75, 0.30, 0.65, 1)),
+        crate("crate_cubes", (0.00, 0.0)),
     ]),
-    Table("table_ware", (-2.25, 0.90), math.radians(-90), [
-        bowl("bowl", (-0.26, 0.0)),
-        mug("mug", (-0.03, 0.0)),
-        crate("crate_ware", (0.24, 0.0)),
+    Table("table_pick", (-2.25, 0.90), math.radians(-90), [
+        cube("pick_cube", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
     ]),
 ]
+
+TABLEWARE = Table("table_ware", (-2.25, 0.90), math.radians(-90), [
+    bowl("bowl", (-0.22, 0.0)),
+    # 0.22 m out, not 0.14.  Sat next to the crate it is picked up fine on
+    # an empty table and not at all once the bowl is in the crate: the hand
+    # has to come down 30 mm from a crate wall that now has something
+    # standing in it.  Whether an object is reachable depends on what has
+    # already been put away.
+    cup("cup", (0.22, 0.0)),
+    crate("crate_ware", (0.00, 0.0)),
+])
 
 # ---- fixed furniture, so the map is not four bare walls -------------------
 PILLAR = (1.15, 1.30, 0.14)        # x, y, radius
@@ -213,7 +258,7 @@ def item_geoms(item: Item):
             ("box", (t, w - 2 * t, h / 2), (l - t, 0, h / 2), None),
             ("box", (t, w - 2 * t, h / 2), (-(l - t), 0, h / 2), None),
         ]
-    if item.kind in ("bowl", "mug"):
+    if item.kind in ("bowl", "cup"):
         base_h = s["t"]
         geoms = [("cylinder", (s["r_base"], base_h / 2), (0, 0, base_h / 2), None)]
         for slab in cone_shell(s["r_base"], s["r_rim"], base_h, s["h"], s["t"]):
@@ -246,15 +291,24 @@ def lowest_point(geoms) -> float:
 
 
 PAD_REACH = 0.022      # m the pads extend below the jaw centre, plus a margin
+RIM_GRIP = 0.012       # m below the rim to take a bowl or a mug
 
 
 def grasp_pose(item: Item, table: Table):
     """Where the jaws have to be to take this item.
 
-    Halfway up the object, which is where closing squeezes it instead of
-    levering it over - aiming at its lower third tipped an 85 mm cube onto its
-    face every time.  Except for anything under 56 mm tall: the pads reach
-    PAD_REACH below the middle of the jaw, and below that they close on the
-    table before they close on the object.
+    Two heights fight here.  The pads reach PAD_REACH below the middle of the
+    jaw, so any lower and they close on the table before they close on the
+    object.  Any higher and the jaw is above a short object altogether.
+
+    Above that floor, where to grip depends on the shape:
+
+      * A cube or a ball: halfway up, which is where closing squeezes it rather
+        than levering it over.
+      * A bowl or a mug: just under the rim.  These are tapered, and `width` is
+        measured across the rim - grip them at their waist and the jaw opens for
+        a diameter the object does not have there.  It is also where a tapered
+        wall gives the pads a lip to close under, which is the difference
+        between carrying a mug and knocking it over.
     """
     return table.place(item) + np.array([0, 0, max(PAD_REACH, item.height / 2)])

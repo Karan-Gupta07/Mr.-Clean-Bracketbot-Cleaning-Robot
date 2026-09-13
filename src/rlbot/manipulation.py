@@ -10,8 +10,8 @@ import math
 import mujoco
 import numpy as np
 
-from .arm import Arm, ArmIK, GRIPPER, OPEN, Gripper, down_quat
-from .gripper_pads import add_pads, PaddedGripper
+from .arm import Arm, ArmIK, GRIPPER, OPEN, MeshGripper as Gripper, down_quat
+from .gripper_pads import add_pads, bare_grippers, PaddedGripper
 from .parallel_gripper import replace_grippers, ParallelGripper
 from .robot import ROOM
 from .room import TABLES
@@ -34,6 +34,7 @@ def make_model(item_name="cube_m", gripper="padded", table_index=1):
         raise ValueError(f"gripper must be one of {GRIPPERS}")
     table = TABLES[table_index]
     spec = mujoco.MjSpec.from_file(str(ROOM))
+    spec.option.impratio = 200
     for key in list(spec.keys):
         spec.delete(key)
     root = spec.body("root")
@@ -50,6 +51,8 @@ def make_model(item_name="cube_m", gripper="padded", table_index=1):
         replace_grippers(spec)
     elif gripper == "padded":
         add_pads(spec)
+    else:
+        bare_grippers(spec)
     return spec.compile()
 
 

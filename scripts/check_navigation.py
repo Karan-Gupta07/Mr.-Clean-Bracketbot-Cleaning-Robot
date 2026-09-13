@@ -699,7 +699,7 @@ def check_fit_resampled_corner():
 def check_goal_for():
     from rlbot.room import TABLES
 
-    assert {table.name.split('_')[1] for table in TABLES} == {'ball', 'cubes', 'ware'}
+    assert {table.name.split('_')[1] for table in TABLES} == {'ball', 'cubes', 'pick'}
     for table in TABLES:
         assert goal_for(table.name.split('_')[1]) == table.dock
     with np.testing.assert_raises_regex(KeyError, "no table called 'missing'"):
@@ -1354,7 +1354,7 @@ def check_terminal_drift():
         assert grid.rect_free((pose[0] + path.goal[0]) / 2, (pose[1] + path.goal[1]) / 2, pose[2],
                               lim.half_depth + lim.margin + path.exit / 2, lim.half_width + lim.margin)
     pose = (-1.61564, 0.98995, math.radians(152.42))
-    goal = goal_for("ware")
+    goal = goal_for("pick")
     path = terminal_plan(grid, pose, goal, lim, 0.10)
     assert path is not None and path.exit == 0 and 0 < path.turn < math.pi / 2
     assert abs(_wrap(path.goal[2] - math.atan2(goal[1] - pose[1], goal[0] - pose[0]))) < 1e-9
@@ -1638,10 +1638,11 @@ def check_true_pose():
 
 def check_navigation_exports():
     import rlbot
-    from rlbot import arm, control, robot
+    from rlbot import arm, control, robot, sensing
 
     expected = {name: getattr(robot, name) for name in ("Balancer", "State", "TOY", "BRACKETBOT", "ROOM")}
-    expected.update({name: getattr(control, name) for name in ("BalanceController", "Gains")})
+    expected.update({name: getattr(control, name) for name in ("BalanceController", "Gains", "StationKeeper")})
+    expected.update({name: getattr(sensing, name) for name in ("Lidar", "Pose", "WheelOdometry")})
     expected.update({name: getattr(arm, name)
                      for name in ("Arm", "ArmIK", "Gripper", "Solution", "down_quat", "OPEN", "SHUT")})
     expected.update(OccupancyGrid=OccupancyGrid, Limits=Limits, NoPath=NoPath, Path=NavPath,

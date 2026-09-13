@@ -64,18 +64,63 @@ MIMIC = {
 # +-120 degrees on every hinge, which lets the arms fold into the mast; a
 # self-contact there would be an artefact of bad limits, not of the real robot,
 # and the balancer would have to fight it.
-ROBOT_CONTYPE, ROBOT_CONAFFINITY = 2, 1
+# Collision masks.  The world is 1/1.  The two arms get their own bits so that
+# they collide with the world and *with each other*, but never with themselves -
+# the URDF's joint limits are boilerplate +-120 degrees on every hinge, so a
+# link touching its own neighbour is an artefact of bad limits, while one arm
+# swinging through the other is a real collision that a real robot would have.
+# The chassis has a third bit so the arms can fold against the mast without
+# fighting it.
+WORLD = 1
+RIGHT_ARM, LEFT_ARM, CHASSIS = 2, 4, 8
+ARM_MASK = {"right": (RIGHT_ARM, WORLD | LEFT_ARM),
+            "left": (LEFT_ARM, WORLD | RIGHT_ARM)}
+ROBOT_CONTYPE, ROBOT_CONAFFINITY = CHASSIS, WORLD
 
 # Links that get a collision copy of their visual mesh.  Grasping happens on the
 # fingers and the palm between them; the arm links are here so a badly aimed
 # reach stops at the table instead of sweeping through it.
 COLLIDING_LINKS = (
-    "hand__hand", "left_finger__left_finger", "right_finger__right_finger",
-    "forearm__forearm", "bicep__bicep",
-    "l_hand__hand", "l_left_finger__left_finger", "l_right_finger__right_finger",
-    "l_forearm__forearm", "l_bicep__bicep",
+    "hand__hand", "forearm__forearm", "bicep__bicep",
+    "l_hand__hand", "l_forearm__forearm", "l_bicep__bicep",
 )
-GRIP_FRICTION = [1.2, 0.02, 0.002]   # sliding, torsional, rolling
+
+# The fingers are the exception.  MuJoCo collides a mesh as its convex hull, and
+# each blade is a 131 x 67 x 37 mm hook with a concave inner face: hulled, the
+# two of them fill the jaw solid.  A 55 mm cube placed dead centre between blades
+# 139 mm apart was already in contact with both, and closing shot it out.  So
+# each blade gets a flat pad fitted to its real inner face instead, measured off
+# the mesh at PAD_REF_OPEN.
+# One slab per blade, on the last 46 mm before the tip.  These blades are hooks:
+# measured face to face, the throat down by the pivot never opens past about
+# 45 mm however wide the hand goes, while the mouth reaches 130 mm.  A pad that
+# spans the whole blade therefore has its deep corners jutting into the jaw,
+# and an object entering the mouth wedges on them and squirts back out.  Pad the
+# mouth only, where the two faces stay roughly parallel, and the hand grips the
+# way its shape says it should: near the fingertips.
+PAD_REF_OPEN = 0.25        # rad, gripper angle the pads are measured at -
+                           # near closed, which is where this claw grips
+PAD_BANDS = ((-0.044, -0.004),)    # m, depth along the blade
+PAD_SKIN = 0.004           # m, how far in from a slice's extreme counts as face
+PAD_SLICES = 12            # slices along the blade used to trace that face
+PAD_HALF = (0.014, 0.003, 0.018)   # m, half sizes: across, through, along
+# Compliant rubber pads, in the only way a rigid-body solver can have them:
+# all three friction dimensions, on condim 6 contacts.
+#
+# Sliding friction stops the object creeping out of the pinch.  At mu = 1.2 the
+# solver let a 50 g cube slide 80 mm out of a 10 N grip in three seconds -
+# twenty times the friction it needed on paper, lost to the way MuJoCo trades
+# normal impedance against friction impedance.  That and the scene's impratio
+# fixed the sliding.
+#
+# What it did not fix was rolling.  A round object between two flat rigid pads
+# touches each at a point, and nothing resists it turning about the line between
+# them: the mug tilted 84 degrees in the first fifth of every carry and the ball
+# could not be picked up at all.  That is exactly what a soft pad prevents in
+# real life - it deforms around the curve - and `condim 6` with a rolling
+# friction term is how you say so here.  With it, both of them are carried.
+PAD_CONDIM = 6
+GRIP_FRICTION = [3.0, 0.05, 0.015]   # sliding, torsional, rolling
 ARM_FRICTION = [0.6, 0.005, 0.0001]
 
 # Three boxes spanning the chassis, each sized to the meshes inside its own
@@ -257,6 +302,8 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         for name in COLLIDING_LINKS:
             body = spec.body(name)
             finger = "finger" in name or name.endswith("hand__hand")
+            contype, conaffinity = ARM_MASK["left" if name.startswith("l_")
+                                            else "right"]
             visuals = [g for g in body.geoms if g.type == mujoco.mjtGeom.mjGEOM_MESH]
             for n, g in enumerate(visuals):
                 body.add_geom(
@@ -266,8 +313,8 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                     pos=g.pos,
                     quat=g.quat,
                     mass=0.0,
-                    contype=ROBOT_CONTYPE,
-                    conaffinity=ROBOT_CONAFFINITY,
+                    contype=contype,
+                    conaffinity=conaffinity,
                     group=3,
                     condim=4 if finger else 3,
                     friction=GRIP_FRICTION if finger else ARM_FRICTION,
@@ -385,6 +432,24 @@ def build(total_mass: float = TOTAL_MASS) -> None:
             hand.add_camera(name=f"wrist_{side}_cam", pos=pos, quat=flipped,
                             fovy=70)
 
+
+        # the pads are measured in the grip site's frame, so that has to exist
+        model = spec.compile()
+        for tag, (pos, quat, half) in finger_pads(model).items():
+            finger, n = tag.split("#")
+            pad_type, pad_aff = ARM_MASK["left" if finger.startswith("l_")
+                                         else "right"]
+            spec.body(finger).add_geom(
+                name=f"{finger}_pad{n}",
+                type=mujoco.mjtGeom.mjGEOM_BOX,
+                pos=pos, quat=quat, size=half, mass=0.0,
+                contype=pad_type, conaffinity=pad_aff,
+                group=2, condim=PAD_CONDIM, friction=GRIP_FRICTION,
+                solimp=[0.97, 0.99, 0.001, 0.5, 2],
+                rgba=next(g.rgba for g in spec.body(finger).geoms
+                          if g.type == mujoco.mjtGeom.mjGEOM_MESH and g.group == 2),
+            )
+
         # scale density so the whole robot weighs TOTAL_MASS
         model = spec.compile()
         got = sum(model.body_mass) - 2 * total_mass * WHEEL_MASS_FRACTION
@@ -420,7 +485,7 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         model = spec.compile()
 
         xml = spec.to_xml()
-        OUT.write_text(xml)
+        OUT.write_text(xml, newline="\n")
 
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
@@ -533,6 +598,83 @@ def grip_frames(model):
         quat = np.zeros(4)
         mujoco.mju_mat2Quat(quat, (rot.T @ axes).flatten())
         out[side] = (rot.T @ (centre - origin), quat)
+    return out
+
+
+def finger_pads(model):
+    """A flat pad on the inner face of each blade, in that finger's own frame.
+
+    Measured in the grip site's frame, where +z runs out along the blades and +y
+    is the closing axis: take the vertices in the part of the blade that does the
+    gripping, find the face pointing at the other blade, fit the plane they lie
+    on, and lay a slab on it.  Returns (pos, quat, half sizes) per pad.
+    """
+    data = mujoco.MjData(model)
+    hands = {
+        "right": ("hand__hand", "grip_right",
+                  ("left_finger__left_finger", "right_finger__right_finger"),
+                  ("right_left_gripper", "right_right_gripper")),
+        "left": ("l_hand__hand", "grip_left",
+                 ("l_left_finger__left_finger", "l_right_finger__right_finger"),
+                 ("left_left_gripper", "left_right_gripper")),
+    }
+    data.qpos[:] = model.qpos0
+    for _, _, _, joints in hands.values():
+        for joint in joints:          # the follower has no servo; set it by hand
+            data.qpos[model.jnt_qposadr[model.joint(joint).id]] = PAD_REF_OPEN
+    mujoco.mj_kinematics(model, data)
+
+    out = {}
+    for _side, (_hand, site_name, fingers, _joints) in hands.items():
+        site = model.site(site_name).id
+        origin, rot = data.site_xpos[site], data.site_xmat[site].reshape(3, 3)
+        clouds = {f: (_mesh_points(model, data, {model.body(f).id}) - origin) @ rot
+                  for f in fingers}
+        inner_side = {f: 1 if c[:, 1].mean() < np.mean(
+            [clouds[g][:, 1].mean() for g in fingers]) else -1
+            for f, c in clouds.items()}
+
+        for finger, cloud in clouds.items():
+            towards = inner_side[finger]          # +1 if this blade faces +y
+            body = data.body(finger)
+            body_rot = body.xmat.reshape(3, 3)
+
+            for n, (lo, hi) in enumerate(PAD_BANDS):
+                # Trace the inner profile slice by slice.  Taking the single
+                # most-inward vertex over the whole blade picks the one nearest
+                # the pivot, where the two blades almost touch, and fits the pad
+                # to a 20 mm patch down in the crook of the hand.
+                band = cloud[(cloud[:, 2] > lo) & (cloud[:, 2] < hi)]
+                face = []
+                for edge in np.linspace(lo, hi, PAD_SLICES + 1)[:-1]:
+                    step = (hi - lo) / PAD_SLICES
+                    slab = band[(band[:, 2] >= edge) & (band[:, 2] < edge + step)]
+                    if len(slab) < 4:
+                        continue
+                    inner = slab[:, 1].max() if towards > 0 else slab[:, 1].min()
+                    face.append(slab[np.abs(slab[:, 1] - inner) < PAD_SKIN])
+                face = np.vstack(face)
+
+                # The gripping face is a tilted plane, not a slab parallel to the
+                # approach axis: the blades pivot at the hand, so the face leans
+                # in towards the tips.  Fit the plane the points actually lie on.
+                middle = face.mean(0)
+                _, _, axes = np.linalg.svd(face - middle, full_matrices=False)
+                normal = axes[2] * (1.0 if axes[2][1] * towards > 0 else -1.0)
+                along = axes[0]
+                across = np.cross(normal, along)
+
+                frame = np.column_stack([across, normal, along])
+                extent = (face - middle) @ frame
+                half = [float(np.clip(np.abs(extent[:, 0]).max(), 0.004, PAD_HALF[0])),
+                        PAD_HALF[1],
+                        float(np.clip(np.abs(extent[:, 2]).max(), 0.010, PAD_HALF[2]))]
+
+                centre = middle - normal * PAD_HALF[1]   # slab just inside the face
+                world = origin + rot @ centre
+                quat = np.zeros(4)
+                mujoco.mju_mat2Quat(quat, (body_rot.T @ rot @ frame).flatten())
+                out[f"{finger}#{n}"] = (body_rot.T @ (world - body.xpos), quat, half)
     return out
 
 

@@ -9,6 +9,7 @@ a caller can tell "reached it" from "got within 4 cm and stopped".
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 
@@ -132,7 +133,7 @@ class ArmIK:
         return best
 
 
-class Gripper:
+class MeshGripper:
     """Where the jaws actually are, as a function of the gripper command.
 
     The two blades are not symmetric about the grip site and they do not swing
@@ -196,6 +197,125 @@ class Gripper:
     def jaw_offset(self, opening: float) -> np.ndarray:
         """Tip midpoint at that opening, in the site frame."""
         return np.array([np.interp(opening, self.q, self.offset[:, k])
+                         for k in range(3)])
+
+    def site_target(self, jaw_target, quat, opening: float) -> np.ndarray:
+        """Where to send the site so the jaws land on `jaw_target`."""
+        world = np.zeros(3)
+        mujoco.mju_rotVecQuat(world, self.jaw_offset(opening),
+                              np.asarray(quat, dtype=float))
+        return np.asarray(jaw_target, dtype=float) - world
+
+
+class Gripper:
+    """Where the jaws are, as a function of the gripper command.
+
+    The blades are not symmetric about the grip site and they do not swing in a
+    plane: opening from shut to wide slides the jaw centre sideways and pulls it
+    back up the approach axis.  Aim the site itself at an object and the object
+    lands off-centre in a jaw shallower than it looks, and one blade reaches it
+    first and flicks it away.
+
+    So measure, once, off the pads the build script laid on the blades: for each
+    gripper command, where the two gripping faces are in the site's own frame.
+    The planner aims the *jaws* and this corrects the site target.
+    """
+
+    def __init__(self, model, side: str, samples: int = 25):
+        self.model, self.side = model, side
+        self.site = model.site(GRIP_SITE[side]).id
+        data = mujoco.MjData(model)
+        joint = model.joint(GRIPPER[side]).id
+        adr = [model.jnt_qposadr[joint],
+               model.jnt_qposadr[model.joint(FOLLOWER[side]).id]]
+        self.lo, self.hi = model.jnt_range[joint]
+
+        prefix = "" if side == "right" else "l_"
+        self.pads = [model.geom(f"{prefix}{f}_finger__{f}_finger_pad0").id
+                     for f in ("left", "right")]
+        self.q = np.linspace(self.lo, self.hi, samples)
+        self.centre = np.zeros((samples, 3))   # jaw centre, in the site frame
+        self.gap = np.zeros(samples)           # between the pad faces, m
+        self.splay = np.zeros(samples)         # how far off facing each other, rad
+
+        for i, q in enumerate(self.q):
+            data.qpos[:] = model.qpos0
+            data.qpos[adr] = q
+            mujoco.mj_kinematics(model, data)
+            faces = self._faces(model, data)
+            self.centre[i] = faces.mean(0)
+            self.gap[i] = self._narrowest(model, data)
+            self.splay[i] = self._splay(model, data)
+
+    def _faces(self, model, data):
+        """The two pads' gripping faces, in the site frame."""
+        origin = data.site_xpos[self.site]
+        rot = data.site_xmat[self.site].reshape(3, 3)
+        centres = [rot.T @ (data.geom_xpos[pad] - origin) for pad in self.pads]
+        out = []
+        for pad, centre, other in zip(self.pads, centres, centres[::-1]):
+            # the pad's own y is its thin axis; take the face pointing at the
+            # opposite pad, not at the site, which is not between them
+            normal = rot.T @ data.geom_xmat[pad].reshape(3, 3)[:, 1]
+            normal = normal * (1.0 if normal @ (other - centre) > 0 else -1.0)
+            out.append(centre + normal * model.geom_size[pad][1])
+        return np.array(sorted(out, key=lambda f: f[1]))
+
+    def _splay(self, model, data) -> float:
+        """Angle between the two pad faces.
+
+        These blades do not swing in a plane.  Open the hand wide and the faces
+        turn outward until they are no longer looking at each other at all - at
+        full travel they are 65 degrees apart, and an object between them is not
+        between anything.  A grasp only means something while this stays small.
+        """
+        normals = [data.geom_xmat[pad].reshape(3, 3)[:, 1] for pad in self.pads]
+        return float(math.pi - math.acos(np.clip(-abs(normals[0] @ normals[1]),
+                                                 -1.0, 1.0)))
+
+    def _narrowest(self, model, data) -> float:
+        """Closest approach of the two pads, corner to corner.
+
+        The pads are not parallel - they lean in towards the throat - so the gap
+        between their centres overstates what fits between them by about a
+        quarter.  What an object has to clear is the narrowest point.
+        """
+        boxes = []
+        for pad in self.pads:
+            half = model.geom_size[pad]
+            rot = data.geom_xmat[pad].reshape(3, 3)
+            signs = np.array(list(itertools.product((-1, 1), repeat=3)))
+            boxes.append(data.geom_xpos[pad] + (signs * half) @ rot.T)
+        return float(np.linalg.norm(boxes[0][:, None, :] - boxes[1][None, :, :],
+                                    axis=-1).min())
+
+    MAX_SPLAY = math.radians(35)   # past this the faces are not opposed enough
+
+    @property
+    def widest(self) -> float:
+        """The most this hand can hold with its faces still opposed."""
+        usable = self.gap[self.splay <= self.MAX_SPLAY]
+        return float(usable.max()) if len(usable) else 0.0
+
+    def opening_for(self, width: float, clearance: float = 0.012):
+        """The command that leaves `clearance` of daylight around an object.
+
+        Wider is not always more open: the blades splay as they go, so the gap
+        peaks and the faces stop opposing.  Take the smallest command that fits,
+        and refuse anything that only fits with the hand splayed open.
+        """
+        wanted = width + clearance
+        peak = int(np.argmax(self.gap))
+        if wanted > self.gap[peak]:
+            return None
+        opening = float(np.interp(wanted, self.gap[: peak + 1], self.q[: peak + 1]))
+        if np.interp(opening, self.q, self.splay) > self.MAX_SPLAY:
+            return None
+        return opening
+
+    def jaw_offset(self, opening: float) -> np.ndarray:
+        """Jaw centre at that opening, in the site frame."""
+        return np.array([np.interp(opening, self.q, self.centre[:, k])
                          for k in range(3)])
 
     def site_target(self, jaw_target, quat, opening: float) -> np.ndarray:

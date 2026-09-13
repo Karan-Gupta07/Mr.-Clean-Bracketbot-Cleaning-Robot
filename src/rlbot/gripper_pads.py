@@ -20,7 +20,7 @@ padding has been fitted to the real robot.
 import mujoco
 import numpy as np
 
-from .arm import GRIPPER, FOLLOWER, GRIP_SITE, Gripper
+from .arm import GRIPPER, FOLLOWER, GRIP_SITE, MeshGripper as Gripper
 from .parallel_gripper import visual_rgba
 
 # Jaw command the pads are fitted at: both blades are near the object here, so
@@ -58,8 +58,33 @@ def _blade_surface(model, data, body_id, site_id, target):
     raise ValueError(f"no mesh geom on body {body_id}")
 
 
+def bare_grippers(spec):
+    for prefix in ("", "l_"):
+        for finger in ("left", "right"):
+            name = f"{prefix}{finger}_finger__{finger}_finger"
+            body = spec.body(name)
+            for geom in list(body.geoms):
+                if geom.name.startswith(f"{name}_pad"):
+                    spec.delete(geom)
+            visuals = [g for g in body.geoms if g.type == mujoco.mjtGeom.mjGEOM_MESH and g.group == 2]
+            for geom in body.geoms:
+                if geom.type == mujoco.mjtGeom.mjGEOM_MESH and geom.group == 3:
+                    geom.contype = 4 if prefix else 2
+                    geom.conaffinity = 3 if prefix else 5
+            if not any(g.contype or g.conaffinity for g in body.geoms):
+                for i, geom in enumerate(visuals):
+                    body.add_geom(name=f"{name}_bare_collision{i}",
+                                  type=mujoco.mjtGeom.mjGEOM_MESH,
+                                  meshname=geom.meshname, pos=geom.pos, quat=geom.quat,
+                                  mass=0, group=3, contype=4 if prefix else 2,
+                                  conaffinity=3 if prefix else 5, condim=4,
+                                  friction=[1.2, .02, .002])
+    return spec
+
+
 def add_pads(spec, thickness=THICKNESS, friction=FRICTION, span=HALF_SPAN):
     """Give each supplied blade a contact pad and stop colliding the blade mesh."""
+    bare_grippers(spec)
     probe = spec.compile()
     data = mujoco.MjData(probe)
     placements = []
@@ -114,7 +139,8 @@ def add_pads(spec, thickness=THICKNESS, friction=FRICTION, span=HALF_SPAN):
         body.add_geom(name=f"{name}_pad", type=mujoco.mjtGeom.mjGEOM_BOX,
                       pos=pos, quat=quat,
                       size=[span[0], thickness / 2, span[2]],
-                      mass=0.004, contype=2, conaffinity=1, condim=4,
+                      mass=0.004, contype=4 if name.startswith("l_") else 2,
+                      conaffinity=3 if name.startswith("l_") else 5, condim=4,
                       friction=list(friction), solref=list(SOLREF),
                       rgba=visual_rgba(body), group=2)
     return spec
