@@ -72,9 +72,8 @@ def xml_item(item: Item, table: Table, indent="    "):
     # mass is the item's, shared out by volume-free equal split: these are thin
     # shells, and what matters for a grasp is the total the fingers have to hold
     each = item.mass / len(geoms)
-    lines = [f'{indent}<body name="{item.name}" pos="{fmt(pos)}">']
-    if not item.fixed:
-        lines.append(f'{indent}  <freejoint/>')
+    lines = [f'{indent}<body name="{item.name}" pos="{fmt(pos)}">',
+             f'{indent}  <freejoint/>']
     for i, (kind, size, gpos, quat) in enumerate(geoms):
         q = f' quat="{fmt(quat)}"' if quat is not None else ""
         lines.append(

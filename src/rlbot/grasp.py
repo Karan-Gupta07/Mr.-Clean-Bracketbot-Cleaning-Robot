@@ -29,7 +29,6 @@ HOLD_SECONDS = 1.5     # s to keep holding something before believing the grasp
 # following it - that is the pads meeting something - then push GRIP_BITE
 # further and hold, which is a grip force of about kp * GRIP_BITE.
 STALL = 0.04           # rad of servo tracking error that counts as contact
-GRIP_RATE = 0.35       # rad/s the gripper is allowed to open or close
 GRIP_BITE = 0.20       # rad of command past contact, for the squeeze
 
 # A 7 DOF arm reaches most poses several ways, and IK restarted from scratch is
@@ -177,23 +176,7 @@ def move(rig: Rig, arm: Arm, target, seconds=1.2, tol=0.01, patience=3.0) -> flo
     return float(np.abs(arm.data.qpos[arm.ik.qadr] - target).max())
 
 
-def set_grip(rig: Rig, arm: Arm, target: float, rate: float = GRIP_RATE) -> None:
-    """Drive the gripper to an opening at a speed, rather than commanding it.
-
-    A position servo handed a new setpoint moves at whatever the force limit
-    allows, which for these blades is a snap: it looks wrong, it throws light
-    objects, and it slams the fingers into whatever is beside them.  Every
-    gripper command goes through here.
-    """
-    start = float(arm.data.ctrl[arm.grip_act])
-    steps = max(1, int(abs(target - start) / max(rate, 1e-6)
-                       / rig.model.opt.timestep))
-    for i in range(steps):
-        arm.grip(start + (target - start) * (i + 1) / steps)
-        rig.step()
-
-
-def squeeze(rig: Rig, arm: Arm, floor: float = SHUT, rate: float = GRIP_RATE,
+def squeeze(rig: Rig, arm: Arm, floor: float = SHUT, rate: float = 0.6,
             settle: float = 0.6) -> float:
     """Close the fingers until they are loaded, then hold there.
 
@@ -221,54 +204,8 @@ def squeeze(rig: Rig, arm: Arm, floor: float = SHUT, rate: float = GRIP_RATE,
     return float(data.qpos[joint])
 
 
-RIGHT_BIT, LEFT_BIT = 2, 4     # the arms' collision bits, from build_mjcf.py
-
-
-def fouls(model, data, qadr, qpos, avoid=()) -> bool:
-    """Would the arm be inside the other arm, or inside something it must not
-    touch, at this pose?
-
-    A waypoint check, not a path check - it does not prove the motion between
-    two waypoints is clear.  It is still worth doing: without it the planner
-    happily answers with a pose that has one hand buried in the other, and the
-    arm then spends the whole approach jammed against it.  Cheap enough to run
-    on every candidate: one forward-kinematics call per waypoint.
-    """
-    data.qpos[qadr] = qpos
-    mujoco.mj_forward(model, data)
-    for c in range(data.ncon):
-        g1, g2 = data.contact[c].geom1, data.contact[c].geom2
-        types = {model.geom_contype[g1], model.geom_contype[g2]}
-        if types == {RIGHT_BIT, LEFT_BIT}:
-            return True                       # one arm inside the other
-        names = (model.body(model.geom_bodyid[g1]).name,
-                 model.body(model.geom_bodyid[g2]).name)
-        arm = any(model.geom_contype[g] in (RIGHT_BIT, LEFT_BIT) for g in (g1, g2))
-        if arm and any(n in avoid for n in names):
-            return True
-    return False
-
-
-PATH_SAMPLES = 6               # poses checked between each pair of waypoints
-
-
-def path_fouls(model, data, qadr, start, end, avoid=()) -> bool:
-    """Does the straight joint-space move from one pose to another hit anything?
-
-    Checking the waypoints alone is not enough and the difference is not
-    academic: two clear poses either side of the crate are joined by a motion
-    that goes through it.  The servos interpolate in joint space, so sampling
-    the same interpolation is an honest approximation of the path they take.
-    """
-    for k in range(1, PATH_SAMPLES + 1):
-        pose = start + (end - start) * k / PATH_SAMPLES
-        if fouls(model, data, qadr, pose, avoid):
-            return True
-    return False
-
-
 def plan_waypoints(model, scratch, jaws, width, yaws, dock_yaw, seed_from,
-                   sides=("right", "left"), avoid=()):
+                   sides=("right", "left")):
     """Best (score, side, wrist, opening, [above, on, up]) for a top-down grasp.
 
     Targets are the *jaws*, not the grip site: `Gripper` knows where the tip
@@ -305,10 +242,6 @@ def plan_waypoints(model, scratch, jaws, width, yaws, dock_yaw, seed_from,
                 previous = got
             if broke:
                 continue
-            poses = [np.asarray(seed_from)[ik.qadr]] + [c.qpos for c in chain]
-            if any(path_fouls(model, scratch, ik.qadr, a, b, avoid)
-                   for a, b in zip(poses, poses[1:])):
-                continue                      # through the other arm, or the crate
 
             return (sum(c.pos_err for c in chain), side, yaw, opening, chain)
     return None
