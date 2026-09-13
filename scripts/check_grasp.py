@@ -99,7 +99,7 @@ class Rig:
         rot = d.body("root").xmat.reshape(3, 3)
         gyro = d.sensordata[self._gyro : self._gyro + 3]
         return State(
-            pitch=math.atan2(rot[0, 2], rot[2, 2]),
+            pitch=math.atan2(-rot[2, 0], math.hypot(rot[0, 0], rot[1, 0])),
             pitch_rate=float(gyro[1]),
             yaw=math.atan2(rot[1, 0], rot[0, 0]),
             yaw_rate=float(gyro[2]),
