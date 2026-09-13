@@ -105,6 +105,12 @@ def drive(name: str, keyframe: str, table: str, grid, nav_hz: float, view: bool 
     window = (mujoco.viewer.launch_passive(model, data)
               if view and nav.traj is not None else contextlib.nullcontext())
     with window as viewer:
+        if viewer is not None:
+            viewer.cam.lookat[:] = [0., 0., .6]
+            viewer.cam.distance = 7.5
+            viewer.cam.azimuth = 90
+            viewer.cam.elevation = -65
+            viewer.opt.geomgroup[3] = 0
         while data.time < budget and not nav.done and not nav.failed and not result.fell:
             tick = time.monotonic()
             if viewer is not None and not viewer.is_running():

@@ -2,6 +2,7 @@ import argparse
 from dataclasses import asdict
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -11,20 +12,38 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'src'))
 
 from rlbot.orchestration import Dispatcher, Recognition, Target, ToolResult, route_for, station_at
+from rlbot.act import prepare_act
 
 
 def prepare_fable(planner, view=False):
+    if planner not in ('fable', 'sweep'):
+        raise ValueError('Fable planner must be fable or explicitly offline sweep')
     if planner == 'fable':
         if importlib.util.find_spec('anthropic') is None:
             raise RuntimeError('Install requirements-agent.txt to run the Fable API planner')
         if not os.environ.get('ANTHROPIC_API_KEY'):
             raise RuntimeError('Set ANTHROPIC_API_KEY locally to run Fable, or explicitly select --planner sweep for offline skill validation')
-    from agent import Harness, Robot, fable_planner, sweep_planner, watch
+    from agent import Harness, MODEL, Robot, fable_planner, sweep_planner, watch
+    if planner == 'fable':
+        import anthropic
+        try:
+            with anthropic.Anthropic(timeout=30., max_retries=0) as client:
+                client.models.retrieve(MODEL)
+        except anthropic.APIError:
+            raise RuntimeError('Fable API/model preflight failed; verify the locally configured replacement key and model access. No movement started.') from None
 
     def execute():
         robot = Robot('cubes')
         harness = Harness(robot)
-        job = (lambda: fable_planner(harness, 'cubes', 'high')) if planner == 'fable' else lambda: sweep_planner(harness)
+
+        def job():
+            if planner == 'sweep':
+                sweep_planner(harness)
+            else:
+                try:
+                    fable_planner(harness, 'cubes', 'high')
+                except anthropic.APIError:
+                    raise RuntimeError('Fable API request failed; verify API/model access. No fallback controller was used.') from None
         if view:
             watch(robot, job, 1.)
         else:
@@ -65,22 +84,31 @@ def prepare_flybrain(checkpoint, seed, view=False):
     def execute():
         import contextlib
         import mujoco.viewer
-        observation, _ = env.reset(seed=seed)
-        window = mujoco.viewer.launch_passive(env.model, env.data) if view else contextlib.nullcontext()
-        with window as viewer:
-            started = time.monotonic()
-            for _ in range(env.horizon):
-                if viewer is not None and not viewer.is_running():
-                    return ToolResult(False, {'reason':'viewer closed before completion'})
-                action, _ = policy.predict(observation, deterministic=True)
-                observation, _, terminated, truncated, info = env.step(action)
+        try:
+            observation, _ = env.reset(seed=seed)
+            window = mujoco.viewer.launch_passive(env.model, env.data) if view else contextlib.nullcontext()
+            with window as viewer:
                 if viewer is not None:
-                    viewer.sync()
-                    time.sleep(max(0, env.data.time-(time.monotonic()-started)))
-                if terminated or truncated:
-                    break
-        env.close()
-        return ToolResult(info['success'], dict(seed=seed, **info))
+                    viewer.cam.lookat[:] = env.to_world([-.26,-1.60,1.0])
+                    viewer.cam.distance = 1.7
+                    viewer.cam.azimuth = -60 + math.degrees(env.frame_yaw)
+                    viewer.cam.elevation = -25
+                    viewer.opt.geomgroup[3] = 0
+                    env.model.vis.map.znear = .003 / env.model.stat.extent
+                started = time.monotonic()
+                for _ in range(env.horizon):
+                    if viewer is not None and not viewer.is_running():
+                        return ToolResult(False, {'reason':'viewer closed before completion'})
+                    action, _ = policy.predict(observation, deterministic=True)
+                    observation, _, terminated, truncated, info = env.step(action)
+                    if viewer is not None:
+                        viewer.sync()
+                        time.sleep(max(0, env.data.time-(time.monotonic()-started)))
+                    if terminated or truncated:
+                        break
+            return ToolResult(info['success'], dict(seed=seed, **info))
+        finally:
+            env.close()
     return execute
 
 
@@ -103,6 +131,8 @@ def main():
     parser.add_argument('--execute', action='store_true', help='Run navigation, then a separate fixed-base manipulation simulation')
     parser.add_argument('--planner', choices=['fable','sweep'], default='fable')
     parser.add_argument('--checkpoint', type=Path, default=ROOT/'out/rl/arm_observable/policy.zip')
+    parser.add_argument('--act-checkpoint', type=Path,
+                        help='ACT checkpoint path; the real ACT backend is not implemented yet')
     parser.add_argument('--seed', type=int, default=3000)
     parser.add_argument('--view', action='store_true')
     args = parser.parse_args()
@@ -118,6 +148,7 @@ def main():
         dispatcher = Dispatcher(lambda station: navigate_to(station, args.view), {
             'run_fable':lambda: prepare_fable(args.planner, args.view),
             'run_flybrain':lambda: prepare_flybrain(args.checkpoint, args.seed, args.view),
+            'run_act':lambda: prepare_act(args.act_checkpoint, args.view),
         })
         result = dispatcher.run(station, recognition, now=now)
     except (ValueError, RuntimeError, FileNotFoundError) as error:

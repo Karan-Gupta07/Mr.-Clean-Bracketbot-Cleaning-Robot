@@ -134,6 +134,118 @@ class ArmCompatibilityTests(unittest.TestCase):
                 self.assertEqual(model.arm_calibration,dict(jaw_output_gain=1.25))
                 model.save.assert_called_once()
 
+    def test_release_correction_seats_before_opening_and_waits_for_clearance(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from train_arm import ReleaseCorrection
+        env = SimpleNamespace(cube=np.array([0.,0.,.740]),goal=np.array([0.,0.,.724]),
+                              rest_height=.724,max_lift=0.,held=0.,closed_action=-1.,
+                              grip_point=np.array([0.,0.,.748]),target=np.array([0.,0.,.748]),
+                              data=SimpleNamespace(qpos=np.array([.515])),gripq=0,
+                              released_qpos=.42,contacts=Mock(return_value=2))
+        teacher = ReleaseCorrection()
+        self.assertIsNone(teacher.action(env))
+        env.max_lift=.15; env.held=1.
+        action=teacher.action(env)
+        np.testing.assert_array_equal(action,[0,0,-1,-1])
+        env.target[2]=env.grip_point[2]=.732
+        for _ in range(15):
+            self.assertEqual(teacher.action(env)[3],-1)
+        env.cube[2]=.724
+        for _ in range(11):
+            self.assertEqual(teacher.action(env)[3],-1)
+        np.testing.assert_array_equal(teacher.action(env),[0,0,0,1])
+        for _ in range(25):
+            self.assertEqual(teacher.action(env)[2],0)
+        env.contacts.return_value=0
+        for _ in range(7):
+            self.assertEqual(teacher.action(env)[2],0)
+        env.contacts.return_value=1
+        self.assertEqual(teacher.action(env)[2],0)
+        env.contacts.return_value=0
+        for _ in range(7):
+            self.assertEqual(teacher.action(env)[2],0)
+        np.testing.assert_array_equal(teacher.action(env),[0,0,.5,1])
+        env.data.qpos[0]=.3
+        self.assertEqual(teacher.action(env)[2],0)
+        self.assertFalse(ReleaseCorrection().active)
+
+    def test_learned_evaluation_never_constructs_a_teacher_or_release_correction(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        import train_arm
+        observation=np.zeros(23,dtype=np.float32)
+        action=np.array([.1,.2,.3,-.4],dtype=np.float32)
+        env=SimpleNamespace(horizon=1,reset=Mock(return_value=(observation,{})),
+                            step=Mock(return_value=(observation,0,True,False,dict(success=True))))
+        model=SimpleNamespace(predict=Mock(return_value=(action,None)))
+        with patch.object(train_arm,'Teacher',side_effect=AssertionError('teacher at inference')), \
+                patch.object(train_arm,'ReleaseCorrection',side_effect=AssertionError('correction at inference')):
+            score=train_arm.evaluate(model,env,1)
+        self.assertEqual(score['successes'],1)
+        np.testing.assert_array_equal(env.step.call_args.args[0],action)
+        model.predict.assert_called_once_with(observation,deterministic=True)
+
+    def test_release_collection_discards_failures_and_preserves_raw_prefix_outputs(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        import torch
+        import train_arm
+        distribution=SimpleNamespace(distribution=SimpleNamespace(mean=torch.tensor([[.1,.2,.3,-1.25]])))
+        policy=SimpleNamespace(obs_to_tensor=lambda state:(torch.tensor(state),False),
+                               get_distribution=lambda tensor:distribution)
+        env=SimpleNamespace(horizon=2,reset=Mock(side_effect=[(np.array([30.],dtype=np.float32),{}),
+                                                            (np.array([31.],dtype=np.float32),{})]),
+                            step=Mock(side_effect=[(np.array([30.]),0,False,False,dict(success=False)),
+                                                   (np.array([30.]),0,True,False,dict(success=False)),
+                                                   (np.array([31.]),0,False,False,dict(success=False)),
+                                                   (np.array([31.]),0,True,False,dict(success=True))]))
+        teacher=SimpleNamespace(action=Mock(side_effect=[None,np.array([0.,0.,0.,1.]),
+                                                        None,np.array([0.,0.,0.,1.])]))
+        with patch.object(train_arm,'ReleaseCorrection',return_value=teacher), patch('builtins.print'):
+            observations,actions,corrected,runs=train_arm.collect_release_corrections(
+                SimpleNamespace(policy=policy),env,2)
+        np.testing.assert_array_equal(observations,[[31.],[31.]])
+        np.testing.assert_array_equal(corrected,[False,True])
+        self.assertEqual(actions[0,3],-1.25)
+        self.assertEqual(actions[1,3],1.)
+        self.assertEqual(observations.dtype,np.float32)
+        self.assertEqual(actions.dtype,np.float32)
+        self.assertEqual([run['success'] for run in runs],[False,True])
+
+    def test_release_distillation_does_not_modify_graph_or_value_parameters(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import torch
+        import train_arm
+        extractor=torch.nn.Linear(3,5)
+        extractor.graph_sha256='unit graph'
+        actor=torch.nn.Sequential(torch.nn.Linear(5,4),torch.nn.Tanh())
+        critic=torch.nn.Linear(5,1)
+        policy=SimpleNamespace(features_extractor=extractor,extract_features=extractor,
+                               mlp_extractor=SimpleNamespace(policy_net=actor,forward_actor=actor),
+                               action_net=torch.nn.Linear(4,4),value_net=critic)
+        model=SimpleNamespace(policy=policy,num_timesteps=0,arm_calibration=dict(jaw_output_gain=1.25),
+                              save=lambda path:Path(str(path)+'.zip').write_bytes(b'unit checkpoint'))
+        observations=np.arange(24,dtype=np.float32).reshape(8,3)/24
+        actions=np.ones((8,4),dtype=np.float32)
+        corrected=np.array([False]*4+[True]*4)
+        frozen=[parameter.detach().clone() for module in (extractor,critic) for parameter in module.parameters()]
+        before=policy.action_net.weight.detach().clone()
+        with tempfile.TemporaryDirectory() as output, \
+                patch.object(train_arm,'collect_release_corrections',return_value=(observations,actions,corrected,[])), \
+                patch.object(train_arm,'evaluate',return_value=dict(successes=0,episodes=10)), \
+                patch('builtins.print'):
+            report=train_arm.distill_release(model,SimpleNamespace(configuration={}),Path(output),1,3,.001)
+        for expected,actual in zip(frozen,[parameter for module in (extractor,critic) for parameter in module.parameters()]):
+            torch.testing.assert_close(actual,expected)
+            self.assertIsNone(actual.grad)
+        self.assertFalse(torch.equal(before,policy.action_net.weight))
+        self.assertEqual(report['ppo_steps'],0)
+        self.assertTrue(report['feature_extractor_frozen'])
+        self.assertEqual(report['corrected_examples'],4)
+
     def test_rate_limiter_command_is_visible_to_the_policy(self):
         env = ArmEnv()
         observation, _ = env.reset(seed=99)

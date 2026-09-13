@@ -134,6 +134,43 @@
     "diagnostic_replay_success": true,
     "diagnostic_replay_displays_heldout_score": true
   },
+  "parallel_release_followup": {
+    "strongest_checkpoint": "out/rl/arm_history_deadband/policy.zip",
+    "checkpoint_sha256": "ed83080a80c25a612c36ac96de0ac94d27f380f0ce35593adeb0d1b62f19abe2",
+    "fresh_seed_range": [6000, 6019],
+    "successes": 18,
+    "episodes": 20,
+    "failed_seeds": [6012, 6017],
+    "validation_report": "out/rl/release_agent_baseline_validation/validation/report.json",
+    "audit": "out/rl/release_agent_audit.json",
+    "diagnosis": "Withdrawal begins while a finger still contacts the cube; learned release height is above the demonstrated seating target",
+    "training_only_correction_successes": 4,
+    "training_only_correction_episodes": 4,
+    "correction_is_not_a_learned_policy_success": true,
+    "actor_distillation_development_successes": 6,
+    "vertical_readout_development_successes": 8,
+    "development_episodes_each": 10,
+    "experimental_checkpoints_promoted": false,
+    "ready": false
+  },
+  "act_scaffold": {
+    "entrypoint": "rlbot.act.prepare_act",
+    "cli": "scripts/run_act.py",
+    "registered_in_orchestration": true,
+    "registered_in_live_demo": true,
+    "backend_implemented": false,
+    "stops_before_navigation": true,
+    "fallback": null
+  },
+  "live_demo_launcher": {
+    "script": "scripts/live_demo.py",
+    "uses_live_mujoco_viewers": true,
+    "separate_simulation_stages": true,
+    "secure_console_prompt_supported": true,
+    "keys_written_to_repo": false,
+    "api_model_preflight_before_navigation": true,
+    "live_run_validated": false
+  },
   "live_fable_followup": {"anthropic_sdk_installed": true, "api_key_configured": false, "tested": false},
   "rendering": {
     "command": "scripts/view_cameras.py --keyframe dock_pick --pose approach --item pick_cube --snapshot out/integrated_camera_views.png --headless --near-clip 0.005",
@@ -143,6 +180,6 @@
     "right_wrist_camera_sees_cube": true,
     "robot_camera_mounts_changed": false
   },
-  "regressions": {"tests_run": 45, "passed": 44, "expected_bare_gripper_failures": 1, "unexpected_failures": 0, "navigation_unit_checks": "passed", "python_compile": "passed", "replay_js_syntax": "passed", "replay_metadata_checks": "passed", "pip_check": "passed"},
+  "regressions": {"tests_run": 83, "passed": 82, "expected_bare_gripper_failures": 1, "unexpected_failures": 0, "navigation_unit_checks": "passed", "python_compile": "passed", "replay_js_syntax": "passed", "replay_metadata_checks": "passed", "pip_check": "passed"},
   "release_gates": ["ACT code/checkpoint and evaluation", "live Fable API validation", "passing learned Flybrain policy", "camera recognition and continuous handoff are not implemented"]
 }

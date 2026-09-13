@@ -156,21 +156,25 @@ class Pacer:
     """
 
     def __init__(self, viewer, model, speed: float = 1.0, fps: int = 60):
+        if not math.isfinite(speed) or speed <= 0:
+            raise ValueError('Live viewer speed must be finite and positive')
         self.viewer, self.model, self.speed = viewer, model, speed
         self.every = max(1, round(1 / (fps * model.opt.timestep)))
         self.count = 0
-        self.clock = time.time()
+        self.clock = time.monotonic()
 
     def __call__(self, data) -> None:
+        if not self.viewer.is_running():
+            raise RuntimeError('Live viewer closed before manipulation finished')
         self.count += 1
         if self.count % self.every:
             return
         self.viewer.sync()
         ahead = self.every * self.model.opt.timestep / self.speed - (
-            time.time() - self.clock)
+            time.monotonic() - self.clock)
         if ahead > 0:
             time.sleep(ahead)
-        self.clock = time.time()
+        self.clock = time.monotonic()
 
 
 def watch(robot: Robot, run, speed: float) -> None:
@@ -184,15 +188,20 @@ def watch(robot: Robot, run, speed: float) -> None:
         viewer.cam.distance = 1.8
         viewer.cam.elevation = -20
         viewer.cam.azimuth = math.degrees(math.atan2(rot[1, 0], rot[0, 0])) + 150
+        previous = robot.rig.on_step
         robot.rig.on_step = Pacer(viewer, robot.model, speed)
-        viewer.sync()
-
-        run()
-
-        print("\ndone - the window stays open, close it to finish")
-        while viewer.is_running():
+        try:
             viewer.sync()
-            time.sleep(0.05)
+            if not viewer.is_running():
+                raise RuntimeError('Live viewer closed before manipulation started')
+            run()
+
+            print("\ndone - the window stays open, close it to finish", flush=True)
+            while viewer.is_running():
+                viewer.sync()
+                time.sleep(0.05)
+        finally:
+            robot.rig.on_step = previous
 
 
 class Harness:

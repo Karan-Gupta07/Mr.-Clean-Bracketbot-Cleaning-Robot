@@ -76,6 +76,30 @@ tests Fable's skills without an API model; default `fable` needs a locally set
 registered; it never falls back to VLA or to a script. Flybrain refuses dispatch
 without compatible model metadata and a passing, checkpoint-bound validation.
 
+### Live MuJoCo demo and ACT scaffold
+
+The integrated Flybrain/Fable code is in `main`. ACT has an importable scaffold
+at `rlbot.act.prepare_act`; its real controller and checkpoint are still pending.
+The scaffold never moves the robot or substitutes another controller.
+
+```powershell
+.venv\Scripts\python.exe scripts/run_act.py --describe
+.venv\Scripts\python.exe scripts/live_demo.py --station cubes --recognized colored_cubes --prompt-api-key --report out/live_fable.json
+.venv\Scripts\python.exe scripts/live_demo.py --station cubes --recognized colored_cubes --planner sweep
+```
+
+The hidden prompt requires an interactive local console and keeps the key in
+that process only. Fable API/model access is checked before navigation. The
+sweep command is explicitly **offline skill validation**, not an API-agent run.
+Navigation opens a live MuJoCo window, followed by a **separate fixed-base**
+manipulation window. Close the cubes window after completion to finish the
+result report; closing it during manipulation stops the skill loop. No camera
+recognition or continuous navigation/manipulation handoff is claimed.
+
+For Flybrain, `live_demo.py --station pick --recognized blue_cube_rectangle`
+also requires an explicit `--checkpoint`. Its unchanged preflight rejects the
+current 18/20 candidates. A `--dry-run` reports routing only, not readiness.
+
 ## Setup
 
 ### Fly-connectivity controller and demo
