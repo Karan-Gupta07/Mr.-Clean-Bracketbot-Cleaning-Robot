@@ -87,6 +87,11 @@ pip install -r requirements.txt
 # Put the camera frames back onto recorded demonstrations, and preview them.
 .venv/bin/python scripts/render_demos.py out/demos/cubes --preview
 
+# Train ACT on the ball demonstrations (needs requirements-train.txt), then run it in the sim.
+.venv/bin/pip install -r requirements-train.txt
+.venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
+.venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
+
 # Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
 docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
     python3 src/rlbot/hybrid_ik.py /path/to/libhybrid_ik_lib.so models/bracketbot/chopped_urdf_v2.urdf right_eef
@@ -116,6 +121,11 @@ scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed 
 scripts/teleop.py           Keyboard teleop of one arm, recording demonstrations for the VLA.
 scripts/render_demos.py     Renders the cameras for recorded demonstrations, after the fact.
 scripts/collect_demos.py    Scripted demonstrations: the teleop controller driven by code, layouts randomized.
+scripts/audit_demos.py      Cuts bad demonstrations and writes a folder's manifest.
+scripts/train_act.py        Trains ACT on demonstration folders, checkpointing and resuming.
+scripts/rollout_act.py      Runs a trained ACT policy closed-loop in the sim and scores it.
+scripts/replay_demo.py      Plays recorded episodes or rollouts back in the viewer.
+checkpoints/                Trained ACT policies, weights only, with their configs and logs.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
@@ -127,6 +137,7 @@ src/rlbot/grasp.py          The motions a pick is made of, shared by the harness
 src/rlbot/skills.py         The robot as an agent sees it: typed skills, symbolic scene.
 src/rlbot/filming.py        Records a run to an mp4.
 src/rlbot/teleop.py         The jog controller and the demonstration recorder behind teleop.py.
+src/rlbot/act.py            ACT: the model, the demonstration loader, checkpoints.
 ```
 
 ## How the robot model was fixed
@@ -323,6 +334,43 @@ every cube on the table with either arm, at key-repeat rate and at tap rate.
 The two outer cubes sit at the edge of the wrist's range: the last centimetre
 across to them gets refused at a wrist yaw of 90 degrees, and turning the wrist
 gets it back.
+
+## A first policy: ACT on the ball
+
+`src/rlbot/act.py` is Action Chunking with Transformers (Zhao et al. 2023),
+sized for a laptop: a shared ResNet-18 over the three cameras at 128 px, a
+256-wide transformer with 4 encoder and 4 decoder layers, a 32-dimensional
+CVAE latent, 22M parameters. State and action are the recorder's 16 numbers,
+both arms' seven joints plus the gripper blade, as measured and as commanded.
+It predicts 32 commands at a time, 1.6 s at 20 Hz. Training is L1 on the
+chunk plus the KL term at weight 10, AdamW at 1e-4 (1e-5 for the backbone),
+batch 8, float32 on the MPS backend at about 0.2 s a step on an M5.
+
+Two runs on the 80-episode ball set, 72 training and 8 held out:
+
+| Run | Augmentation | Steps | Best val L1 | Rollouts into the crate |
+| --- | --- | --- | --- | --- |
+| `checkpoints/act_ball_run1_noaug.pt` | none | 20K | 0.0167 | 2 of 14 |
+| `checkpoints/act_ball_run2_aug.pt` | random 6 px image shift | 17K | 0.0153 | 1 of 6 at step 15.7K |
+
+Rollouts are on layouts the policy never saw, ball and crate both moved, scored
+by the collector's own test. Both checkpoints reach the ball and close on it
+about four times in ten; most of those then lose the ball on the carry, which
+is the ball's weakness with this hand rather than the policy's - the scripted
+collector, with perfect information, drops a third of its carries too. The
+checkpoints are weights only in half precision; `scripts/rollout_act.py`
+loads either. `--mode open-loop` runs each chunk out before re-planning and
+has done better than the paper's temporal ensemble here.
+
+Things learned the hard way, in case they save someone an afternoon:
+
+- Rollouts must start where the demonstrations start, after the collector's
+  ready move. Handed the rest pose, the policy swung the arm through the ball.
+- The policy starts closing about half a second earlier than the
+  demonstrations, before the arm has settled at the ball's height, so the pads
+  catch the top of the ball. More demonstrations and augmentation reduce it.
+- Frames are memory-mapped from a per-episode cache at 128 px; at 224 px the
+  set does not fit beside the model on a 24 GB machine.
 
 ## Plan for the next steps
 
