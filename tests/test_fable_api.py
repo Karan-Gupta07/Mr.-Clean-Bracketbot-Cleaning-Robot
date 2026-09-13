@@ -29,6 +29,22 @@ class FablePreflightTests(unittest.TestCase):
             self.assertNotIn('synthetic-test-key',str(raised.exception))
             robot.assert_not_called()
 
+    def test_http_status_is_reported_without_exposing_api_error_contents(self):
+        import anthropic
+        for status in (401, 403, 404):
+            with self.subTest(status=status), \
+                    patch.object(orchestrate.os,'environ',{'ANTHROPIC_API_KEY':'synthetic-test-key'}), \
+                    patch('anthropic.Anthropic') as constructor, patch.object(agent,'Robot') as robot:
+                client = constructor.return_value.__enter__.return_value
+                client.models.retrieve.side_effect = anthropic.APIStatusError(
+                    'synthetic-test-key', response=Mock(status_code=status,headers={}), body=None)
+                with self.assertRaises(RuntimeError) as raised:
+                    orchestrate.prepare_fable('fable')
+                self.assertIn(f'HTTP {status}',str(raised.exception))
+                self.assertIn(agent.MODEL,str(raised.exception))
+                self.assertNotIn('synthetic-test-key',str(raised.exception))
+                robot.assert_not_called()
+
     def test_offline_preflight_never_creates_an_api_client(self):
         with patch('anthropic.Anthropic') as constructor, patch.object(agent,'Robot') as robot:
             self.assertTrue(callable(orchestrate.prepare_fable('sweep')))

@@ -29,8 +29,10 @@ def prepare_fable(planner, view=False):
         try:
             with anthropic.Anthropic(timeout=30., max_retries=0) as client:
                 client.models.retrieve(MODEL)
-        except anthropic.APIError:
-            raise RuntimeError('Fable API/model preflight failed; verify the locally configured replacement key and model access. No movement started.') from None
+        except anthropic.APIError as error:
+            status = getattr(error, 'status_code', None)
+            category = f'HTTP {status}' if isinstance(status, int) else type(error).__name__
+            raise RuntimeError(f'Fable API/model preflight failed ({category}; model {MODEL}); verify the locally configured key and model access. No movement started.') from None
 
     def execute():
         robot = Robot('cubes')
