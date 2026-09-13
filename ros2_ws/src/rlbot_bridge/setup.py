@@ -15,5 +15,6 @@ setup(
     entry_points={"console_scripts": [
         "simulation = rlbot_bridge.simulation:main",
         "save_map = rlbot_bridge.map_session:main",
+        "navigate = rlbot_bridge.navigate:main",
     ]},
 )

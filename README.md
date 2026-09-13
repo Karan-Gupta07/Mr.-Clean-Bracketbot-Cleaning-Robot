@@ -19,7 +19,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | Step | Status |
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
-| 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Manual mapping works; Nav2 navigation is not implemented. |
+| 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Custom curved navigation passes all nine sim routes on the true pose, and a ROS node drives the same navigator on the SLAM pose in Docker (two routes hand-tested). Nav2 is not implemented. |
 | 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. Nothing lifts reliably yet - the gripper model is the blocker, see below. No VLA model yet. |
 
 ### What works today
@@ -27,7 +27,12 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 - **The BracketBot model.** It was converted from a URDF file into MuJoCo format by `scripts/build_mjcf.py`. The wheels spin, the robot can stand on the floor, and the mass numbers are fixed. See "How the robot model was fixed" below.
 - **Balancing.** A hand-tuned PD controller keeps the robot upright for as long as you like. It survives a 300 N shove.
 - **A room to work in.** A 6 x 4.5 m room with four walls, a pillar and a divider to map, and three tables: one with a ball and a crate, one with four cubes and a crate, one with a bowl, a mug and a crate. It is written twice - `models/room.xml` is the environment on its own, with no robot in it at all, and `models/room_scene.xml` is the same room with the robot added.
-- **A room the robot actually fits in.** `scripts/build_room.py` measures the robot's own footprint - 42 cm across, 1.7 m tall, read off its collision boxes - and checks the room against it before writing anything. 16.2 of the 27 m2 of floor is standable, all of it reachable from the middle, and each table's docking pose leaves 14.6 cm of daylight. It prints the map and refuses to write a room that fails.
+- **A room the robot actually fits in.** By default, `scripts/build_room.py` regenerates the room files, then checks clearance and arm reach. The clearance check measures the robot's own footprint - 42 cm across, 1.61 m tall, read off its collision boxes. 16.2 of the 27 m2 of floor is standable, all of it reachable from the middle, and each table's docking pose leaves 14.6 cm of daylight. It prints the map and exits with a nonzero status if the checks fail; the room files have already been written.
+- **Driving to a table.** A* searches a grid inflated for the robot's footprint, then the robot follows checked cubic curves with bounded motion profiles. All nine nominal routes from the start to each table and between table docks arrived within 10 cm and 5 degrees, without falling or touching furniture. The local check uses the known-room grid and the sim's true pose. In Docker, `ros2 run rlbot_bridge navigate` runs the same navigator on a saved SLAM map and the localised pose; two routes have been hand-tested that way.
+
+  The four phases - exit, turn, curve, dock - are played open loop from a schedule worked out in advance, not steered step by step. Between phases the robot stops, waits for a steady pose, and replans from wherever it actually ended up; a stale pose, or drifting more than 15 cm off the schedule, stops it the same way. The design asked for 10 cm there; the extra 5 cm is simulation tuning, because a balancing robot writes phantom distance into its pose every time it catches itself. Waiting for a steady pose means holding zero for a braking dwell and then seeing 0.5 s of poses within 5 mm and half a degree of each other before it replans. If that window never arrives the wait re-arms after 8 s and tries again; only 60 replans on one route, or 30 s with no pose at all, ends it. Within about 20 cm of the goal - twice the arrival tolerance - the four phases give way to a guarded turn in place, each intermediate angle checked as a padded rectangle, so the last stretch is not a detour back out to an exact docking anchor and in again. The schedules cap speed at 0.15 m/s, yaw rate at 0.3 rad/s and linear acceleration at 0.1 m/s², with angular acceleration on curves best effort and the DriveController's ramp as a backstop. No controller limits were raised to make any of this work. These are nominal simulation results only: two routes finished with little of their time budget to spare, and noisy poses and hardware have not been tested.
+
+  The check also watches the bridge's 2-degree scan-tilt gate, and it never tripped: the chassis spent 0.00 s past 2 degrees on all nine routes, so driving did not starve SLAM of scans in sim. That is only one of the three things the bridge asks of a scan, though. It also throws one away when the gyro's roll/pitch rate passes 0.2 rad/s, or when fewer than half the rays come back, and the local check measures neither - so a clean sweep here does not fully predict the ROS behaviour.
 - **Arm control.** Inverse kinematics (IK) moves each 7-joint arm to a target pose. The arms and mast now have collision shapes, so they cannot pass through each other.
 - **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along. Nothing currently survives the lift - see "What the room is built around".
 - **A small toy balancer.** `models/balancer.xml` is a simple two-wheeled robot. It loads in a second and is a quick way to catch controller bugs without loading the full robot.
@@ -71,6 +76,16 @@ pip install -r requirements.txt
 
 # Check how close the arm gets to the robot's own mast and base along the grasp paths.
 .venv/bin/python scripts/check_arm_clearance.py
+
+# Plan the nine routes between the start pose and the three tables, draw them, check them.
+.venv/bin/python scripts/plan_path.py
+
+# Drive those routes in the sim on the balancer and check the robot arrives.
+.venv/bin/python scripts/navigate.py
+.venv/bin/mjpython scripts/navigate.py --route cubes-ware --view
+
+# Unit checks for the grid, planner and navigator.
+.venv/bin/python scripts/check_navigation.py
 
 # Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
 docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
@@ -144,6 +159,14 @@ docker --context colima-rlbot run --rm -it --name rlbot-localize -v "$PWD/out:/a
 
 The initial map-pose guess defaults to x/y/yaw = 0. Launch arguments `x:=... y:=... yaw:=...` change that localization guess, not the simulator spawn; the bridge currently starts at the room's `start` keyframe. `mode:=mapping` with `map_file:=...` resumes mapping instead of localization.
 
+With the stack in localization mode, drive to a table on the SLAM pose. The `navigate` node reads the saved map, unions in the known table tops the lidar cannot see, looks up `map -> base_footprint`, and publishes `/cmd_vel` until it arrives within 10 cm and 5 degrees:
+
+```bash
+docker --context colima-rlbot exec -it rlbot-localize /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge navigate --ros-args -p use_sim_time:=true -p map_yaml:=/artifacts/room_1/map.yaml -p to:=cubes
+```
+
+`to` takes a table name (`ball`, `cubes`, `ware`) or `"x y yaw"`. It is the same navigator `scripts/navigate.py` runs locally on the sim's true pose.
+
 Run the real integration check in a fresh output directory:
 
 ```bash
@@ -173,9 +196,15 @@ scripts/balance.py          Live viewer.
 scripts/check_grasp.py      Tries to pick up each object in the room.
 scripts/validate_ik.py      Proves the arm IK: round-trip on random poses, then every object in the room.
 scripts/check_arm_clearance.py  Measures arm-to-chassis clearance along the grasp paths (the sim filters self-collision).
+scripts/plan_path.py        Plans, draws and checks the nine routes without running physics.
+scripts/navigate.py         Drives the nine routes in the sim and checks arrival, falls and furniture contacts.
+scripts/check_navigation.py Unit checks for the grid, planner and navigator.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
+src/rlbot/navmap.py         Known-room and saved PGM/YAML grids, obstacle overlays, inflation and footprint checks.
+src/rlbot/planner.py        A* routes, cubic curves, guarded turns and bounded speed/yaw-rate schedules.
+src/rlbot/navigate.py       Runs open-loop phases, holds zero to settle and replans from the actual pose.
 src/rlbot/arm.py            Arm inverse kinematics and the grasp sequence.
 src/rlbot/room.py           What is in the room and where. Shared by the builder and the grasp test.
 src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' libhybrid_ik_lib.so, set up the way their daemon uses it.
@@ -242,10 +271,10 @@ the tables.
 
 **Step 2, SLAM navigation**
 
-- Validate the LiDAR mount and tilted-scan projection, then publish the tested sensor/odometry inputs through ROS 2.
-- Hook up a SLAM library so the robot can build a map of the room and know where it is.
-- Add a path planner so the robot can drive to a target spot while it keeps its balance.
-- Add a "dock at a table" move so the robot ends up in a good spot for the arms to reach.
+- Run all nine routes through the ROS node on the SLAM pose automatically, the way `scripts/check_ros_mapping.py` runs mapping; only two routes have been hand-tested in Docker so far.
+- Account for tabletop overhangs that the low LiDAR scan cannot see. The loader already accepts extra obstacle boxes; sensing those overhangs and placing them in the map frame still need work.
+- Validate the physical LiDAR mount and the 2-degree scan-tilt gate during autonomous routes, including pose loss and noisy localization, so driving does not starve SLAM of scans.
+- Use perceived table edges for fine docking within the arms' reach, rather than relying on the known room's docking poses.
 
 **Step 3, VLA pick and place**
 
@@ -260,3 +289,5 @@ the tables.
 - **The robot's weight and motor limits are guesses.** The URDF does not say what the robot weighs. We will need to weigh the real robot and check the motor specs before trusting any force or torque numbers from the sim. Then re-run `build_mjcf.py --total-mass` and re-tune the gains.
 - **The arms have no damping or friction.** The URDF does not give any, and none was made up.
 - **The grasp test bolts the robot to the floor by default.** That way a failed grasp is the grasp's fault, not the balancer's. Use `--balance` to run it the honest way, on the wheels.
+- **Nav2 was considered and dropped, not overlooked.** Nothing here uses a Nav2 controller, so running Nav2 only to plan would mean standing up a second Docker stack for one A* call.
+- **If open loop plus replanning ever stops arriving, the answer is a different design.** `scripts/navigate.py` prints a replan count and a worst-distance-off-schedule for every route; those two columns are the evidence. If they climb and the robot stops reaching 10 cm - on noisier poses, or on hardware - what it needs is a cross-track tracking controller, not a tweak to this one.
