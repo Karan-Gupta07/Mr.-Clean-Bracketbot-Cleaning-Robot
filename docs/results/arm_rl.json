@@ -1,0 +1,390 @@
+{
+  "ppo_steps": 8192,
+  "imitation_updates": 750,
+  "before_ppo": {
+    "successes": 1,
+    "episodes": 5,
+    "runs": [
+      {
+        "seed": 1000,
+        "success": true,
+        "distance": 0.0037514917305142125,
+        "max_lift": 0.162247144980752,
+        "held_seconds": 5.2799999999996405,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 190
+      },
+      {
+        "seed": 1001,
+        "success": false,
+        "distance": 0.019521590230860825,
+        "max_lift": 0.16446947503179254,
+        "held_seconds": 5.4619999999996205,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1002,
+        "success": false,
+        "distance": 0.020019388776264857,
+        "max_lift": 0.16511538889758115,
+        "held_seconds": 5.493999999999617,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1003,
+        "success": false,
+        "distance": 0.022437411051730142,
+        "max_lift": 0.16589074056908282,
+        "held_seconds": 5.217999999999647,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1004,
+        "success": false,
+        "distance": 0.022870056526044062,
+        "max_lift": 0.16618215510888723,
+        "held_seconds": 5.2259999999996465,
+        "stable_seconds": 0.0,
+        "steps": 400
+      }
+    ]
+  },
+  "after_ppo": {
+    "successes": 10,
+    "episodes": 10,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": true,
+        "distance": 0.007197338513258409,
+        "max_lift": 0.15977315026868777,
+        "held_seconds": 4.935999999999678,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 206
+      },
+      {
+        "seed": 2001,
+        "success": true,
+        "distance": 0.009934336526332438,
+        "max_lift": 0.16598824235747378,
+        "held_seconds": 5.747999999999589,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 232
+      },
+      {
+        "seed": 2002,
+        "success": true,
+        "distance": 0.008266656920613924,
+        "max_lift": 0.1535059248995968,
+        "held_seconds": 4.817999999999691,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 201
+      },
+      {
+        "seed": 2003,
+        "success": true,
+        "distance": 0.007872122288299735,
+        "max_lift": 0.168324012514389,
+        "held_seconds": 6.763999999999477,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 252
+      },
+      {
+        "seed": 2004,
+        "success": true,
+        "distance": 0.008529453029813465,
+        "max_lift": 0.15971911315966558,
+        "held_seconds": 4.927999999999679,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 207
+      },
+      {
+        "seed": 2005,
+        "success": true,
+        "distance": 0.00863646231963539,
+        "max_lift": 0.15658407772122718,
+        "held_seconds": 5.017999999999669,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 198
+      },
+      {
+        "seed": 2006,
+        "success": true,
+        "distance": 0.010656219287827855,
+        "max_lift": 0.1666635811277143,
+        "held_seconds": 7.455999999999401,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 254
+      },
+      {
+        "seed": 2007,
+        "success": true,
+        "distance": 0.007443462088730087,
+        "max_lift": 0.1611462183585357,
+        "held_seconds": 4.953999999999676,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 207
+      },
+      {
+        "seed": 2008,
+        "success": true,
+        "distance": 0.007200065975422415,
+        "max_lift": 0.15786914867755153,
+        "held_seconds": 4.859999999999687,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 200
+      },
+      {
+        "seed": 2009,
+        "success": true,
+        "distance": 0.006165240809369486,
+        "max_lift": 0.15809372020240708,
+        "held_seconds": 5.117999999999658,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 203
+      }
+    ]
+  },
+  "graph_sha256": "e561650067d66eb8c8e8fd79e1a637a6f17bd6b9e734aba93b0b57c02f9089c8",
+  "ppo_metrics": {
+    "train/learning_rate": 1e-05,
+    "train/entropy_loss": 8.325175841649374,
+    "train/policy_gradient_loss": -0.010904404567554593,
+    "train/value_loss": 27.396069685618084,
+    "train/approx_kl": 0.020984552800655365,
+    "train/clip_fraction": 0.15690104166666666,
+    "train/loss": 0.2721061706542969,
+    "train/explained_variance": 0.0061171650886535645,
+    "train/std": 0.03019038215279579,
+    "train/n_updates": 48.0,
+    "train/clip_range": 0.2
+  },
+  "initial_cloning_updates": 3000,
+  "release_cloning_updates": 750,
+  "demonstration_transitions": 5260,
+  "release_correction_transitions": 138,
+  "correction_training_seeds": [
+    30,
+    31,
+    32,
+    33,
+    34
+  ],
+  "rehearsal_updates_per_rollout": 32,
+  "pad_sliding_friction": 3.0,
+  "parameter_change_l2": 0.7981406450271606,
+  "graph_gain_change_l2": 0.07341793179512024,
+  "paired_before": {
+    "checkpoint": "out/rl/arm_release/imitation.zip",
+    "checkpoint_sha256": "a07892b1ba9b7b9b98750a604b2ce4b3792894bbdbb6c370812a94f514abcc94",
+    "graph_sha256": "e561650067d66eb8c8e8fd79e1a637a6f17bd6b9e734aba93b0b57c02f9089c8",
+    "controller": "learned continuous Cartesian and gripper policy",
+    "pad_sliding_friction": 3.0,
+    "successes": 2,
+    "episodes": 10,
+    "runs": [
+      {
+        "seed": 3000,
+        "success": false,
+        "distance": 0.01389719647947145,
+        "max_lift": 0.16477520037153026,
+        "held_seconds": 5.475999999999619,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3001,
+        "success": false,
+        "distance": 0.029778535374439086,
+        "max_lift": 0.1589344315337562,
+        "held_seconds": 5.141999999999656,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3002,
+        "success": true,
+        "distance": 0.004898414506774962,
+        "max_lift": 0.1660525540090586,
+        "held_seconds": 5.317999999999636,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 200
+      },
+      {
+        "seed": 3003,
+        "success": false,
+        "distance": 0.021929476835525825,
+        "max_lift": 0.16530541377181018,
+        "held_seconds": 5.251999999999644,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3004,
+        "success": false,
+        "distance": 0.03049552445254162,
+        "max_lift": 0.15898744534566156,
+        "held_seconds": 5.135999999999656,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3005,
+        "success": true,
+        "distance": 0.0033585834992253265,
+        "max_lift": 0.16505155801314042,
+        "held_seconds": 5.501999999999616,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 193
+      },
+      {
+        "seed": 3006,
+        "success": false,
+        "distance": 0.02528674950851111,
+        "max_lift": 0.1672306250464316,
+        "held_seconds": 5.289999999999639,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3007,
+        "success": false,
+        "distance": 0.03125959876709681,
+        "max_lift": 0.16184518967668282,
+        "held_seconds": 5.299999999999638,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3008,
+        "success": false,
+        "distance": 0.028726442157702595,
+        "max_lift": 0.16094722902998693,
+        "held_seconds": 5.265999999999642,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 3009,
+        "success": false,
+        "distance": 0.02099572168275953,
+        "max_lift": 0.1620645024866918,
+        "held_seconds": 5.3079999999996375,
+        "stable_seconds": 0.0,
+        "steps": 400
+      }
+    ]
+  },
+  "paired_after": {
+    "checkpoint": "out/rl/arm_release/policy.zip",
+    "checkpoint_sha256": "aef31bd9841a2adc6f0a35b4d98a45a0b1e3128338303a32e75ca1b370b10ae4",
+    "graph_sha256": "e561650067d66eb8c8e8fd79e1a637a6f17bd6b9e734aba93b0b57c02f9089c8",
+    "controller": "learned continuous Cartesian and gripper policy",
+    "pad_sliding_friction": 3.0,
+    "successes": 10,
+    "episodes": 10,
+    "runs": [
+      {
+        "seed": 3000,
+        "success": true,
+        "distance": 0.008565834366617526,
+        "max_lift": 0.15921567587397922,
+        "held_seconds": 4.959999999999676,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 206
+      },
+      {
+        "seed": 3001,
+        "success": true,
+        "distance": 0.008858278725469687,
+        "max_lift": 0.15292806173570994,
+        "held_seconds": 4.819999999999691,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 203
+      },
+      {
+        "seed": 3002,
+        "success": true,
+        "distance": 0.007823737420632821,
+        "max_lift": 0.16006505024718554,
+        "held_seconds": 4.985999999999673,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 213
+      },
+      {
+        "seed": 3003,
+        "success": true,
+        "distance": 0.007325033436389284,
+        "max_lift": 0.1674711800524541,
+        "held_seconds": 6.165999999999543,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 243
+      },
+      {
+        "seed": 3004,
+        "success": true,
+        "distance": 0.007947394808756959,
+        "max_lift": 0.14936807540833497,
+        "held_seconds": 4.987999999999673,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 205
+      },
+      {
+        "seed": 3005,
+        "success": true,
+        "distance": 0.006386497502123749,
+        "max_lift": 0.16131783294833058,
+        "held_seconds": 5.00999999999967,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 215
+      },
+      {
+        "seed": 3006,
+        "success": true,
+        "distance": 0.0072067971627449495,
+        "max_lift": 0.16841634764485414,
+        "held_seconds": 6.0699999999995535,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 233
+      },
+      {
+        "seed": 3007,
+        "success": true,
+        "distance": 0.00749054217588215,
+        "max_lift": 0.15998629589929836,
+        "held_seconds": 4.947999999999677,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 208
+      },
+      {
+        "seed": 3008,
+        "success": true,
+        "distance": 0.0074054703806781435,
+        "max_lift": 0.15345040836352508,
+        "held_seconds": 4.865999999999686,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 202
+      },
+      {
+        "seed": 3009,
+        "success": true,
+        "distance": 0.008889073963022867,
+        "max_lift": 0.15768451184370424,
+        "held_seconds": 4.899999999999682,
+        "stable_seconds": 0.5499999999999999,
+        "steps": 193
+      }
+    ]
+  },
+  "limitations": [
+    "One training seed",
+    "One cube and fixed goal offset",
+    "Fixed base",
+    "Replacement parallel jaws with unmeasured friction",
+    "Privileged simulator observations",
+    "PPO combined with demonstration rehearsal"
+  ]
+}

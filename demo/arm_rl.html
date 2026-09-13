@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Learned arm policy | BracketBot</title>
+<style>
+body{margin:30px;background:#101923;color:#e6eef6;font:16px system-ui}h1{margin-bottom:6px}
+p{color:#b6c8d8}main{max-width:1320px;margin:auto}.views{display:flex;gap:16px}.views img{width:49%;border-radius:12px}
+button{padding:10px 20px;background:#8ef0b8;border:0;border-radius:8px;cursor:pointer}input{width:70%;vertical-align:middle}
+canvas{width:100%;height:260px;background:#152433;border-radius:10px}pre{white-space:pre-wrap}#status{font-size:22px;color:#8ef0b8}
+</style><main><h1>Fly-connectivity arm policy</h1>
+<p>Learned Cartesian motion and gripper commands · Demonstration initialization + PPO · 20 Hz policy / 500 Hz physics</p>
+<p>Fixed base · Parallel-jaw simulation replacement · Pad friction 3.0 · Simulator state observations</p>
+<div id="status"></div><div class="views"><img id="overview" alt="Robot overview"><img id="detail" alt="Grasp close-up"></div>
+<p><button id="play">Pause</button> <button id="restart">Restart</button> <input id="scrub" type="range" min="0" value="0"> <span id="time"></span></p>
+<p>512 mapped FlyWire neurons — activity from this policy's forward pass (artificial rate values, not biological spikes)</p>
+<canvas id="brain" width="1280" height="260"></canvas><pre id="metrics"></pre>
+<p>The policy chooses all four action values. IK converts its XYZ commands to joint targets; servos and contact physics execute them. No demonstration controller runs during this replay.</p>
+</main><script>
+const data=__ARM_DATA__;let i=0,playing=true;
+const $=id=>document.getElementById(id);$('scrub').max=data.frames.length-1;
+$('status').textContent=`Saved-policy evaluation: ${data.report.successes}/${data.report.episodes} successful`;
+function draw(){const f=data.frames[i];$('overview').src=f.overview;$('detail').src=f.detail;$('scrub').value=i;$('time').textContent=f.time.toFixed(1)+' s';
+$('metrics').textContent=`Placement error: ${(f.distance*1000).toFixed(1)} mm | Maximum lift: ${(f.max_lift*100).toFixed(1)} cm | Held with both fingers: ${f.held_seconds.toFixed(2)} s\nActions [x, y, z, gripper]: ${f.action.map(x=>x.toFixed(3)).join(', ')}`;
+const c=$('brain').getContext('2d');c.clearRect(0,0,1280,260);const points=data.positions.map(([x,y,z])=>[640+(x*.94+z*.34)*430,130+(y*.94-z*.34)*230]);
+c.strokeStyle='#38747a55';c.lineWidth=.6;data.edges.forEach(([a,b])=>{c.beginPath();c.moveTo(...points[a]);c.lineTo(...points[b]);c.stroke()});
+f.activity.forEach((v,n)=>{c.fillStyle=`hsl(${165+60*v} 80% ${20+65*v}%)`;c.beginPath();c.arc(...points[n],1.5+2*v,0,Math.PI*2);c.fill()});c.fillStyle='#b6c8d8';c.fillText('Measured neuron positions | 1 in 4 connections drawn',20,24)}
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Play'};$('restart').onclick=()=>{i=0;draw()};$('scrub').oninput=e=>{i=+e.target.value;draw()};
+setInterval(()=>{if(playing){i=(i+1)%data.frames.length;draw()}},100);draw();
+</script></html>

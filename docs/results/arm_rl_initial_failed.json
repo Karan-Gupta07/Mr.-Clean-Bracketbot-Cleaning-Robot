@@ -1,0 +1,151 @@
+{
+  "ppo_steps": 8192,
+  "imitation_updates": 3000,
+  "before_ppo": {
+    "successes": 0,
+    "episodes": 5,
+    "runs": [
+      {
+        "seed": 1000,
+        "success": false,
+        "distance": 0.005814992373446752,
+        "max_lift": 0.15347184692918525,
+        "held_seconds": 5.047999999999666,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1001,
+        "success": false,
+        "distance": 0.004891252457969371,
+        "max_lift": 0.1535993922651797,
+        "held_seconds": 5.039999999999667,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1002,
+        "success": false,
+        "distance": 0.006016243578117581,
+        "max_lift": 0.15360192875900203,
+        "held_seconds": 5.065999999999664,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1003,
+        "success": false,
+        "distance": 0.005901952370882362,
+        "max_lift": 0.15356738867382957,
+        "held_seconds": 5.079999999999663,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1004,
+        "success": false,
+        "distance": 0.0060910437690254015,
+        "max_lift": 0.15430091270128798,
+        "held_seconds": 5.10199999999966,
+        "stable_seconds": 0.0,
+        "steps": 400
+      }
+    ]
+  },
+  "after_ppo": {
+    "successes": 0,
+    "episodes": 10,
+    "runs": [
+      {
+        "seed": 2000,
+        "success": false,
+        "distance": 0.006339085470232411,
+        "max_lift": 0.1606668872246101,
+        "held_seconds": 4.935999999999678,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2001,
+        "success": false,
+        "distance": 0.007087824468789559,
+        "max_lift": 0.16308479564837208,
+        "held_seconds": 4.895999999999683,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2002,
+        "success": false,
+        "distance": 0.00533433038163502,
+        "max_lift": 0.16034655936615683,
+        "held_seconds": 4.745999999999699,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2003,
+        "success": false,
+        "distance": 0.006140376826214279,
+        "max_lift": 0.15979487912100188,
+        "held_seconds": 4.975999999999674,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2004,
+        "success": false,
+        "distance": 0.0034025087349220983,
+        "max_lift": 0.1725305489501685,
+        "held_seconds": 5.367999999999631,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2005,
+        "success": false,
+        "distance": 0.0058096593688029,
+        "max_lift": 0.1636439335437634,
+        "held_seconds": 4.967999999999675,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2006,
+        "success": false,
+        "distance": 0.006933062179260219,
+        "max_lift": 0.16024690209180192,
+        "held_seconds": 4.717999999999702,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2007,
+        "success": false,
+        "distance": 0.004769240694320984,
+        "max_lift": 0.16536488446630793,
+        "held_seconds": 4.957999999999676,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2008,
+        "success": false,
+        "distance": 0.0066739905178934186,
+        "max_lift": 0.160925975663327,
+        "held_seconds": 4.659999999999709,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 2009,
+        "success": false,
+        "distance": 0.007053294263344306,
+        "max_lift": 0.16055771728513646,
+        "held_seconds": 5.019999999999669,
+        "stable_seconds": 0.0,
+        "steps": 400
+      }
+    ]
+  }
+}

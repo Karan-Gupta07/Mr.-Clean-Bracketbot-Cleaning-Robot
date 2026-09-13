@@ -1,0 +1,985 @@
+{
+  "model": "parallel-jaw gripper variant, fixed base",
+  "controller": "scripted IK and joint servos",
+  "episodes": 25,
+  "successes": 25,
+  "position_randomization_m": 0.008,
+  "minimum_error_m": 0.002137386458031703,
+  "maximum_error_m": 0.005364921635802141,
+  "reports": {
+    "pick_place_eval": {
+      "episodes": 10,
+      "successes": 10,
+      "runs": [
+        {
+          "success": true,
+          "seed": 0,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33780861300285675,
+            -1.713683412579778,
+            0.7
+          ],
+          "goal": [
+            -0.16780861300285674,
+            -1.713683412579778,
+            0.7
+          ],
+          "position": [
+            -0.1719202475075818,
+            -1.7113158490984346,
+            0.6999946063669668
+          ],
+          "distance": 0.004744564799708875,
+          "max_lift": 0.1490027385355045,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.046546172507598e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00018383314497301162
+        },
+        {
+          "success": true,
+          "seed": 1,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33981085400479594,
+            -1.702792580858785,
+            0.7
+          ],
+          "goal": [
+            -0.16981085400479592,
+            -1.702792580858785,
+            0.7
+          ],
+          "position": [
+            -0.17339729557029507,
+            -1.7007397229011052,
+            0.6999946063669684
+          ],
+          "distance": 0.004132407155296892,
+          "max_lift": 0.14917701315526288,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.135999999999656,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.112757521949152e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001296967734617358
+        },
+        {
+          "success": true,
+          "seed": 2,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.34381420585201095,
+            -1.713224141705374,
+            0.7
+          ],
+          "goal": [
+            -0.17381420585201093,
+            -1.713224141705374,
+            0.7
+          ],
+          "position": [
+            -0.17728520749303553,
+            -1.7109376915937413,
+            0.6999946063669676
+          ],
+          "distance": 0.004156405478894037,
+          "max_lift": 0.14899112999640352,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0064785662640034e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001586974741659811
+        },
+        {
+          "success": true,
+          "seed": 3,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.346629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "goal": [
+            -0.176629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "position": [
+            -0.18052270980080085,
+            -1.7116926837929274,
+            0.6999946063669669
+          ],
+          "distance": 0.004636623483196761,
+          "max_lift": 0.14898914142969621,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.706144762607234e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001658509249652603
+        },
+        {
+          "success": true,
+          "seed": 4,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33291110231084214,
+            -1.7098187591549703,
+            0.7
+          ],
+          "goal": [
+            -0.16291110231084213,
+            -1.7098187591549703,
+            0.7
+          ],
+          "position": [
+            -0.16657778164949133,
+            -1.707665669233929,
+            0.6999946063669669
+          ],
+          "distance": 0.004252097550687986,
+          "max_lift": 0.1490474519806857,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0352736968100859e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001629220457810862
+        },
+        {
+          "success": true,
+          "seed": 5,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33511995322007393,
+            -1.705072947364216,
+            0.7
+          ],
+          "goal": [
+            -0.16511995322007392,
+            -1.705072947364216,
+            0.7
+          ],
+          "position": [
+            -0.16826821700395617,
+            -1.7031607735465355,
+            0.6999946063669682
+          ],
+          "distance": 0.003683473029890107,
+          "max_lift": 0.14904879973240237,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.518922116685056e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001387910886741256
+        },
+        {
+          "success": true,
+          "seed": 6,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33938937037644895,
+            -1.7125076660829865,
+            0.7
+          ],
+          "goal": [
+            -0.16938937037644894,
+            -1.7125076660829865,
+            0.7
+          ],
+          "position": [
+            -0.17317148724947973,
+            -1.7100950196557256,
+            0.6999946063669674
+          ],
+          "distance": 0.004486119796019611,
+          "max_lift": 0.1489740086083774,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.82788884460392e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00017734968689642308
+        },
+        {
+          "success": true,
+          "seed": 7,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.33799847253432536,
+            -1.7036445791844868,
+            0.7
+          ],
+          "goal": [
+            -0.16799847253432534,
+            -1.7036445791844868,
+            0.7
+          ],
+          "position": [
+            -0.17135199830562584,
+            -1.7014746125438696,
+            0.6999946063669669
+          ],
+          "distance": 0.003994357310027237,
+          "max_lift": 0.14894010181172013,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 8.651768447399194e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00013266802188784392
+        },
+        {
+          "success": true,
+          "seed": 8,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.3427684435743111,
+            -1.7022035705065932,
+            0.7
+          ],
+          "goal": [
+            -0.17276844357431106,
+            -1.7022035705065932,
+            0.7
+          ],
+          "position": [
+            -0.17617564342857717,
+            -1.700033978407377,
+            0.699994606366968
+          ],
+          "distance": 0.0040393242905085325,
+          "max_lift": 0.1490320389478592,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.131999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.984311441029573e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00012909872759444402
+        },
+        {
+          "success": true,
+          "seed": 9,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.048,
+          "object": "cube_m",
+          "start": [
+            -0.3340760127364787,
+            -1.713410924654599,
+            0.7
+          ],
+          "goal": [
+            -0.16407601273647868,
+            -1.713410924654599,
+            0.7
+          ],
+          "position": [
+            -0.16758951645944556,
+            -1.7112256107173638,
+            0.6999946063669684
+          ],
+          "distance": 0.004137669079998611,
+          "max_lift": 0.14893111161625128,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.129999999999657,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.248100272745376e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001826848274761112
+        }
+      ]
+    },
+    "pick_place_small": {
+      "episodes": 5,
+      "successes": 5,
+      "runs": [
+        {
+          "success": true,
+          "seed": 0,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.042,
+          "object": "cube_s",
+          "start": [
+            -0.33780861300285675,
+            -1.713683412579778,
+            0.7
+          ],
+          "goal": [
+            -0.16780861300285674,
+            -1.713683412579778,
+            0.7
+          ],
+          "position": [
+            -0.17035003430614923,
+            -1.7132426202637578,
+            0.699994606366968
+          ],
+          "distance": 0.0025793642834410348,
+          "max_lift": 0.1493735011494004,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.1439999999996555,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.216982855718936e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00018383314497301162
+        },
+        {
+          "success": true,
+          "seed": 1,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.042,
+          "object": "cube_s",
+          "start": [
+            -0.33981085400479594,
+            -1.702792580858785,
+            0.7
+          ],
+          "goal": [
+            -0.16981085400479592,
+            -1.702792580858785,
+            0.7
+          ],
+          "position": [
+            -0.17191628210422616,
+            -1.7024243507824646,
+            0.6999946063669683
+          ],
+          "distance": 0.002137386458031703,
+          "max_lift": 0.14931048355164878,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.139999999999656,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0057584158727666e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001296967734617358
+        },
+        {
+          "success": true,
+          "seed": 2,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.042,
+          "object": "cube_s",
+          "start": [
+            -0.34381420585201095,
+            -1.713224141705374,
+            0.7
+          ],
+          "goal": [
+            -0.17381420585201093,
+            -1.713224141705374,
+            0.7
+          ],
+          "position": [
+            -0.17617984851432963,
+            -1.7128197323298089,
+            0.6999946063669668
+          ],
+          "distance": 0.0023999608640199207,
+          "max_lift": 0.14934121595289718,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.141999999999656,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 8.694757990490725e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001586974741659811
+        },
+        {
+          "success": true,
+          "seed": 3,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.042,
+          "object": "cube_s",
+          "start": [
+            -0.346629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "goal": [
+            -0.176629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "position": [
+            -0.17908793531634037,
+            -1.713851987089971,
+            0.6999946063669676
+          ],
+          "distance": 0.0024844033853801406,
+          "max_lift": 0.14929539042102247,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.141999999999656,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 9.999541692651238e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001658509249652603
+        },
+        {
+          "success": true,
+          "seed": 4,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.042,
+          "object": "cube_s",
+          "start": [
+            -0.33291110231084214,
+            -1.7098187591549703,
+            0.7
+          ],
+          "goal": [
+            -0.16291110231084213,
+            -1.7098187591549703,
+            0.7
+          ],
+          "position": [
+            -0.16522506133573997,
+            -1.7094068654166183,
+            0.6999946063669673
+          ],
+          "distance": 0.0023503324914998054,
+          "max_lift": 0.14941264018437006,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.1439999999996555,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 8.994125188665187e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001629220457810862
+        }
+      ]
+    },
+    "pick_place_cube_l": {
+      "episodes": 5,
+      "successes": 5,
+      "runs": [
+        {
+          "success": true,
+          "seed": 0,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.054,
+          "object": "cube_l",
+          "start": [
+            -0.33780861300285675,
+            -1.713683412579778,
+            0.7
+          ],
+          "goal": [
+            -0.16780861300285674,
+            -1.713683412579778,
+            0.7
+          ],
+          "position": [
+            -0.17107567413771876,
+            -1.7115826956721032,
+            0.6999946063669678
+          ],
+          "distance": 0.0038841601389639695,
+          "max_lift": 0.1485596126797205,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.115999999999659,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0040281599821464e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00018383314497301162
+        },
+        {
+          "success": true,
+          "seed": 1,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.054,
+          "object": "cube_l",
+          "start": [
+            -0.33981085400479594,
+            -1.702792580858785,
+            0.7
+          ],
+          "goal": [
+            -0.16981085400479592,
+            -1.702792580858785,
+            0.7
+          ],
+          "position": [
+            -0.17354262306045626,
+            -1.700697407116414,
+            0.6999946063669686
+          ],
+          "distance": 0.004279702477451496,
+          "max_lift": 0.14867824973778576,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.117999999999658,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0404809295786848e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001296967734617358
+        },
+        {
+          "success": true,
+          "seed": 2,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.054,
+          "object": "cube_l",
+          "start": [
+            -0.34381420585201095,
+            -1.713224141705374,
+            0.7
+          ],
+          "goal": [
+            -0.17381420585201093,
+            -1.713224141705374,
+            0.7
+          ],
+          "position": [
+            -0.17733643284455197,
+            -1.710995914396694,
+            0.6999946063669685
+          ],
+          "distance": 0.00416786275279453,
+          "max_lift": 0.14851657067237778,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.115999999999659,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0136777975464164e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001586974741659811
+        },
+        {
+          "success": true,
+          "seed": 3,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.054,
+          "object": "cube_l",
+          "start": [
+            -0.346629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "goal": [
+            -0.176629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "position": [
+            -0.17946496166951398,
+            -1.7124753107404116,
+            0.699994606366968
+          ],
+          "distance": 0.0033244440370348385,
+          "max_lift": 0.14857300280178642,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.115999999999659,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 8.334438413273498e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001658509249652603
+        },
+        {
+          "success": true,
+          "seed": 4,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.054,
+          "object": "cube_l",
+          "start": [
+            -0.33291110231084214,
+            -1.7098187591549703,
+            0.7
+          ],
+          "goal": [
+            -0.16291110231084213,
+            -1.7098187591549703,
+            0.7
+          ],
+          "position": [
+            -0.16687492195458348,
+            -1.7081161409263803,
+            0.6999946063669683
+          ],
+          "distance": 0.0043140207464077655,
+          "max_lift": 0.1488960682693835,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.119999999999658,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 8.726961704086794e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001629220457810862
+        }
+      ]
+    },
+    "pick_place_large": {
+      "episodes": 5,
+      "successes": 5,
+      "runs": [
+        {
+          "success": true,
+          "seed": 0,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.058,
+          "object": "cube_xl",
+          "start": [
+            -0.33780861300285675,
+            -1.713683412579778,
+            0.7
+          ],
+          "goal": [
+            -0.16780861300285674,
+            -1.713683412579778,
+            0.7
+          ],
+          "position": [
+            -0.1727700206929163,
+            -1.7117894357384364,
+            0.6999946063669666
+          ],
+          "distance": 0.005310622801755005,
+          "max_lift": 0.14808148072074,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.10199999999966,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0386842752934374e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.00018383314497301162
+        },
+        {
+          "success": true,
+          "seed": 1,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.058,
+          "object": "cube_xl",
+          "start": [
+            -0.33981085400479594,
+            -1.702792580858785,
+            0.7
+          ],
+          "goal": [
+            -0.16981085400479592,
+            -1.702792580858785,
+            0.7
+          ],
+          "position": [
+            -0.1747486729604493,
+            -1.700874902878173,
+            0.6999946063669676
+          ],
+          "distance": 0.005297126095925416,
+          "max_lift": 0.148216187072285,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.09999999999966,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0420988044807441e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001296967734617358
+        },
+        {
+          "success": true,
+          "seed": 2,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.058,
+          "object": "cube_xl",
+          "start": [
+            -0.34381420585201095,
+            -1.713224141705374,
+            0.7
+          ],
+          "goal": [
+            -0.17381420585201093,
+            -1.713224141705374,
+            0.7
+          ],
+          "position": [
+            -0.1782876480734354,
+            -1.7111757978177664,
+            0.6999946063669681
+          ],
+          "distance": 0.004920101420735368,
+          "max_lift": 0.14826880811370147,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.10199999999966,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 6.938258082142594e-11,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001586974741659811
+        },
+        {
+          "success": true,
+          "seed": 3,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.058,
+          "object": "cube_xl",
+          "start": [
+            -0.346629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "goal": [
+            -0.176629613325702,
+            -1.7142110318944623,
+            0.7
+          ],
+          "position": [
+            -0.18131337477151235,
+            -1.7121653772842618,
+            0.6999946063669676
+          ],
+          "distance": 0.005111000299891814,
+          "max_lift": 0.148167317069141,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.10199999999966,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0217603514686439e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001658509249652603
+        },
+        {
+          "success": true,
+          "seed": 4,
+          "phase": "verify",
+          "time": 18.500000000000625,
+          "controller": "scripted IK and joint servos",
+          "base": "fixed at docking pose",
+          "side": "right",
+          "gripper": "parallel-jaw simulation replacement",
+          "object_width": 0.058,
+          "object": "cube_xl",
+          "start": [
+            -0.33291110231084214,
+            -1.7098187591549703,
+            0.7
+          ],
+          "goal": [
+            -0.16291110231084213,
+            -1.7098187591549703,
+            0.7
+          ],
+          "position": [
+            -0.16795223252841324,
+            -1.707983169253116,
+            0.6999946063669685
+          ],
+          "distance": 0.005364921635802141,
+          "max_lift": 0.1482723611155592,
+          "two_finger_contact_during_lift": true,
+          "released": true,
+          "held_lift_seconds": 5.10399999999966,
+          "stable_place_seconds": 1.0000000000000007,
+          "on_table": true,
+          "stopped": true,
+          "speed": 1.0453846110069127e-10,
+          "finger_contacts": 0,
+          "ik_position_error_sum": 0.0001629220457810862
+        }
+      ]
+    }
+  }
+}

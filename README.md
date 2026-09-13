@@ -48,7 +48,34 @@ development machine, open `out/demo/index.html` for the generated interactive
 demo. Generated data/checkpoints stay in ignored `out/` and must be regenerated
 on a fresh checkout. The linked guide includes the tested Windows commands.
 
-### Base simulation
+### Pick-and-place simulation variant
+
+The arm now has a contact-based cube pick-and-place demo with a **parallel-jaw
+gripper replacement and a fixed base**. It passed 25 tested starts across four
+cube sizes. This baseline uses scripted IK and servos. The supplied hooked gripper remains unresolved.
+See [commands, results, and technical details](docs/pick_place.md).
+
+```powershell
+.venv\Scripts\python.exe scripts/pick_place.py --record --open
+```
+
+A separate [continuous arm RL experiment](docs/arm_rl.md) trains a new FlyWire
+graph policy with demonstrations and PPO. Its four outputs select XYZ motion and
+gripper opening; inference has no scripted phase controller. It uses the fixed
+base and parallel jaws with simulated pad friction increased to 3.0.
+
+```powershell
+.venv\Scripts\python.exe scripts/train_arm.py --steps 0
+.venv\Scripts\python.exe scripts/train_arm.py --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750
+.venv\Scripts\python.exe scripts/run_arm.py --record --open
+```
+
+The saved arm policy passed 20/20 tested starts. On a paired set of ten starts,
+the pre-PPO checkpoint passed 2/10 and PPO plus demonstration rehearsal passed
+10/10. These are small position variations of one cube with a fixed destination
+offset; see [raw results](docs/results/arm_rl.json).
+
+### Base simulation setup
 
 You need macOS (Apple Silicon is fine) and Python 3.10 or newer.
 
