@@ -64,7 +64,7 @@
       <geom name="chassis_head" size="0.0587263 0.0654754 0.0856884" pos="0.015572 1.2642e-05 1.52569" type="box" contype="8" group="3" rgba="0.9 0.4 0.2 0.25" mass="0"/>
       <site name="imu" size="0.01" pos="0 0 0.2"/>
       <site name="lidar" size="0.012" pos="0 0 0.32" rgba="0.2 0.8 0.3 0.6"/>
-      <camera name="head_cam" quat="-0.5 -0.5 0.5 0.5" pos="0.075 0 1.575" fovy="58"/>
+      <camera name="head_cam" quat="-0.686103 -0.171065 0.171065 0.686103" pos="0.075 0 1.575" fovy="58"/>
       <body name="base_plate__base_plate" pos="0.0113398 6.4516e-07 0.0776294" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05">
         <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Base_Plate__Base_Plate"/>
         <body name="bottom_cover_front__bottom_cover_front__bottom_cover_front__bottom_cover_front" pos="0.004 0.0272667 0.000135341" quat="1 0 0 0">
@@ -161,12 +161,12 @@
                           <site name="grip_right" size="0.008" pos="0.0586412 -0.14505 -0.0475135" quat="0.606175 0.790593 0.0707503 0.0500864" rgba="0.2 0.9 0.9 0.7"/>
                           <camera name="wrist_right_cam" quat="-0.790593 0.606175 0.0500864 -0.0707503" pos="0.0586412 -0.14505 -0.0475135" fovy="70"/>
                           <body name="left_finger__left_finger" pos="0.0413008 -0.0450476 -0.0372147" quat="0.504688 0.364974 0.605635 0.495268">
-                            <joint name="right_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
+                            <joint name="right_left_gripper" range="0 1" armature="0.005" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="-0.700467 -0.222749 -0.0540855" quat="0.695209 0.144141 -0.704207 1.7071e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger"/>
                             <geom name="left_finger__left_finger_pad0" size="0.014 0.003 0.018" pos="-0.0743734 -0.00988516 -0.0248548" quat="0.974576 0.0744719 -0.196004 -0.0789832" type="box" contype="2" conaffinity="5" condim="6" group="2" friction="3 0.05 0.015" solimp="0.97 0.99" rgba="1 1 1 1" mass="0"/>
                           </body>
                           <body name="right_finger__right_finger" pos="0.0413009 -0.0450476 -0.00313575" quat="0.520146 0.586412 -0.395122 -0.479008">
-                            <joint name="right_right_gripper" range="0 1" actuatorfrcrange="-10 10"/>
+                            <joint name="right_right_gripper" range="0 1" armature="0.005" actuatorfrcrange="-10 10"/>
                             <geom pos="0.736527 0.0353731 0.0544735" quat="0.718808 -0.139409 0.681088 1.76495e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Right_Finger__Right_Finger"/>
                             <geom name="right_finger__right_finger_pad0" size="0.0139875 0.003 0.018" pos="0.0868944 -0.000540541 0.0188823" quat="-0.0374317 0.950065 0.0278795 0.308542" type="box" contype="2" conaffinity="5" condim="6" group="2" friction="3 0.05 0.015" solimp="0.97 0.99" rgba="1 1 1 1" mass="0"/>
                           </body>
@@ -220,12 +220,12 @@
                           <site name="grip_left" size="0.008" pos="-0.00253808 -0.156435 0.0475135" quat="0.0878904 -0.0714659 -0.604028 0.788871" rgba="0.2 0.9 0.9 0.7"/>
                           <camera name="wrist_left_cam" quat="0.0714659 0.0878904 0.788871 0.604028" pos="-0.00253808 -0.156435 0.0475135" fovy="70"/>
                           <body name="l_left_finger__left_finger" pos="0.0204743 -0.0575834 0.0372147" quat="0.496119 0.414495 -0.572882 -0.503851">
-                            <joint name="left_left_gripper" range="0 1" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
+                            <joint name="left_left_gripper" range="0 1" armature="0.005" actuatorfrcrange="-10 10" actuatorfrclimited="true"/>
                             <geom pos="0.731653 -0.070385 0.0540855" quat="0.718808 0.139409 0.681088 1.76511e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Left_Finger__Left_Finger_Mirrored"/>
                             <geom name="l_left_finger__left_finger_pad0" size="0.014 0.003 0.018" pos="0.072276 -0.0201318 0.0248548" quat="-0.033655 0.938942 -0.272808 0.206957" type="box" contype="4" conaffinity="3" condim="6" group="2" friction="3 0.05 0.015" solimp="0.97 0.99" rgba="1 1 1 1" mass="0"/>
                           </body>
                           <body name="l_right_finger__right_finger" pos="0.0204743 -0.0575834 0.00313575" quat="0.478128 0.593102 0.385006 0.520954">
-                            <joint name="left_right_gripper" range="0 1" actuatorfrcrange="-10 10"/>
+                            <joint name="left_right_gripper" range="0 1" armature="0.005" actuatorfrcrange="-10 10"/>
                             <geom pos="-0.691192 0.25686 -0.0544735" quat="0.695209 -0.144141 -0.704207 1.70707e-08" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Right_Finger__Right_Finger_Mirrored"/>
                             <geom name="l_right_finger__right_finger_pad0" size="0.0139875 0.003 0.018" pos="-0.0796937 0.0346387 -0.0188823" quat="0.936358 -0.0251999 -0.309781 -0.163201" type="box" contype="4" conaffinity="3" condim="6" group="2" friction="3 0.05 0.015" solimp="0.97 0.99" rgba="1 1 1 1" mass="0"/>
                           </body>

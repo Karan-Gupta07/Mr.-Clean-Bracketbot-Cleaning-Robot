@@ -121,9 +121,17 @@ class Table:
         return origin + along * item.at[0] + toward * inset + np.array([0, 0, TABLE_H])
 
 
-def ball(name, at, d=0.055, mass=0.09, rgba=(0.85, 0.25, 0.2, 1)):
+def ball(name, at, d=0.050, mass=0.09, rgba=(0.85, 0.25, 0.2, 1)):
     """A ball rolls away from a gripper closing on it, so this one is rubber:
-    rolling friction, not the frictionless marble a bare sphere geom would be."""
+    rolling friction, not the frictionless marble a bare sphere geom would be.
+
+    50 mm, and no tackier than this.  Sweeping the scripted pick over size
+    and friction: a 45 mm ball puts the pads on the table; raising the
+    sliding friction to 2 or the spin and rolling terms to (0.2, 0.1) jams
+    the swinging blades so the stall detector bites before the ball is
+    between them, and the grasp fails 19 times in 20.  The plain rubber
+    values hold it, and 50 mm drops on the carry a third as often as 55.
+    """
     return Item(name, "ball", at, d, mass, rgba, {"r": d / 2, "condim": 6,
                                                   "friction": (1.2, 0.05, 0.02)})
 
