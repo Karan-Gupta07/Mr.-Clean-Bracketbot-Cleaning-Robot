@@ -20,7 +20,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
 | 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Custom curved navigation passes all nine sim routes on the true pose, and a ROS node drives the same navigator on the SLAM pose in Docker (two routes hand-tested). Nav2 is not implemented. |
-| 3. Manipulation | Scripted cube transfers work with padded original grippers. The current original-gripper Flybrain checkpoint succeeds on 0/10 evaluation starts; ACT integration awaits its controller and checkpoint. |
+| 3. Manipulation | Scripted cube transfers work with padded original grippers. The latest original-gripper Flybrain checkpoint succeeds on 0/20 held-out starts and is blocked from dispatch; ACT integration awaits its controller and checkpoint. |
 
 
 ### What works today

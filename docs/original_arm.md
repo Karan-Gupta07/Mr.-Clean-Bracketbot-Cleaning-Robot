@@ -48,8 +48,21 @@ grip carries through to intentional release, and the 400-step limit truncated
 withdrawal. Three teacher trials now complete in 428 steps each.
 
 The interrupted `out/rl/arm_original` experiment finished with **0/10** learned
-policy successes. Its checkpoint is not a working demo. New training goes to
-`out/rl/arm_integrated`, preserving that failed artifact for comparison.
+policy successes. The combined-model `out/rl/arm_integrated` run also finished
+at **0/10**, despite 4,000 imitation updates, three DAgger rounds and 8,192 PPO
+steps. Neither checkpoint is a working demo.
+
+A regression test identified hidden controller state: changing the rate-limited
+jaw command did not change the policy observation. Version 4 adds that command,
+jaw angular velocity and the previous jaw action, making 23 observation values.
+New training goes to `out/rl/arm_observable`; the failed artifacts are preserved.
+The replay reads the observation count from the actual recording. This version
+also failed: **0/10** evaluation starts and **0/20** held-out starts (3000–3019).
+The missing-input fix is verified, but it is not a working learned grasp policy.
+Increasing the jaw-output gain in diagnostic trials did not recover a grasp and
+was not adopted. Dispatch remains blocked. Further work must repair the learned
+grip transitions rather than reuse the scripted teacher as a hidden fallback.
+Measured integration results are in `docs/results/integration.json`.
 
 Checkpoints and demonstration datasets must match the gripper, station, control
 version, horizon, physics fingerprint, and generated robot/room hashes. This
@@ -61,12 +74,12 @@ diagnostics and exits nonzero when any requested episode fails.
 
 ```powershell
 # Train the original hinged grippers with matching-color pads at the new station.
-.venv\Scripts\python.exe scripts/train_arm.py --gripper padded --station pick --output out/rl/arm_integrated --episodes 20 --updates 4000 --dagger-rounds 3 --dagger-episodes 5 --dagger-updates 1000 --steps 8192
+.venv\Scripts\python.exe scripts/train_arm.py --gripper padded --station pick --output out/rl/arm_observable --episodes 20 --updates 2500 --steps 8192
 
 # Run the saved policy in a live viewer, or make the neuron-explorer replay.
 .venv\Scripts\python.exe scripts/run_arm.py --view
 .venv\Scripts\python.exe scripts/run_arm.py --record --open
-.venv\Scripts\python.exe scripts/run_arm.py --episodes 20 --seed 3000 --output out/rl/arm_integrated/validation
+.venv\Scripts\python.exe scripts/run_arm.py --episodes 20 --seed 3000 --output out/rl/arm_observable/validation
 
 # Test the bare exported gripper separately.
 .venv\Scripts\python.exe scripts/train_arm.py --teacher-check --gripper urdf --station pick

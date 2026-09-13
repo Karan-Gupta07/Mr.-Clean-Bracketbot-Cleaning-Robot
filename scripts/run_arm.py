@@ -50,7 +50,7 @@ def graph_payload(graph_path):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--checkpoint',default='out/rl/arm_integrated/policy.zip')
+    p.add_argument('--checkpoint',default='out/rl/arm_observable/policy.zip')
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--seed',type=int,default=2000)
     p.add_argument('--episodes',type=int,default=1)

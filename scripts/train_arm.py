@@ -22,7 +22,7 @@ class Teacher:
 
     def action(self, env):
         cube = env.cube
-        pick = env.start + [0,0,.032]
+        pick = env.start + [0,0,env.cube_width/2+.008]
         place = env.goal + [0,0,.008]
         targets = [pick, pick, pick+[0,0,.15], place+[0,0,.15], place, place, place+[0,0,.12]]
         shut = env.closed_action
@@ -71,7 +71,7 @@ def main():
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--gripper',choices=['padded','urdf','parallel'],default='padded',
         help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
-    p.add_argument('--output',type=Path,default=Path('out/rl/arm_integrated'))
+    p.add_argument('--output',type=Path,default=Path('out/rl/arm_observable'))
     a=p.parse_args()
     torch.set_num_threads(2)
     env=ArmEnv(gripper=a.gripper,station=a.station)

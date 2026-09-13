@@ -47,7 +47,7 @@ def prepare_flybrain(checkpoint, seed, view=False):
         raise RuntimeError(f'Flybrain checkpoint missing: {checkpoint}; run scripts/train_arm.py first')
     report_path = checkpoint.parent/'validation/report.json'
     if not report_path.is_file():
-        raise RuntimeError('Flybrain has no validation report; run scripts/run_arm.py --episodes 20 --seed 3000 --output out/rl/arm_integrated/validation')
+        raise RuntimeError('Flybrain has no validation report; run scripts/run_arm.py --episodes 20 --seed 3000 --output out/rl/arm_observable/validation')
     report = json.loads(report_path.read_text())
     if (report.get('episodes',0) < 20 or report.get('successes') != report['episodes']
             or report.get('checkpoint_sha256') != hashlib.sha256(checkpoint.read_bytes()).hexdigest()):
@@ -98,7 +98,7 @@ def main():
     parser.add_argument('--confidence', type=float, default=1.)
     parser.add_argument('--execute', action='store_true', help='Run navigation, then a separate fixed-base manipulation simulation')
     parser.add_argument('--planner', choices=['fable','sweep'], default='fable')
-    parser.add_argument('--checkpoint', type=Path, default=ROOT/'out/rl/arm_integrated/policy.zip')
+    parser.add_argument('--checkpoint', type=Path, default=ROOT/'out/rl/arm_observable/policy.zip')
     parser.add_argument('--seed', type=int, default=3000)
     parser.add_argument('--view', action='store_true')
     args = parser.parse_args()

@@ -33,6 +33,8 @@ def make_model(item_name="cube_m", gripper="padded", table_index=1):
     if gripper not in GRIPPERS:
         raise ValueError(f"gripper must be one of {GRIPPERS}")
     table = TABLES[table_index]
+    if not any(item.name == item_name for item in table.items):
+        raise ValueError(f'{item_name!r} is not on {table.name}')
     spec = mujoco.MjSpec.from_file(str(ROOM))
     spec.option.impratio = 200
     for key in list(spec.keys):

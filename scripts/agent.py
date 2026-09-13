@@ -327,7 +327,8 @@ def fable_planner(harness: Harness, table: str, effort: str):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--table", default="cubes",
-                    choices=[t.name.split("_")[1] for t in TABLES])
+                    choices=[t.name.split("_")[1] for t in TABLES
+                             if any(item.kind == "crate" for item in t.items)])
     ap.add_argument("--planner", default="fable", choices=["fable", "sweep"])
     ap.add_argument("--effort", default="high",
                     choices=["low", "medium", "high", "xhigh", "max"])

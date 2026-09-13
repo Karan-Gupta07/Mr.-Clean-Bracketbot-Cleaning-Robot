@@ -25,8 +25,13 @@ class ArmEnvironmentTests(unittest.TestCase):
         point=np.array([-.34,-1.71,.7])
         np.testing.assert_allclose(env.to_task(env.to_world(point)),point,atol=1e-12)
         obs,_=env.reset(seed=99)
-        self.assertEqual(obs.shape,(20,))
+        self.assertEqual(obs.shape,(23,))
         self.assertLess(np.linalg.norm(env.cube[:2]-env.start[:2]),1e-8)
+
+    def test_grasp_width_matches_the_selected_station_cube(self):
+        for station in ('pick','cubes'):
+            env=ArmEnv(station=station)
+            self.assertAlmostEqual(env.cube_width,2*env.model.geom_size[env.objgeom,0])
 
     def test_policy_actions_select_motion_without_scripted_planner(self):
         with patch('rlbot.manipulation.PickPlace.plan',side_effect=AssertionError('script invoked')):

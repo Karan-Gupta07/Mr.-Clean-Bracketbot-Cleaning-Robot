@@ -1,0 +1,90 @@
+{
+  "date": "2026-09-13",
+  "integration_commit": "ae12989c489a3dea01398942d9c73a193134e290",
+  "urdf_sha256": "4ea3652f2a19141952f93eb1de162d36c95aa851ec59bb942a3dcebcdd3a7d57",
+  "urdf_and_meshes_unchanged_from_main": true,
+  "stations": {"ball": "ACT (not yet supplied)", "cubes": "Fable", "pick": "Flybrain"},
+  "navigation": {
+    "command": "scripts/navigate.py",
+    "pose_source": "simulator truth",
+    "solver_impratio": 10,
+    "successes": 9,
+    "routes": 9,
+    "falls": 0,
+    "furniture_contacts": 0,
+    "tolerance_cm": 10,
+    "tolerance_degrees": 5,
+    "values_rounded_as_printed_by_runner": true,
+    "results": [
+      {"route": "start-ball", "error_cm": 9.6, "error_degrees": 4.1},
+      {"route": "start-cubes", "error_cm": 2.4, "error_degrees": 3.4},
+      {"route": "start-pick", "error_cm": 6.9, "error_degrees": 2.2},
+      {"route": "ball-cubes", "error_cm": 4.6, "error_degrees": 4.6},
+      {"route": "ball-pick", "error_cm": 7.8, "error_degrees": 1.8},
+      {"route": "cubes-ball", "error_cm": 2.6, "error_degrees": 4.3},
+      {"route": "cubes-pick", "error_cm": 8.3, "error_degrees": 4.0},
+      {"route": "pick-ball", "error_cm": 7.8, "error_degrees": 1.8},
+      {"route": "pick-cubes", "error_cm": 7.9, "error_degrees": 4.9}
+    ]
+  },
+  "offline_routed_fable_skills": {
+    "command": "scripts/orchestrate.py --station cubes --recognized colored_cubes --execute --planner sweep",
+    "success": true,
+    "placed": 4,
+    "objects": 4,
+    "tool_calls": 14,
+    "live_fable_api_tested": false,
+    "recognition_source": "user-provided label",
+    "manipulation_base": "separate fixed-base simulation, not a continuous handoff"
+  },
+  "original_gripper_teacher": {
+    "seeds": [1000, 1001, 1002],
+    "bare_successes": 0,
+    "padded_successes": 3,
+    "episodes_each": 3,
+    "padded_completion_steps": [428, 428, 428],
+    "horizon": 480,
+    "pad_friction": 5.0,
+    "friction_measured_on_hardware": false
+  },
+  "flybrain_control_v3_training": {
+    "output": "out/rl/arm_integrated",
+    "kept_demonstrations": 17,
+    "attempted_demonstrations": 20,
+    "imitation_updates": 4000,
+    "dagger_rounds": 3,
+    "ppo_steps": 8192,
+    "successes": 0,
+    "episodes": 10,
+    "ready": false
+  },
+  "flybrain_control_v4_training": {
+    "output": "out/rl/arm_observable",
+    "observation_size": 23,
+    "change": "Expose jaw command, jaw velocity and previous jaw action instead of hiding the rate-limiter state",
+    "status": "failed validation",
+    "kept_demonstrations": 17,
+    "attempted_demonstrations": 20,
+    "imitation_updates": 2500,
+    "ppo_steps": 8192,
+    "evaluation_successes": 0,
+    "evaluation_episodes": 10,
+    "heldout_successes": 0,
+    "heldout_episodes": 20,
+    "heldout_seed_range": [3000, 3019],
+    "checkpoint_sha256": "a1a61a6d16498e4aa870c3eea50c825983dbdeebc0dfcb33052809c8e8aa791a",
+    "validation_report": "out/rl/arm_observable/validation/report.json",
+    "diagnostic_replay": "out/arm_observable_diagnostic/index.html",
+    "ready": false
+  },
+  "rendering": {
+    "command": "scripts/view_cameras.py --keyframe dock_pick --pose approach --item pick_cube --snapshot out/integrated_camera_views.png --headless --near-clip 0.005",
+    "snapshot_rendered": true,
+    "overview_wall_occlusion_fixed": true,
+    "head_camera_sees_tabletop": false,
+    "right_wrist_camera_sees_cube": true,
+    "robot_camera_mounts_changed": false
+  },
+  "regressions": {"tests_run": 32, "passed": 31, "expected_bare_gripper_failures": 1, "unexpected_failures": 0, "navigation_unit_checks": "passed", "python_compile": "passed", "replay_js_syntax": "passed", "pip_check": "passed"},
+  "release_gates": ["ACT code/checkpoint and evaluation", "live Fable API validation", "passing learned Flybrain policy", "camera recognition and continuous handoff are not implemented"]
+}

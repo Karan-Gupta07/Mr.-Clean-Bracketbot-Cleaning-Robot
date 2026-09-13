@@ -58,7 +58,8 @@ class ArmEnv(gym.Env):
         # What "closed on the cube" is for this gripper, as a normalized action.
         # Parallel jaws stall when commanded shut; the supplied blades are a
         # pincer and would scissor past the cube, so they stop at its width.
-        self.cube_width = 0.048
+        self.cube_width = float(2*self.model.geom_size[self.objgeom,0])
+        self.rest_height = .70 + self.cube_width/2
         self.hand = hand_for(self.model, 'right', gripper)
         closed = (self.hand.grip_command(self.cube_width)
                   if hasattr(self.hand, 'grip_command') else 0.0)
@@ -91,7 +92,7 @@ class ArmEnv(gym.Env):
                               self.quat)
         self.jaw_shift = shift
         self.action_space = spaces.Box(-1., 1., (4,), np.float32)
-        self.observation_space = spaces.Box(-np.inf, np.inf, (20,), np.float32)
+        self.observation_space = spaces.Box(-np.inf, np.inf, (23,), np.float32)
         self.horizon = 480
 
     @property
@@ -102,7 +103,7 @@ class ArmEnv(gym.Env):
                        self.model.geom_contype, self.model.geom_conaffinity,
                        self.model.body_mass, self.model.actuator_forcerange):
             physics.update(values.tobytes())
-        return dict(control_version=3, gripper=self.gripper, station=self.station,
+        return dict(control_version=4, observation_size=23, gripper=self.gripper, station=self.station,
                     horizon=self.horizon, cube_width=self.cube_width,
                     impratio=float(self.model.opt.impratio), physics_sha256=physics.hexdigest(),
                     scene_sha256=hashlib.sha256(ROOM.read_bytes()).hexdigest(),
@@ -127,7 +128,7 @@ class ArmEnv(gym.Env):
         mujoco.mj_resetData(self.model, self.data)
         self.start = np.array([-.34, -1.71, .70])
         self.start[:2] += self.np_random.uniform(-.008, .008, 2)
-        self.goal = self.start + [.17, 0, .024]
+        self.goal = self.start + [.17, 0, self.cube_width/2]
         self.data.qpos[self.objq:self.objq+3] = self.to_world(self.start)
         self.data.qpos[self.objq+3:self.objq+7] = [math.cos(self.frame_yaw/2),0,0,math.sin(self.frame_yaw/2)]
         for side in ('right', 'left'):
@@ -172,11 +173,13 @@ class ArmEnv(gym.Env):
         return np.concatenate([(grip - self.start)*10,
             (self.cube-grip)*10, (self.goal-self.cube)*10,
             (self.frame_rotation.T @ velocity[3:])*10, [self.data.qpos[self.gripq]*self.jaw_scale, self.contacts()/2],
-            (self.target-grip)*10, self.previous[:3]]).astype(np.float32)
+            (self.target-grip)*10, self.previous[:3],
+            [self.data.ctrl[self.arm.grip_act]*self.jaw_scale,
+             self.data.joint(GRIPPER['right']).qvel[0]*10, self.previous[3]]]).astype(np.float32)
 
     def _potential(self):
         reach = np.linalg.norm(self.cube + [0,0,.008] - self.grip_point)
-        lift = np.clip((self.cube[2]-.724)/.12, 0, 1)
+        lift = np.clip((self.cube[2]-self.rest_height)/.12, 0, 1)
         distance = np.linalg.norm(self.cube[:2]-self.goal[:2])
         return -3*reach + 2*lift + 4*(.17-distance)
 
@@ -187,7 +190,7 @@ class ArmEnv(gym.Env):
         action = np.clip(action, -1, 1)
         # the box bounds where the jaws may go, so it means the same for any gripper
         self.target = np.clip(self.target + action[:3]*.004,
-                              [-.42,-1.79,.731], [-.09,-1.63,.94])
+                              [-.42,-1.79,self.rest_height+.007], [-.09,-1.63,.94])
         self.scratch.qpos[:] = self.data.qpos
         solution = self.arm.ik.solve(self.scratch, self.site_for_jaws(self.target), self.quat,
                                     seed=self.data.ctrl[self.arm.acts], iters=12, restarts=1)
@@ -200,7 +203,7 @@ class ArmEnv(gym.Env):
         self.arm.grip(jaw_target)
         for _ in range(25):
             mujoco.mj_step(self.model, self.data)
-            lift = float(self.cube[2]-.724)
+            lift = float(self.cube[2]-self.rest_height)
             self.max_lift = max(self.max_lift, lift)
             if lift > .05 and self.contacts() == 2:
                 self.held += self.model.opt.timestep
@@ -209,7 +212,7 @@ class ArmEnv(gym.Env):
         velocity = np.zeros(6)
         mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY, self.object_id, velocity, 0)
         distance = float(np.linalg.norm(self.cube[:2]-self.goal[:2]))
-        stable = (distance < .025 and abs(self.cube[2]-.724)<.008 and self.contacts()==0
+        stable = (distance < .025 and abs(self.cube[2]-self.rest_height)<.008 and self.contacts()==0
                   and np.linalg.norm(velocity[3:])<.025 and self.grip_point[2]>.80)
         self.stable = self.stable+.05 if stable else 0.
         success = self.stable>=.5 and self.max_lift>.08 and self.held>.5

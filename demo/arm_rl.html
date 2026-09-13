@@ -119,7 +119,7 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 <p class="note" style="margin-top:10px">Bars show each type's mean activation at the current frame, relative to the strongest type's episode peak. Links are summed absolute model weights between types, not measured synapse counts.</p></section>
 
 <section class="tab" id="pane-input" role="tabpanel" aria-labelledby="tab-input" hidden><h2>What the policy sees</h2>
-<p class="note">The actual 20-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×<span id="jawScale">20</span>; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
+<p class="note">The actual <span id="observationSize"></span>-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×<span id="jawScale">20</span>; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
 <h3>Control path</h3><p class="note">Simulator state → learned input adapter → 4 graph propagation rounds → actor → XYZ increments and jaw opening → <span class="term" tabindex="0" data-term="inverse kinematics">inverse kinematics</span> → joint servos.</p>
 <p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; wrist orientation is fixed downward.</p><p class="note" id="jawMapping"></p>
 <p class="note">The <b id="ioCount"></b> mapped nodes are engineering interfaces. Those roles do not mean the biological neurons encode robot coordinates.</p></section>
@@ -251,7 +251,9 @@ $('provenance').textContent=`Checkpoint ${data.report.checkpoint_sha256}\nGraph 
 $('scrub').max=frames.length-1;$('status').textContent=`${data.report.successes}/${data.report.episodes} complete`;
 ['X motion','Y motion','Z motion','Jaw opening'].forEach((label,k)=>{const row=document.createElement('div');row.className='action';
   row.innerHTML=`<span>${label}</span><div class="track"><div id="bar${k}" class="fill"></div></div><span id="value${k}"></span>`;$('actions').append(row)});
-const obsNames=['Grip / start X','Grip / start Y','Grip / start Z','Cube / grip X','Cube / grip Y','Cube / grip Z','Goal / cube X','Goal / cube Y','Goal / cube Z','Cube velocity X','Cube velocity Y','Cube velocity Z','Jaw opening','Finger contacts','Command error X','Command error Y','Command error Z','Previous action X','Previous action Y','Previous action Z'];
+const observationSize=frames[0].observation?.length||20;
+$('observationSize').textContent=observationSize;
+const obsNames=['Grip / start X','Grip / start Y','Grip / start Z','Cube / grip X','Cube / grip Y','Cube / grip Z','Goal / cube X','Goal / cube Y','Goal / cube Z','Cube velocity X','Cube velocity Y','Cube velocity Z','Jaw opening','Finger contacts','Command error X','Command error Y','Command error Z','Previous action X','Previous action Y','Previous action Z','Jaw command','Jaw velocity','Previous jaw action'].slice(0,observationSize);
 obsNames.forEach((name,k)=>{const row=document.createElement('div');row.className='observation';
   const label=document.createElement('span');label.textContent=name;const value=document.createElement('b');value.id='obs'+k;row.append(label,value);$('observations').append(row)});
 
@@ -473,7 +475,7 @@ const tourSteps=[
  {target:'#brainPanel',title:'Every dot is a real neuron',text:`${N} neurons from the FlyWire connectome, drawn at their measured annotation points. Brightness is the activation the saved policy actually computed at this instant. Drag to orbit, scroll to zoom, click any dot to inspect it.`},
  {target:'.toolbar',title:'Follow the signal, hop by hop',text:'Switch View to Circuit to see the same activity as cell types, arranged by how many synapses separate them from the neurons the observation is injected into. Colour the cloud by policy role, brain region, transmitter or activity.'},
  {target:'#explorePanel',title:'Inspect anything',text:'Search a FlyWire root ID, read its transmitter prediction and classification, walk its strongest connections, and watch its activity trace. Science holds what was actually measured, including what it does not show.'},
- {target:'#playbackPanel',title:'Scrub the episode',text:'Robot pose, camera frames, the 20 observation values, the 4 policy outputs and every neuron activation all come from the same recorded timestamp. Move the slider and the whole room moves with it.'}];
+ {target:'#playbackPanel',title:'Scrub the episode',text:'Robot pose, camera frames, the observation values, the 4 policy outputs and every neuron activation all come from the same recorded timestamp. Move the slider and the whole room moves with it.'}];
 let tourAt=0;
 function showTour(){const step=tourSteps[tourAt],target=document.querySelector(step.target);
   $('tourTitle').textContent=step.title;$('tourText').textContent=step.text;

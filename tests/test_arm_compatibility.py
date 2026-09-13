@@ -31,6 +31,12 @@ class ArmCompatibilityTests(unittest.TestCase):
             with self.subTest(config=bad), self.assertRaises(ValueError):
                 validate_arm_config(bad, env.configuration)
 
+    def test_rate_limiter_command_is_visible_to_the_policy(self):
+        env = ArmEnv()
+        observation, _ = env.reset(seed=99)
+        env.data.ctrl[env.arm.grip_act] -= .05
+        self.assertFalse(np.array_equal(observation, env._obs()))
+
     def test_invalid_actions_do_not_mutate_the_simulator(self):
         env = ArmEnv()
         env.reset(seed=99)
@@ -65,6 +71,30 @@ class ArmCompatibilityTests(unittest.TestCase):
         mujoco.mj_forward(bot.model, bot.data)
         sensors = tuple(bot.model.sensor(n).adr[0] for n in ('gyro','vel_left','vel_right'))
         self.assertAlmostEqual(read_state(bot.model, bot.data, sensors).pitch, bot.state().pitch)
+
+    def test_replay_javascript_syntax(self):
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('Node is optional for the replay syntax check')
+        template = (ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
+        script = template.split('<script>',1)[1].split('</script>',1)[0]
+        result = subprocess.run([node,'--check'],input=script,encoding='utf-8',capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_replay_has_targets_for_recorded_gripper_metadata(self):
+        from html.parser import HTMLParser
+        class Elements(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ids = set()
+            def handle_starttag(self, tag, attrs):
+                self.ids.add(dict(attrs).get('id'))
+        parser = Elements()
+        parser.feed((ROOT/'demo/arm_rl.html').read_text(encoding='utf-8'))
+        self.assertTrue({'jawScale','jawMapping','beforeScore','afterScore',
+                         'gripperScope','gripperNote','trainingSteps','observationSize'} <= parser.ids)
 
     def test_teacher_can_release_and_withdraw_before_timeout(self):
         env = ArmEnv()

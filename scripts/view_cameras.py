@@ -69,7 +69,7 @@ def overview(model, data):
     mujoco.mjv_defaultCamera(camera)
     camera.lookat[:] = data.body("root").xpos + [0, 0, 0.8]
     camera.distance = 2.6
-    camera.azimuth = -65
+    camera.azimuth = float(np.degrees(np.arctan2(camera.lookat[1], camera.lookat[0])))
     camera.elevation = -25
     return camera
 
