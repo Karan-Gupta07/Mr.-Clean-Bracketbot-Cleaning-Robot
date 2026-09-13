@@ -1,11 +1,18 @@
 # Pick-and-place controller
 
-The manipulation baseline uses the BracketBot arm with an explicit **parallel-jaw
-gripper replacement** to pick up a cube, move it 17 cm along a table, release it,
-and retreat. The base is fixed at the table's docking pose. The object remains a
-free body: contact and friction must support it throughout the transfer. The
-supplied hooked gripper did not complete this task; this result does not validate
-that original gripper model or the corresponding hardware.
+The manipulation baseline drives the BracketBot arm to pick up a cube, move it
+17 cm along a table, release it, and retreat. The base is fixed at the table's
+docking pose. The object remains a free body: contact and friction must support
+it throughout the transfer.
+
+Models are built with the **supplied hooked gripper plus a contact pad on each
+blade** (`--gripper padded`, the default). The CAD blades are untouched and are
+still what you see; the pads are what the simulator collides. Two other builds
+exist: `--gripper urdf` is the supplied gripper with nothing added, which does
+not grasp, and `--gripper parallel` is the sliding-jaw replacement the earlier
+results used. The pad dimensions and friction are prototype values chosen so
+this task works in simulation. No padding has been fitted to the real robot, so
+none of this validates the hardware.
 
 This is a scripted inverse-kinematics controller. **The fly-connectivity driving
 checkpoint does not control the arms, and this sequence is not RL-trained.** It
@@ -99,14 +106,47 @@ links, hand, and joint servos remain. The replacement is constructed in memory
 for this task; the original robot and room XML files are not modified. These
 gripper parameters are a prototype specification, not measured hardware values.
 
-The original mesh gripper failed the initial cube test. Convex decomposition,
-force changes, and pad experiments yielded transient lifts but did not establish
-reliable transfer. The working result therefore uses the clearly identified
-parallel-jaw variant instead of claiming those changes fixed the supplied jaws.
+## Why the blades need pads
+
+MuJoCo collides a mesh geom as a single convex body. Each hooked blade's convex
+hull measures **147.5 cm3 against the mesh's own 46.1 cm3, a factor of 3.2**, so
+the concave hook the CAD depends on is filled in solid and the blades present as
+fat wedges. Three independent runs agree:
+
+| Check | Bare blades | With pads |
+| --- | --- | --- |
+| `check_grasp.py --item cube_m` | 0/1, rose -0.0 mm, empty | 1/1, rose +135.4 mm, holding |
+| `pick_place.py` 48 mm cube | 0/5, max lift 1.5 mm, no two-finger contact | 5/5 |
+
+So the pads replace the blade mesh as the colliding geometry. Each pad is a
+26 x 33 mm face standing 6 mm proud of the blade it sits on, with sliding
+friction 3.0 and a slightly soft contact, drawn in the blade's own colour. The
+blade meshes stay as the visuals and stop colliding, which is the one real cost:
+the blades no longer collide with anything else either, so they cannot be relied
+on to bump the table or another object.
+
+Two further changes were needed, both in the controller rather than the gripper:
+
+- **Grip to the object's width, not shut.** These blades are a pincer. Commanded
+  fully closed they scissor past each other and flick the object out - measured
+  directly, the pads swapped sides and the cube escaped after a 1.9 mm lift.
+  `PaddedGripper.grip_command` stops them 4 mm inside the object's faces and lets
+  the force-limited servo press.
+- **Aim the pads, not the blade tips.** `PaddedGripper` measures aperture between
+  the pad faces, since the pads are now what touches.
+
+Pad size was swept against all four cubes. A smaller face loses the 42 mm cube,
+which the blades grip above its centre and which rolls out during the carry; a
+larger face fouls the 54 mm and 58 mm cubes going in. An earlier convex
+decomposition attempt gave transient lifts without reliable transfer and was not
+kept.
 
 ## Success criteria
 
-The measured set passed **25/25** episodes: ten 48 mm cube starts, and five each
+The supplied blades with pads pass **20/20**: five starts each at 42, 48, 54 and
+58 mm. The same sweep with no pads passes 0/20.
+
+The parallel-jaw variant (`--gripper parallel`) passed **25/25** episodes: ten 48 mm cube starts, and five each
 for 42, 54, and 58 mm cubes. Those are small ±8 mm position variations near one
 docking pose, not a general manipulation success rate. Final horizontal errors
 were 2.1–5.4 mm. The displayed 48 mm run lifts 14.9 cm and releases 4.7 mm from

@@ -1,5 +1,13 @@
 # Learned arm motion
 
+> **Gripper.** Models now default to the supplied hooked gripper with contact
+> pads on its blades. Every result on this page was trained and measured against
+> the sliding-jaw substitution instead, so reproducing any of it requires
+> `--gripper parallel`. The saved checkpoint does not transfer to the other
+> builds - it learned a different jaw travel and pad friction - so retraining is
+> needed before this policy can drive the supplied gripper. See
+> [pick_place.md](pick_place.md) for what the pads do.
+
 The arm policy reads simulator state and chooses four continuous values: XYZ
 motion and gripper opening. It uses the same measured 512-neuron FlyWire graph
 as the navigation experiment, with new input/output adapters and separately
@@ -50,11 +58,11 @@ rate 0.00001, rollout length 512, batch 128, three epochs, value coefficient
 is followed by 32 rehearsal updates at learning rate 0.0001. Training seed is 7.
 
 ```powershell
-.venv\Scripts\python.exe scripts/train_arm.py --output out/rl/arm_friction3 --steps 0
-.venv\Scripts\python.exe scripts/train_arm.py --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750 --steps 8192
-.venv\Scripts\python.exe scripts/run_arm.py --episodes 10 --seed 2000
-.venv\Scripts\python.exe scripts/run_arm.py --view
-.venv\Scripts\python.exe scripts/run_arm.py --record --open
+.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --output out/rl/arm_friction3 --steps 0
+.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750 --steps 8192
+.venv\Scripts\python.exe scripts/run_arm.py --gripper parallel --episodes 10 --seed 2000
+.venv\Scripts\python.exe scripts/run_arm.py --gripper parallel --view
+.venv\Scripts\python.exe scripts/run_arm.py --gripper parallel --record --open
 ```
 
 Checkpoints, raw before/after evaluation, and demonstrations are saved in the
@@ -93,6 +101,70 @@ The replay in `out/arm_rl_demo/index.html` is the final PPO checkpoint on seed
 error. It displays measured neuron coordinates and actual policy activations.
 The GIF is `out/arm_rl_demo/demo.gif`; generated checkpoints and replays are
 local artifacts in ignored `out/`, not included in the Git repository.
+
+## Interactive neuron explorer
+
+The replay uses a FlyJack-inspired control-room layout: the robot views and an
+episode log on the left, the controller in the middle, and an Explore panel on
+the right. It is a standalone HTML file and works offline after recording; it
+loads no rendering library from a CDN.
+
+**Neuron cloud.** Drag to orbit, scroll to zoom, or expand to fullscreen. Click a
+neuron or search by exact FlyWire root ID, source class, transmitter, neuropil
+group or policy role. Root IDs are exported as strings to avoid JavaScript
+integer rounding. The panel reports the transmitter prediction and its score,
+source classifications, side, flow, source group, synaptic hop, and
+incoming/outgoing counts within this graph, plus the strongest normalized
+model-weight connections; selecting a neuron highlights incoming links in blue
+and outgoing links in gold. Colour by policy role, source region, transmitter or
+activation, filter by super class, and switch between measured annotation
+positions and a conceptual policy-interface layout.
+
+**Circuit view.** The same activity, grouped into cell types and laid out by
+distance from the policy's inputs. Columns are the median synaptic hop of each
+type's neurons, computed by breadth-first search from the 64 afferent input
+neurons over the measured directed edges. The 30 types with the highest total
+activation across the episode are drawn, joined by the 45 strongest type-to-type
+links, ranked by summed absolute model weight. The layout is fixed for the whole
+episode so only the glow moves: node fill tracks each type's mean activation at
+the current frame, scaled against the strongest type's episode peak. Clicking a
+type selects it, lists its neurons, and highlights it in the neuron cloud.
+
+Cell types use FlyWire's class annotation where one exists, and otherwise a
+super-class code plus neuropil group (`CB · AVLP`, `DN · GNG`). That rule is
+disclosed in the Circuit tab, since 325 of the 512 neurons carry no class
+annotation. Hop columns describe the measured wiring, not the four propagation
+rounds the model actually runs.
+
+**Explanation.** Twenty-two neuroscience and machine-learning terms are
+hoverable and keyboard-focusable for a definition. A five-step guided tour opens
+once per browser and can be replayed from the header. The Science tab carries
+the measured results below, including the fact that this arm experiment has no
+matched conventional-network control run and that the navigation experiment's
+control run showed no advantage from the fly wiring. The episode log beside the
+robot marks grasp, lift, arrival, release and confirmation times, all derived
+from the recorded task state rather than a script.
+
+Scrub the replay to inspect any frame's activity trace, robot motion, 20 policy
+observations, and four action outputs at the same recorded action step. Neuron
+metadata, per-neuron synaptic hops, cell-type assignments and all 8,688 graph
+edges download as JSON from How it works.
+
+Activities are mean absolute values across four artificial channels, not Hz or
+spike counts. Source annotation points represent neurons, not their complete
+morphologies. Connection weights are signed, incoming-normalized model weights,
+not raw synapse counts. The 64 input and 64 output roles are engineered adapters.
+Source biological classifications are displayed separately. Missing source
+annotations remain marked as unannotated. The interface credits
+[FlyJack](https://fanpu.io/games/flyjack/) as its design reference.
+
+The generated replay was driven in headless Microsoft Edge over the DevTools
+protocol, asserting playback, scrubbing, exact root-ID search, neighbour
+navigation, the circuit layout and its per-frame glow, cell-type selection
+carrying into the neuron cloud, group filtering, every colour mode, the glossary,
+all five tabs, the first-visit tour, image loading, and no horizontal overflow at
+1600 px or 400 px, with no JavaScript errors. The saved record is
+`out/arm_rl_demo/explorer_checks.json`.
 
 ## Simulation scope
 

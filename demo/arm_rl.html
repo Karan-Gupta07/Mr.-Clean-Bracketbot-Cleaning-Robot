@@ -1,28 +1,501 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Learned arm policy | BracketBot</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlyBot · Neural control room</title>
 <style>
-body{margin:30px;background:#101923;color:#e6eef6;font:16px system-ui}h1{margin-bottom:6px}
-p{color:#b6c8d8}main{max-width:1320px;margin:auto}.views{display:flex;gap:16px}.views img{width:49%;border-radius:12px}
-button{padding:10px 20px;background:#8ef0b8;border:0;border-radius:8px;cursor:pointer}input{width:70%;vertical-align:middle}
-canvas{width:100%;height:260px;background:#152433;border-radius:10px}pre{white-space:pre-wrap}#status{font-size:22px;color:#8ef0b8}
-</style><main><h1>Fly-connectivity arm policy</h1>
-<p>Learned Cartesian motion and gripper commands · Demonstration initialization + PPO · 20 Hz policy / 500 Hz physics</p>
-<p>Fixed base · Parallel-jaw simulation replacement · Pad friction 3.0 · Simulator state observations</p>
-<div id="status"></div><div class="views"><img id="overview" alt="Robot overview"><img id="detail" alt="Grasp close-up"></div>
-<p><button id="play">Pause</button> <button id="restart">Restart</button> <input id="scrub" type="range" min="0" value="0"> <span id="time"></span></p>
-<p>512 mapped FlyWire neurons — activity from this policy's forward pass (artificial rate values, not biological spikes)</p>
-<canvas id="brain" width="1280" height="260"></canvas><pre id="metrics"></pre>
-<p>The policy chooses all four action values. IK converts its XYZ commands to joint targets; servos and contact physics execute them. No demonstration controller runs during this replay.</p>
-</main><script>
-const data=__ARM_DATA__;let i=0,playing=true;
-const $=id=>document.getElementById(id);$('scrub').max=data.frames.length-1;
-$('status').textContent=`Saved-policy evaluation: ${data.report.successes}/${data.report.episodes} successful`;
-function draw(){const f=data.frames[i];$('overview').src=f.overview;$('detail').src=f.detail;$('scrub').value=i;$('time').textContent=f.time.toFixed(1)+' s';
-$('metrics').textContent=`Placement error: ${(f.distance*1000).toFixed(1)} mm | Maximum lift: ${(f.max_lift*100).toFixed(1)} cm | Held with both fingers: ${f.held_seconds.toFixed(2)} s\nActions [x, y, z, gripper]: ${f.action.map(x=>x.toFixed(3)).join(', ')}`;
-const c=$('brain').getContext('2d');c.clearRect(0,0,1280,260);const points=data.positions.map(([x,y,z])=>[640+(x*.94+z*.34)*430,130+(y*.94-z*.34)*230]);
-c.strokeStyle='#38747a55';c.lineWidth=.6;data.edges.forEach(([a,b])=>{c.beginPath();c.moveTo(...points[a]);c.lineTo(...points[b]);c.stroke()});
-f.activity.forEach((v,n)=>{c.fillStyle=`hsl(${165+60*v} 80% ${20+65*v}%)`;c.beginPath();c.arc(...points[n],1.5+2*v,0,Math.PI*2);c.fill()});c.fillStyle='#b6c8d8';c.fillText('Measured neuron positions | 1 in 4 connections drawn',20,24)}
-$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Play'};$('restart').onclick=()=>{i=0;draw()};$('scrub').oninput=e=>{i=+e.target.value;draw()};
-setInterval(()=>{if(playing){i=(i+1)%data.frames.length;draw()}},100);draw();
-</script></html>
+:root{color-scheme:dark;--bg:#090e13;--panel:#111a23;--line:#23313d;--text:#edf3f7;--muted:#92a5b6;--green:#80e8bc;--blue:#6cbdff;--gold:#f4c27a;--violet:#c89aff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}
+button,input,select{font:inherit}button,select,input[type=search]{background:#1a2733;color:var(--text);border:1px solid #344454;border-radius:7px;padding:7px 10px}
+button{cursor:pointer}button:hover{border-color:var(--green)}button:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,.term:focus-visible,.node:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+a{color:var(--blue)}button.primary{background:var(--green);color:#0c241b;border-color:var(--green)}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:18px 24px;border-bottom:1px solid var(--line)}
+h1{font-size:22px;letter-spacing:-.5px;margin:0}h1 span{color:var(--green)}
+.eyebrow{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted)}
+.pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pill{border:1px solid var(--line);padding:4px 9px;border-radius:20px;font-size:11px;color:var(--muted)}.pill.good{color:var(--green)}
+.layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(430px,1.75fr) 340px;gap:14px;padding:18px 20px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+h2{margin:0;font-size:14px;font-weight:600}h3{font-size:12px;font-weight:600;color:var(--muted);margin:18px 0 8px}
+.muted,.note{color:var(--muted)}.note{font-size:12px}.pad{padding:14px 16px}
+.camera{width:100%;display:block;aspect-ratio:4/3;object-fit:contain;background:#090e13}
+.camera-label{padding:8px 12px;font-size:11px;color:var(--muted);border-top:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);padding:14px;gap:8px;border-top:1px solid var(--line)}
+.stat b{display:block;font:20px ui-monospace,monospace;color:var(--green)}.stat span{font-size:10px;color:var(--muted)}
+.log{border-top:1px solid var(--line);padding:12px 16px;display:grid;gap:6px}
+.log-row{display:grid;grid-template-columns:52px 1fr;gap:9px;font-size:11px;color:#54636f;align-items:baseline}
+.log-row time{font-family:ui-monospace,monospace}.log-row.past{color:var(--muted)}.log-row.past time{color:#5f7f74}
+.log-row.now{color:var(--green)}.log-row.now time{color:var(--green)}
+.brain-panel{display:flex;flex-direction:column;min-width:0}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line);font-size:12px}
+.toolbar label{display:flex;align-items:center;gap:5px;color:var(--muted)}.toolbar select{max-width:140px;font-size:12px;padding:5px}
+.stage{position:relative;flex:1;min-height:460px;background:radial-gradient(ellipse at 50% 45%,#192b35 0%,#0b141d 70%);overflow:hidden}
+#brain{width:100%;height:100%;position:absolute;inset:0;touch-action:none;cursor:grab}
+#circuitScroll{position:absolute;inset:0;overflow:auto;padding:52px 10px 26px}#circuit{width:100%;display:block}
+.node{cursor:pointer}
+.stage-caption{position:absolute;left:14px;top:12px;color:var(--muted);font-size:11px;pointer-events:none;z-index:2;text-shadow:0 1px 4px #0b141d}
+.stage-hint{position:absolute;bottom:8px;left:14px;color:var(--muted);font-size:11px;pointer-events:none;z-index:2;text-shadow:0 1px 4px #0b141d}
+#tooltip{position:absolute;background:#070d13ee;border:1px solid #607687;border-radius:6px;padding:6px 9px;font:11px ui-monospace,monospace;pointer-events:none;max-width:90%;z-index:4}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 16px;font-size:11px;border-top:1px solid var(--line);color:var(--muted)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.actions{padding:0 16px 14px;display:grid;gap:8px}
+.action{display:grid;grid-template-columns:72px 1fr 52px;gap:10px;align-items:center;font:11px ui-monospace,monospace}
+.track{position:relative;height:6px;background:#273743;border-radius:4px}.track:after{content:'';position:absolute;left:50%;height:10px;top:-2px;width:1px;background:#71808b}
+.fill{position:absolute;height:6px;background:var(--green);border-radius:3px}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:8px;gap:4px;overflow-x:auto}
+.tabs button{flex:1 0 auto;padding:6px 8px;font-size:12px;background:transparent;border-color:transparent;white-space:nowrap}
+.tabs button[aria-selected=true]{background:#253644;color:var(--green)}
+.tab{padding:14px 16px}.tab[hidden]{display:none}
+#search{width:100%;font-size:12px}#matches{display:grid;gap:4px;margin-top:8px;max-height:180px;overflow:auto}
+#matches button,.neighbor{font:11px ui-monospace,monospace;text-align:left;padding:6px;overflow-wrap:anywhere}
+#selectedId{font:13px ui-monospace,monospace;overflow-wrap:anywhere;color:var(--gold)}
+dl{display:grid;grid-template-columns:1fr 1.3fr;gap:7px;font-size:11px}dt{color:var(--muted)}dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.activity-value{font:30px ui-monospace,monospace;color:var(--green)}
+#trace{width:100%;height:85px;background:#0b141d;border-radius:7px}
+.neighbor-list{display:grid;gap:5px;max-height:150px;overflow:auto}.neighbor{background:#17232e;border:1px solid var(--line);border-radius:5px}
+.top-list{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 14px}.top-list button{font-size:10px;padding:4px 7px}
+.observation{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0;font-size:11px}.observation b{font-family:ui-monospace,monospace}
+.typerow{display:grid;grid-template-columns:1fr 48px;gap:8px;align-items:center;width:100%;text-align:left;font-size:11px;padding:6px 7px;background:#17232e;border:1px solid var(--line);border-radius:6px}
+.typerow.on{border-color:var(--green)}.typerow b{font-weight:600;display:block;overflow-wrap:anywhere}.typerow small{color:var(--muted)}
+.typerow .bar{display:block;height:5px;background:#273743;border-radius:3px;overflow:hidden;margin-top:4px}.typerow .bar i{display:block;height:5px;background:var(--green)}
+#typeList{display:grid;gap:5px;max-height:330px;overflow:auto}
+.playback{margin:0 20px 16px;padding:14px 18px;display:flex;gap:14px;align-items:center}
+#scrub{flex:1;min-width:80px;accent-color:var(--green)}#time{font:12px ui-monospace,monospace;white-space:nowrap}
+footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justify-content:space-between;gap:15px}
+.brain-panel:fullscreen{background:var(--bg);padding:15px}.brain-panel:fullscreen .stage{min-height:60vh}
+#status{font-size:11px;color:var(--green)}.small{font-size:11px}#clear{width:100%;margin-top:8px}
+.about p{font-size:12px;color:var(--muted)}
+.term{border-bottom:1px dotted #5d7181;cursor:help}
+#glossTip{position:fixed;left:0;top:0;max-width:290px;background:#070d13;border:1px solid #607687;border-radius:7px;padding:9px 11px;font-size:11px;line-height:1.55;color:var(--text);z-index:60;pointer-events:none;box-shadow:0 8px 24px #000a}
+#glossTip b{color:var(--green)}
+#tour[hidden]{display:none}#tour{position:fixed;inset:0;z-index:50}
+#tourVeil{position:absolute;inset:0}
+#tourSpot{position:absolute;border:2px solid var(--green);border-radius:12px;box-shadow:0 0 0 9999px #04080cd6;transition:all .25s ease;pointer-events:none}
+#tourCard{position:absolute;width:min(330px,calc(100vw - 28px));background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 16px 40px #000b}
+#tourCard h3{margin:0 0 8px;font-size:14px;color:var(--text)}#tourCard p{margin:0;font-size:12px;color:var(--muted);line-height:1.6}
+.tour-nav{display:flex;gap:8px;align-items:center;margin-top:14px}#tourStep{margin-left:auto;font:11px ui-monospace,monospace;color:var(--muted)}
+.sci{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.sci th,.sci td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+.sci th{color:var(--muted);font-weight:600}.sci td:last-child,.sci th:last-child{text-align:right;font-family:ui-monospace,monospace}
+.caveat{border-left:2px solid var(--gold);padding:2px 0 2px 10px;margin:12px 0;font-size:12px;color:var(--muted)}
+@media(min-width:1600px){.layout{grid-template-columns:400px minmax(540px,1fr) 370px}.stage{min-height:540px}}
+@media(max-width:1150px){.layout{grid-template-columns:minmax(260px,1fr) minmax(380px,1.6fr)}aside{grid-column:1/-1}.tab{max-height:460px;overflow:auto}.stage{min-height:430px}}
+@media(max-width:700px){header{align-items:flex-start;padding:14px;flex-wrap:wrap}.layout{display:flex;flex-direction:column;padding:10px}.stage{height:430px;flex:auto}.playback{margin:0 10px 10px;flex-wrap:wrap}#scrub{flex-basis:60%}.pills{max-width:190px}.camera{max-height:300px}footer{display:block}footer span{display:block;margin-top:5px}.stats{padding:10px}#tourCard{left:10px!important;right:10px;width:auto}}
+</style></head><body>
+<header><div><div class="eyebrow">BracketBot / Neural control room</div><h1>Fly<span>Bot</span> <span style="color:var(--muted);font-weight:400">· Pick &amp; place</span></h1></div>
+<div class="pills"><span class="pill good">PPO-trained policy</span><span class="pill" id="pillNeurons"></span><span class="pill">Recorded simulation</span><button id="tourBtn" class="small">Take the tour</button></div></header>
+<main class="layout">
+<section class="panel" id="robotPanel" aria-label="Robot replay"><div class="panel-head"><h2>Robot</h2><span id="status"></span></div>
+<img id="overview" class="camera" alt="Robot arm performing learned pick and place"><div class="camera-label">01 / Overview</div>
+<img id="detail" class="camera" alt="Close-up of gripper and cube"><div class="camera-label">02 / Grasp camera · green outline marks destination</div>
+<div class="stats"><div class="stat"><b id="distance"></b><span>ERROR / mm</span></div><div class="stat"><b id="lift"></b><span>MAX LIFT / cm</span></div><div class="stat"><b id="held"></b><span>HELD / s</span></div></div>
+<div class="log"><span class="eyebrow">Episode log · derived from recorded state</span><div id="milestones"></div></div></section>
+
+<section class="panel brain-panel" id="brainPanel" aria-label="Interactive neuron visualization"><div class="panel-head"><h2>Inside the controller</h2><div><button id="resetCamera" class="small">Reset view</button> <button id="expand" class="small">Expand</button></div></div>
+<div class="toolbar"><label>View <select id="view"><option value="brain">Neuron cloud</option><option value="circuit">Circuit</option></select></label>
+<label>Layout <select id="layout"><option value="anatomy">Anatomy</option><option value="roles">Policy interfaces</option></select></label>
+<label>Group <select id="group"><option value="all">All neurons</option></select></label>
+<label>Color <select id="color"><option value="role">Policy role</option><option value="region">Source region</option><option value="nt">Transmitter</option><option value="activity">Activity</option></select></label>
+<label><input id="edges" type="checkbox" checked>Connections</label></div>
+<div class="stage" id="stage"><canvas id="brain" aria-label="Drag to rotate, scroll to zoom, click a neuron to inspect. Use neuron search for keyboard selection."></canvas>
+<div id="circuitScroll" hidden><svg id="circuit" role="img" aria-label="Cell types arranged by synaptic distance from the injected neurons"></svg></div>
+<div class="stage-caption"><span id="visibleCount"></span><br><span id="layoutNote">Measured annotation points · positions normalized for display</span></div>
+<div id="tooltip" hidden></div><div class="stage-hint" id="stageHint">Drag to orbit · Scroll to zoom · Click to inspect</div></div>
+<div class="legend" id="legend"></div>
+<div class="pad" style="padding-bottom:6px"><h2>Policy outputs <span class="muted small">20 Hz · normalized −1 to +1</span></h2></div><div class="actions" id="actions"></div>
+<div class="pad" style="padding-top:0;padding-bottom:6px"><span class="eyebrow">Most active this frame</span></div><div id="topActive" class="top-list"></div></section>
+
+<aside class="panel" id="explorePanel" aria-label="Explore the controller"><div class="panel-head"><h2>Explore</h2><span class="eyebrow">FlyWire v783</span></div>
+<div class="tabs" role="tablist"><button role="tab" id="tab-neuron" data-tab="neuron" aria-controls="pane-neuron" aria-selected="true">Neuron</button><button role="tab" id="tab-circuit" data-tab="circuit" aria-controls="pane-circuit" aria-selected="false">Circuit</button><button role="tab" id="tab-input" data-tab="input" aria-controls="pane-input" aria-selected="false">Inputs</button><button role="tab" id="tab-science" data-tab="science" aria-controls="pane-science" aria-selected="false">Science</button><button role="tab" id="tab-about" data-tab="about" aria-controls="pane-about" aria-selected="false">How it works</button></div>
+
+<section class="tab" id="pane-neuron" role="tabpanel" aria-labelledby="tab-neuron"><label class="note" for="search">Find by <span class="term" tabindex="0" data-term="root ID">root ID</span>, class, transmitter or role</label><input type="search" id="search" placeholder="Try descending, GABA, or an ID"><div id="matches"></div>
+<h3>Selection</h3><div id="selectedId"></div><dl id="properties"></dl>
+<h3>Activity at this frame</h3><div class="activity-value" id="activity"></div><p class="note">Mean absolute <span class="term" tabindex="0" data-term="activation">activation</span> across four learned channels; dimensionless, not a firing rate.</p>
+<canvas id="trace" aria-label="Selected neuron activity over the recorded episode"></canvas><div class="note">Episode activity · vertical line is the playback position</div>
+<h3 id="neighborHead">Connections in this graph</h3><div id="neighbors" class="neighbor-list"></div><button id="clear" class="small">Clear selection / show all connections</button></section>
+
+<section class="tab" id="pane-circuit" role="tabpanel" aria-labelledby="tab-circuit" hidden><h2>Follow the signal</h2>
+<p class="note">The controller writes the robot observation into <b id="inputCount"></b> afferent neurons, runs four rounds of <span class="term" tabindex="0" data-term="message passing">message passing</span> over the measured wiring, and reads <b id="outputCount"></b> <span class="term" tabindex="0" data-term="descending neuron">descending neurons</span>. The circuit view groups neurons into cell types and places each type by its typical <span class="term" tabindex="0" data-term="synaptic hop">synaptic hop</span> from the injected set.</p>
+<p class="note">Cell types use FlyWire's class annotation where it exists, otherwise <span class="term" tabindex="0" data-term="super class">super class</span> plus <span class="term" tabindex="0" data-term="neuropil group">neuropil group</span>. Ranking is by total activation over the whole episode, so the diagram holds still and only the glow follows the clock.</p>
+<h3>Top cell types this episode</h3><div id="typeList"></div>
+<p class="note" style="margin-top:10px">Bars show each type's mean activation at the current frame, relative to the strongest type's episode peak. Links are summed absolute model weights between types, not measured synapse counts.</p></section>
+
+<section class="tab" id="pane-input" role="tabpanel" aria-labelledby="tab-input" hidden><h2>What the policy sees</h2>
+<p class="note">The actual 20-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×20; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
+<h3>Control path</h3><p class="note">Simulator state → learned input adapter → 4 graph propagation rounds → actor → XYZ increments and jaw opening → <span class="term" tabindex="0" data-term="inverse kinematics">inverse kinematics</span> → joint servos.</p>
+<p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; the fourth requests a per-jaw opening between 0 and 45 mm. Wrist orientation is fixed downward.</p>
+<p class="note">The <b id="ioCount"></b> mapped nodes are engineering interfaces. Those roles do not mean the biological neurons encode robot coordinates.</p></section>
+
+<section class="tab" id="pane-science" role="tabpanel" aria-labelledby="tab-science" hidden><h2>What was measured</h2>
+<p class="note">Full-task success for the arm policy. One training seed (7), 48 <span class="term" tabindex="0" data-term="PPO">PPO</span> epochs over 8,192 environment actions:</p>
+<table class="sci"><tr><th>Checkpoint</th><th>Success</th></tr>
+<tr><td>Demonstrations + release corrections, before PPO (seeds 3000–3009)</td><td>2/10</td></tr>
+<tr><td>Same start, after PPO + rehearsal (seeds 3000–3009)</td><td>10/10</td></tr>
+<tr><td>Final checkpoint, held-out seeds 2000–2009</td><td>10/10</td></tr></table>
+<p class="note">Final placement error across those twenty starts was 6.2–10.7 mm.</p>
+<div class="caveat">PPO always ran alongside demonstration rehearsal, so this comparison does not separate reinforcement learning from the extra imitation updates.</div>
+<h3>Does the fly wiring help?</h3>
+<p class="note">This arm experiment has <b>no matched conventional-network control run</b>, so it cannot answer that. The companion navigation experiment does have one, and the answer there was no:</p>
+<table class="sci"><tr><th>Navigation policy</th><th>Seeds 2000–2019</th></tr>
+<tr><td>Fly graph, imitation only</td><td>20/20</td></tr><tr><td>Fly graph, PPO + rehearsal</td><td>17/20</td></tr>
+<tr><td>MLP, imitation only</td><td>18/20</td></tr><tr><td>MLP, PPO + rehearsal</td><td>20/20</td></tr></table>
+<p class="note">A plain network of comparable size did the job just as well. What this demo shows is that a controller built on measured fly connectivity <em>can</em> drive a robot arm — not that the connectivity is what makes it work.</p>
+<h3>Scope</h3><p class="note">One 48 mm cube randomized by ±8 mm, a fixed 17 cm destination, a fixed base, and <span id="gripperScope"></span> Camera perception, base balancing during manipulation, other objects, and hardware behaviour are all unvalidated.</p></section>
+
+<section class="tab about" id="pane-about" role="tabpanel" aria-labelledby="tab-about" hidden><h2>Measured wiring. Learned control.</h2>
+<p>This controller uses a <b id="aboutNeurons"></b>-neuron subset of the <span class="term" tabindex="0" data-term="FlyWire">FlyWire</span> FAFB v783 <span class="term" tabindex="0" data-term="connectome">connectome</span>, joined by <b id="aboutEdges"></b> measured directed neuron pairs. Neuron IDs, <span class="term" tabindex="0" data-term="neurotransmitter">transmitter</span> predictions and classifications come from the source tables.</p>
+<p>The policy was initialized from demonstrations by <span class="term" tabindex="0" data-term="behavioral cloning">behavioral cloning</span>, then trained with PPO plus demonstration rehearsal. It chooses arm motion and gripper opening; IK and servos execute those commands. No scripted phase sequence or timer selects movements at playback.</p>
+<h3>What the animation means</h3>
+<p>Node brightness and size show the saved policy's actual activations. The trace follows the same replay clock as the robot. This is finite <span class="term" tabindex="0" data-term="message passing">message passing</span>, not a biological spiking simulation and not a whole fly brain. Edges show connectivity, not measured information flow.</p>
+<p>One source annotation point represents each neuron; these dots are not complete neuron morphologies. “Policy interfaces” is a conceptual input/internal/output layout, not anatomical position or synaptic hop count.</p>
+<h3>Signs and weights</h3>
+<p>Edge weights are synapse counts aggregated per directed neuron pair, signed by the presynaptic transmitter prediction (<span class="term" tabindex="0" data-term="GABA">GABA</span> and <span class="term" tabindex="0" data-term="GLUT">glutamate</span> negative, everything else positive), then normalized by each neuron's total incoming weight. That sign rule is a deliberate engineering simplification, not a biological claim.</p>
+<h3>Provenance</h3><div id="provenance" class="note"></div>
+<p><a href="https://codex.flywire.ai/" target="_blank" rel="noopener">FlyWire / Codex</a> · <a href="https://www.nature.com/articles/s41586-024-07558-y" target="_blank" rel="noopener">Dorkenwald et al. 2024</a> · <a href="https://fanpu.io/games/flyjack/" target="_blank" rel="noopener">Interface inspiration: FlyJack</a></p>
+<button id="download" class="small">Download neuron metadata</button></section></aside>
+</main>
+<section class="panel playback" id="playbackPanel" aria-label="Playback controls"><button id="play" class="primary">Pause</button><button id="restart">Restart</button><label class="small" for="rate">Speed</label><select id="rate"><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select><input id="scrub" aria-label="Replay position" type="range" min="0" value="0" step="1"><span id="time"></span></section>
+<footer><span>Recorded learned-policy rollout · fixed base / <span id="gripperNote"></span> · no scripted arm sequence at inference</span><span>Learned activations ≠ biological spikes</span></footer>
+<div id="glossTip" hidden></div>
+<div id="tour" hidden><div id="tourVeil"></div><div id="tourSpot"></div><div id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle"><h3 id="tourTitle"></h3><p id="tourText"></p><div class="tour-nav"><button id="tourBack">Back</button><button id="tourNext" class="primary">Next</button><button id="tourSkip" class="small">Skip</button><span id="tourStep"></span></div></div></div>
+<script>
+'use strict';
+const data=__ARM_DATA__;
+const $=id=>document.getElementById(id), N=data.neurons.length, frames=data.frames;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let i=0,playing=true,selected=null,focusType=null,yaw=.2,pitch=-.35,zoom=1,clock=frames[0].time,last=performance.now(),projected=[],drag=null;
+const roleColors={input:'#6cbdff',internal:'#80e8bc',output:'#f4c27a'};
+const ntColors={ACH:'#80e8bc',GABA:'#c89aff',GLUT:'#ff9b85',DA:'#f4c27a',SER:'#6cbdff',OCT:'#f098c0'};
+const regionColors={central:'#80e8bc',descending:'#f4c27a',ascending:'#6cbdff',visual_projection:'#c89aff',sensory:'#ff9b85'};
+const superCode={central:'CB',descending:'DN',ascending:'AN',visual_projection:'VPN',sensory:'SN'};
+
+/* ---- graph index: adjacency, synaptic hops, cell types ---- */
+const incoming=Array.from({length:N},()=>[]),outgoing=Array.from({length:N},()=>[]);
+data.edges.forEach(([a,b],k)=>{outgoing[a].push({node:b,weight:data.weights[k]});incoming[b].push({node:a,weight:data.weights[k]})});
+const hop=new Int16Array(N).fill(-1),queue=[];
+data.neurons.forEach((n,k)=>{if(n.role==='input'){hop[k]=0;queue.push(k)}});
+for(let q=0;q<queue.length;q++)for(const {node} of outgoing[queue[q]])if(hop[node]<0){hop[node]=hop[queue[q]]+1;queue.push(node)}
+const typeLabel=n=>n.cell_class||`${superCode[n.super_class]||n.super_class} · ${n.group||'unannotated'}`;
+const typeOf=data.neurons.map(typeLabel),types=new Map();
+typeOf.forEach((label,k)=>{let t=types.get(label);if(!t)types.set(label,t={label,members:[]});t.members.push(k)});
+for(const t of types.values()){
+  const reached=t.members.map(k=>hop[k]).filter(h=>h>=0).sort((a,b)=>a-b);
+  t.hop=reached.length?reached[reached.length>>1]:-1;                 // median hop of this type's neurons
+  t.mean=frames.map(f=>{let s=0;for(const k of t.members)s+=f.activity[k];return s/t.members.length});
+  t.total=t.mean.reduce((a,b)=>a+b,0)*t.members.length;               // share of all activation this episode
+  t.peak=Math.max(...t.mean);
+  t.roles=[...new Set(t.members.map(k=>data.neurons[k].role))];
+}
+const circuitNodes=[...types.values()].sort((a,b)=>b.total-a.total).slice(0,30);
+const circuitPeak=Math.max(...circuitNodes.map(t=>t.peak),1e-6);
+const circuitSet=new Set(circuitNodes.map(t=>t.label));
+const circuitEdges=(()=>{const agg=new Map();
+  data.edges.forEach(([a,b],k)=>{const source=typeOf[a],target=typeOf[b];
+    if(source===target||!circuitSet.has(source)||!circuitSet.has(target))return;
+    const weight=Math.abs(data.weights[k]),key=source+' → '+target,seen=agg.get(key);
+    seen?seen.weight+=weight:agg.set(key,{source,target,weight})});
+  return [...agg.values()].sort((a,b)=>b.weight-a.weight).slice(0,45)})();
+
+/* ---- glossary ---- */
+const glossary={
+ 'connectome':'A wiring diagram of a nervous system: which neurons exist and which of them connect. FlyWire reconstructed one for a whole adult fruit fly brain from electron microscopy.',
+ 'FlyWire':'The project that reconstructed and proofread the adult Drosophila brain connectome. This controller uses release FAFB v783.',
+ 'root ID':'FlyWire’s stable identifier for one reconstructed neuron. They are 18-digit numbers, so this page carries them as text: JavaScript would round them.',
+ 'synaptic hop':'How many connections a signal must cross to reach a neuron from the injected set, following the measured wiring. Hop 0 is where this controller writes the robot observation in.',
+ 'neurotransmitter':'The chemical a neuron releases at its synapses. FlyWire supplies a predicted transmitter per neuron with a confidence score; this model collapses that prediction to a fixed + or − sign.',
+ 'ACH':'Acetylcholine, the fly brain’s main excitatory transmitter. Treated as a positive weight here.',
+ 'GABA':'The fly brain’s main inhibitory transmitter. Treated as a negative weight here.',
+ 'GLUT':'Glutamate. Frequently inhibitory in the fly brain through glutamate-gated chloride channels, so it is treated as a negative weight here.',
+ 'descending neuron':'A neuron carrying commands from the brain down toward the ventral nerve cord, which drives the legs and wings in a real fly. This controller reads its descending neurons as the graph’s output.',
+ 'ascending neuron':'A neuron carrying signals from the ventral nerve cord up into the brain. These are where this controller injects the robot’s observation.',
+ 'ALPN':'Antennal-lobe projection neuron: carries smell information out of the antennal lobe toward the mushroom body and the lateral horn.',
+ 'ALLN':'Antennal-lobe local neuron: wires glomeruli to each other inside the antennal lobe, and is mostly inhibitory.',
+ 'MBON':'Mushroom body output neuron, which reads out the mushroom body — the fly’s best-studied centre for smell learning and memory.',
+ 'CX':'Central complex: a midline structure that in real flies tracks heading direction and steers the animal.',
+ 'message passing':'One propagation round multiplies the current neuron values by the fixed connection matrix, adds the injected observation, and squashes the result. This controller runs four rounds per action and carries nothing between actions.',
+ 'activation':'A dimensionless number this model computes per neuron: the mean absolute value across its four learned channels. It is not a firing rate and not a spike count.',
+ 'PPO':'Proximal Policy Optimization, the reinforcement-learning algorithm that improved this policy after demonstrations initialized it.',
+ 'behavioral cloning':'Supervised training that copies a demonstration’s actions. It initializes this policy before reinforcement learning starts.',
+ 'inverse kinematics':'Solving for the joint angles that put the gripper at a commanded position. The policy commands positions; IK turns them into seven joint targets.',
+ 'flow':'FlyWire’s classification of signal direction: afferent neurons bring signals into the brain, efferent neurons carry them out, intrinsic neurons stay inside it.',
+ 'super class':'FlyWire’s coarsest neuron classification — central, sensory, ascending, descending, visual projection and so on.',
+ 'neuropil group':'The brain regions a neuron arborizes in, written as region codes such as AVLP, GNG or AL. Used here to name cell types that carry no class annotation.'};
+const glossTip=$('glossTip');
+function showTerm(el){const key=el.dataset.term,text=glossary[key];if(!text)return;
+  glossTip.innerHTML=`<b>${esc(key)}</b><br>${esc(text)}`;glossTip.hidden=false;
+  const box=el.getBoundingClientRect(),left=Math.min(innerWidth-glossTip.offsetWidth-12,Math.max(12,box.left));
+  const top=box.bottom+8+glossTip.offsetHeight>innerHeight?box.top-glossTip.offsetHeight-8:box.bottom+8;
+  glossTip.style.transform=`translate(${left}px,${Math.max(8,top)}px)`}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTerm(t)});
+document.addEventListener('focusin',e=>{const t=e.target.closest('.term');if(t)showTerm(t)});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))glossTip.hidden=true});
+document.addEventListener('focusout',e=>{if(e.target.closest('.term'))glossTip.hidden=true});
+
+/* ---- copy driven by the recording, so displayed numbers cannot drift ---- */
+const inputCount=data.neurons.filter(n=>n.role==='input').length,outputCount=data.neurons.filter(n=>n.role==='output').length;
+$('pillNeurons').textContent=`${N} mapped neurons`;
+$('aboutNeurons').textContent=N.toLocaleString();$('aboutEdges').textContent=data.edges.length.toLocaleString();
+$('inputCount').textContent=inputCount;$('outputCount').textContent=outputCount;$('ioCount').textContent=`${inputCount} input and ${outputCount} output`;
+const gripper=data.report.gripper||'parallel';
+$('gripperNote').textContent=gripper==='urdf'?'supplied URDF gripper':'parallel-jaw simulation';
+$('gripperScope').textContent=gripper==='urdf'
+  ?'the supplied hooked gripper exactly as the URDF exports it.'
+  :'simulated parallel jaws with pad sliding friction 3.0 — an engineering value, not a measured hardware coefficient, and not the supplied gripper.';
+$('provenance').textContent=`Checkpoint ${data.report.checkpoint_sha256}\nGraph ${data.report.graph_sha256}`;$('provenance').style.overflowWrap='anywhere';
+[...new Set(data.neurons.map(n=>n.super_class))].sort().forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g.replaceAll('_',' ');$('group').append(o)});
+$('scrub').max=frames.length-1;$('status').textContent=`${data.report.successes}/${data.report.episodes} complete`;
+['X motion','Y motion','Z motion','Jaw opening'].forEach((label,k)=>{const row=document.createElement('div');row.className='action';
+  row.innerHTML=`<span>${label}</span><div class="track"><div id="bar${k}" class="fill"></div></div><span id="value${k}"></span>`;$('actions').append(row)});
+const obsNames=['Grip / start X','Grip / start Y','Grip / start Z','Cube / grip X','Cube / grip Y','Cube / grip Z','Goal / cube X','Goal / cube Y','Goal / cube Z','Cube velocity X','Cube velocity Y','Cube velocity Z','Jaw opening','Finger contacts','Command error X','Command error Y','Command error Z','Previous action X','Previous action Y','Previous action Z'];
+obsNames.forEach((name,k)=>{const row=document.createElement('div');row.className='observation';
+  const label=document.createElement('span');label.textContent=name;const value=document.createElement('b');value.id='obs'+k;row.append(label,value);$('observations').append(row)});
+
+/* ---- episode log, derived from the recorded task state ---- */
+const milestones=(()=>{const found=[],mark=(test,text)=>{const k=frames.findIndex(test);if(k>=0)found.push({k,time:frames[k].time,text})};
+  mark(f=>f.held_seconds>0,'Jaws hold the cube');
+  mark(f=>f.max_lift>.02,'Cube leaves the table');
+  mark(f=>f.max_lift>.08,'Lift passes the 8 cm threshold');
+  mark(f=>f.distance<.025,'Cube arrives over the destination');
+  mark(f=>f.stable_seconds>0,'Jaws release, hand withdraws');
+  mark(f=>f.success,'Placement confirmed stable');
+  return found.sort((a,b)=>a.k-b.k)})();
+$('milestones').innerHTML=milestones.map((m,k)=>`<div class="log-row" data-m="${k}"><time>${m.time.toFixed(2)}s</time><span>${esc(m.text)}</span></div>`).join('')
+  ||'<div class="log-row"><span>No task milestone was reached in this episode.</span></div>';
+function updateLog(){milestones.forEach((m,k)=>{const row=$('milestones').querySelector(`[data-m="${k}"]`);if(!row)return;
+  const next=milestones[k+1];row.className='log-row'+(i>=m.k?(next&&i>=next.k?' past':' now'):'')})}
+
+/* ---- tabs ---- */
+const paneNames=['neuron','circuit','input','science','about'];
+function tab(name){document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===name)));
+  paneNames.forEach(x=>$('pane-'+x).hidden=x!==name);if(name==='neuron')trace()}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+
+/* ---- selection: either one neuron, or one cell type ---- */
+function visible(n){return $('group').value==='all'||n.super_class===$('group').value}
+function color(n,v){const mode=$('color').value;
+  return mode==='activity'?`hsl(${170+v*45} 80% ${30+v*55}%)`
+    :mode==='nt'?(ntColors[n.nt_type]||'#bdc9d4')
+    :mode==='region'?(regionColors[n.super_class]||'#bdc9d4'):roleColors[n.role]}
+function legend(){const l=$('legend'),mode=$('color').value;l.replaceChildren();
+  const entries=mode==='nt'?ntColors:mode==='region'?regionColors:mode==='activity'?{'Low → high activation':'#80e8bc'}:roleColors;
+  Object.entries(entries).forEach(([name,c])=>{const s=document.createElement('span'),d=document.createElement('span');
+    d.className='dot';d.style.background=c;s.append(d,document.createTextNode(name.replaceAll('_',' ')));l.append(s)})}
+function choose(index){selected=index;focusType=null;tab('neuron');$('search').value='';$('matches').replaceChildren();
+  if(index!==null&&!visible(data.neurons[index]))$('group').value='all';details();renderFrame();draw()}
+function chooseType(label){focusType=focusType===label?null:label;selected=null;details();renderFrame();draw()}
+function inFocus(k){return focusType===null||typeOf[k]===focusType}
+
+function details(){const n=selected===null?null:data.neurons[selected];
+  $('selectedId').textContent=n?n.id:(focusType?focusType:'Click a neuron or search above');
+  $('properties').replaceChildren();$('neighbors').replaceChildren();
+  const write=props=>Object.entries(props).forEach(([k,v])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');
+    dt.textContent=k;dd.textContent=v;$('properties').append(dt,dd)});
+  if(!n){
+    $('neighborHead').textContent=focusType?'Neurons of this type':'Connections in this graph';
+    if(focusType){const t=types.get(focusType);
+      write({'Cell type':t.label,'Neurons here':t.members.length,'Policy roles':t.roles.join(', '),
+        'Typical synaptic hop':t.hop<0?'Not reached':t.hop,'Peak mean activation':t.peak.toFixed(3)});
+      t.members.slice(0,14).forEach(k=>{const b=document.createElement('button');b.className='neighbor';
+        b.textContent=data.neurons[k].id;b.onclick=()=>choose(k);$('neighbors').append(b)});
+      if(t.members.length>14){const note=document.createElement('div');note.className='note';
+        note.textContent=`Showing 14 of ${t.members.length}.`;$('neighbors').append(note)}}
+    return}
+  $('neighborHead').textContent='Connections in this graph';
+  write({'Policy role':n.role,'Source super class':n.super_class,'Source class':n.cell_class||'Unannotated',
+    'Source subclass':n.sub_class||'Unannotated','Cell type here':typeOf[selected],
+    'Transmitter prediction':n.nt_type||'Unknown',
+    'Prediction score':typeof n.nt_confidence==='number'?n.nt_confidence.toFixed(2):'Unavailable',
+    'Side / flow':[n.side,n.flow].filter(Boolean).join(' / ')||'Unannotated','Source group':n.group||'Unannotated',
+    'Synaptic hop':hop[selected]<0?'Not reached from inputs':hop[selected],
+    'Incoming / outgoing':`${n.incoming} / ${n.outgoing}`});
+  const links=[...incoming[selected].map(x=>({...x,direction:'IN'})),...outgoing[selected].map(x=>({...x,direction:'OUT'}))]
+    .sort((a,b)=>Math.abs(b.weight)-Math.abs(a.weight));
+  links.slice(0,12).forEach(x=>{const b=document.createElement('button');b.className='neighbor';
+    b.textContent=`${x.direction} ${data.neurons[x.node].id} · ${x.weight.toFixed(4)}`;b.onclick=()=>choose(x.node);$('neighbors').append(b)});
+  const note=document.createElement('div');note.className='note';
+  note.textContent='Top 12 by absolute normalized model weight; signs use the model’s simplified transmitter rule.';$('neighbors').append(note)}
+
+function trace(){const canvas=$('trace'),r=canvas.getBoundingClientRect(),dpr=devicePixelRatio||1;
+  canvas.width=Math.max(1,Math.round(r.width*dpr));canvas.height=85*dpr;
+  const c=canvas.getContext('2d');c.scale(dpr,dpr);c.clearRect(0,0,r.width,85);
+  const values=selected!==null?frames.map(f=>f.activity[selected]):focusType?types.get(focusType).mean:null;
+  if(!values)return;const max=Math.max(...values,.01);
+  c.strokeStyle='#80e8bc';c.lineWidth=1.5;c.beginPath();
+  values.forEach((v,k)=>{const x=k/(values.length-1)*(r.width-12)+6,y=73-v/max*60;k?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();
+  c.strokeStyle='#f4c27a';const x=i/(frames.length-1)*(r.width-12)+6;c.beginPath();c.moveTo(x,5);c.lineTo(x,80);c.stroke();
+  c.fillStyle='#92a5b6';c.font='9px monospace';c.fillText(max.toFixed(3),5,10)}
+
+/* ---- circuit view: cell types by synaptic distance from the injected set ---- */
+const hopColumns=[{key:0,label:'Injected'},{key:1,label:'1 synapse'},{key:2,label:'2 synapses'},{key:3,label:'3+ synapses'},{key:-1,label:'Not reached'}];
+const colKey=h=>h<0?-1:h>=3?3:h;
+let circuitLayout=[],circuitNodeEls=new Map(),circuitLinkEls=[],circuitDrawn=false;
+function buildCircuit(){
+  const width=Math.max(430,$('circuitScroll').clientWidth-24),rowHeight=23;
+  const columns=hopColumns.filter(c=>circuitNodes.some(t=>colKey(t.hop)===c.key));
+  const buckets=columns.map(c=>circuitNodes.filter(t=>colKey(t.hop)===c.key).sort((a,b)=>b.total-a.total));
+  const rows=Math.max(...buckets.map(b=>b.length)),height=44+rows*rowHeight;
+  const span=(width-150)/Math.max(1,columns.length-1),xOf=k=>30+k*span;
+  circuitLayout=[];
+  buckets.forEach((bucket,c)=>bucket.forEach((t,r)=>circuitLayout.push({t,x:xOf(c),y:38+r*rowHeight})));
+  const at=new Map(circuitLayout.map(p=>[p.t.label,p])),maxTotal=Math.max(...circuitNodes.map(t=>t.total),1e-6);
+  const strongest=circuitEdges.length?circuitEdges[0].weight:1;
+  let markup=columns.map((c,k)=>`<text x="${xOf(k)}" y="16" text-anchor="middle" fill="#92a5b6" font-size="10" font-family="ui-monospace,monospace">${esc(c.label)}</text>`).join('');
+  markup+=circuitEdges.map(e=>{const p=at.get(e.source),q=at.get(e.target);if(!p||!q)return '';
+    const mid=(p.x+q.x)/2+(p.x===q.x?26:0);
+    return `<path class="link" data-source="${esc(e.source)}" d="M${p.x.toFixed(1)},${p.y} C${mid.toFixed(1)},${p.y} ${mid.toFixed(1)},${q.y} ${q.x.toFixed(1)},${q.y}" fill="none" stroke="#4d6472" stroke-width="${(.5+2*e.weight/strongest).toFixed(2)}" stroke-opacity=".25"/>`}).join('');
+  markup+=circuitLayout.map(p=>{const t=p.t,radius=3.5+7*Math.sqrt(t.total/maxTotal),tone=roleColors[t.roles[0]]||'#80e8bc';
+    const label=t.label.length>20?t.label.slice(0,19)+'…':t.label;
+    const reach=t.hop<0?'not reached':`median ${t.hop} synaptic hop${t.hop===1?'':'s'}`;
+    return `<g class="node" data-label="${esc(t.label)}" tabindex="0" role="button" transform="translate(${p.x.toFixed(1)},${p.y})">`+
+      `<circle r="${radius.toFixed(1)}" fill="${tone}" fill-opacity=".15" stroke="${tone}" stroke-width="1"/>`+
+      `<text x="${(radius+5).toFixed(1)}" y="3.5" fill="#c6d3dd" font-size="10.5">${esc(label)}</text>`+
+      `<title>${esc(t.label)} — ${t.members.length} neuron${t.members.length>1?'s':''}, ${esc(t.roles.join('/'))}, ${reach} from the injected set. Click to highlight in the neuron cloud.</title></g>`}).join('');
+  const svg=$('circuit');svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.setAttribute('height',height);svg.innerHTML=markup;
+  circuitNodeEls=new Map();circuitLinkEls=[...svg.querySelectorAll('.link')];
+  svg.querySelectorAll('.node').forEach(node=>{const label=node.dataset.label;circuitNodeEls.set(label,node);
+    node.onclick=()=>chooseType(label);
+    node.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();chooseType(label)}}});
+  circuitDrawn=true}
+function drawCircuit(){if(!circuitDrawn)buildCircuit();
+  circuitLayout.forEach(p=>{const node=circuitNodeEls.get(p.t.label);if(!node)return;
+    const value=Math.min(1,p.t.mean[i]/circuitPeak),circle=node.firstChild;
+    circle.setAttribute('fill-opacity',(.1+.8*value).toFixed(3));
+    circle.setAttribute('stroke-width',focusType===p.t.label?'2.4':'1');
+    node.setAttribute('opacity',focusType===null||focusType===p.t.label?'1':'.32')});
+  circuitLinkEls.forEach(link=>{const t=types.get(link.dataset.source);
+    link.setAttribute('stroke-opacity',(.12+.6*Math.min(1,t.mean[i]/circuitPeak)).toFixed(3))});
+  $('visibleCount').textContent=`${circuitNodes.length} cell types · ${circuitEdges.length} strongest type-to-type links`}
+
+/* ---- neuron cloud ---- */
+const roleOrder={input:0,internal:1,output:2},roleIndex=[0,0,0],roleCounts=[0,0,0];
+data.neurons.forEach(n=>roleCounts[roleOrder[n.role]]++);
+const rolePositions=data.neurons.map(n=>{const r=roleOrder[n.role],k=roleIndex[r]++;
+  return [(r-1)*.65,((k%16)/15-.5)*.8,(Math.floor(k/16)/Math.max(1,Math.ceil(roleCounts[r]/16)-1)-.5)*.45]});
+function drawBrain(){const canvas=$('brain'),rect=canvas.getBoundingClientRect(),w=rect.width,h=rect.height,dpr=devicePixelRatio||1;
+  if(!w||!h)return;
+  if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr)}
+  const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
+  const positions=$('layout').value==='anatomy'?data.positions:rolePositions,scale=Math.min(w*.78,h*.88)*zoom;
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  projected=positions.map(([x,y,z],k)=>{const xx=x*cy+z*sy,zz=z*cy-x*sy,yy=y*cp-zz*sp;return {x:w/2+xx*scale,y:h/2+yy*scale,z:y*sp+zz*cp,k}});
+  const shown=new Set(data.neurons.map((n,k)=>visible(n)?k:-1));shown.delete(-1);
+  const neighborhood=new Set(selected===null?[]:[selected,...incoming[selected].map(x=>x.node),...outgoing[selected].map(x=>x.node)]);
+  let drawn=0;
+  if($('edges').checked)data.edges.forEach(([a,b])=>{if(!shown.has(a)||!shown.has(b))return;
+    if(selected!==null&&a!==selected&&b!==selected)return;
+    if(focusType!==null&&!inFocus(a)&&!inFocus(b))return;
+    const p=projected[a],q=projected[b];
+    c.strokeStyle=selected===null?'rgba(88,158,164,.075)':a===selected?'rgba(244,194,122,.48)':'rgba(108,189,255,.48)';
+    c.lineWidth=selected===null?.5:1;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(q.x,q.y);c.stroke();drawn++});
+  const activity=frames[i].activity;
+  [...projected].sort((a,b)=>a.z-b.z).forEach(p=>{if(!shown.has(p.k))return;
+    const v=activity[p.k],isSelected=p.k===selected;
+    c.globalAlpha=selected!==null&&!neighborhood.has(p.k)?.18:focusType!==null&&!inFocus(p.k)?.13:1;
+    c.fillStyle=color(data.neurons[p.k],v);
+    const size=1.6+v*3.4;
+    if(v>.45||isSelected){c.shadowColor=c.fillStyle;c.shadowBlur=isSelected?16:8}
+    c.beginPath();c.arc(p.x,p.y,size+(isSelected?2:0),0,Math.PI*2);c.fill();c.shadowBlur=0;
+    if(isSelected){c.strokeStyle='#fff';c.lineWidth=1;c.beginPath();c.arc(p.x,p.y,size+6,0,Math.PI*2);c.stroke()}});
+  c.globalAlpha=1;
+  $('visibleCount').textContent=`${shown.size} neurons · ${drawn.toLocaleString()} connections`+
+    (selected!==null?' incident to selection → blue in / gold out':focusType!==null?` · highlighting ${focusType}`:'');
+  if($('layout').value==='roles'){c.fillStyle='#92a5b6';c.font='11px system-ui';c.fillText('INPUT / INTERNAL / OUTPUT · conceptual layout',14,h-35)}}
+function draw(){$('view').value==='circuit'?drawCircuit():drawBrain()}
+
+/* ---- per-frame UI ---- */
+function typeList(){const wrap=$('typeList');wrap.replaceChildren();
+  circuitNodes.forEach(t=>{const value=Math.min(1,t.mean[i]/circuitPeak),b=document.createElement('button');
+    b.className='typerow'+(focusType===t.label?' on':'');
+    b.innerHTML=`<span><b>${esc(t.label)}</b><small>${t.members.length} neurons · ${t.hop<0?'not reached':'hop '+t.hop} · ${esc(t.roles.join('/'))}</small>`+
+      `<span class="bar"><i style="width:${(value*100).toFixed(1)}%"></i></span></span><small>${t.mean[i].toFixed(3)}</small>`;
+    b.onclick=()=>chooseType(t.label);wrap.append(b)})}
+function renderFrame(){const f=frames[i];
+  $('overview').src=f.overview;$('detail').src=f.detail;$('scrub').value=i;
+  $('time').textContent=`${f.time.toFixed(1)} / ${frames.at(-1).time.toFixed(1)} s`;
+  $('distance').textContent=(f.distance*1000).toFixed(1);$('lift').textContent=(f.max_lift*100).toFixed(1);$('held').textContent=f.held_seconds.toFixed(1);
+  f.action.forEach((v,k)=>{$('bar'+k).style.left=(v<0?50+v*50:50)+'%';$('bar'+k).style.width=Math.abs(v)*50+'%';$('value'+k).textContent=v.toFixed(3)});
+  obsNames.forEach((_,k)=>$('obs'+k).textContent=f.observation?.[k]?.toFixed(4)??'Unavailable');
+  $('activity').textContent=selected!==null?f.activity[selected].toFixed(4):focusType?types.get(focusType).mean[i].toFixed(4):'—';
+  trace();updateLog();typeList();
+  $('topActive').replaceChildren();
+  f.activity.map((v,k)=>({v,k})).filter(x=>visible(data.neurons[x.k])).sort((a,b)=>b.v-a.v).slice(0,4).forEach(x=>{
+    const b=document.createElement('button');b.textContent=`…${data.neurons[x.k].id.slice(-6)} / ${x.v.toFixed(3)}`;
+    b.title=`${data.neurons[x.k].id} · ${typeOf[x.k]}`;b.onclick=()=>choose(x.k);$('topActive').append(b)})}
+
+/* ---- interaction ---- */
+function pick(x,y){let found=null,distance=100;
+  for(const p of projected){if(!visible(data.neurons[p.k]))continue;const d=(p.x-x)**2+(p.y-y)**2;if(d<distance){distance=d;found=p.k}}return found}
+$('brain').onpointerdown=e=>{drag={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY};$('brain').setPointerCapture(e.pointerId)};
+$('brain').onpointermove=e=>{const r=$('brain').getBoundingClientRect();
+  if(drag){yaw+=(e.clientX-drag.x)*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch+(e.clientY-drag.y)*.008));drag.x=e.clientX;drag.y=e.clientY;$('tooltip').hidden=true;drawBrain()}
+  else{const over=pick(e.clientX-r.left,e.clientY-r.top),tip=$('tooltip');tip.hidden=over===null;
+    if(over!==null){tip.textContent=`${data.neurons[over].id} · ${typeOf[over]} · ${frames[i].activity[over].toFixed(3)}`;
+      tip.style.left=Math.max(0,Math.min(e.clientX-r.left+12,r.width-280))+'px';tip.style.top=Math.max(30,e.clientY-r.top-35)+'px'}}};
+$('brain').onpointerup=e=>{if(drag&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)<4){
+    const r=$('brain').getBoundingClientRect();choose(pick(e.clientX-r.left,e.clientY-r.top))}drag=null};
+$('brain').onpointercancel=()=>drag=null;$('brain').onpointerleave=()=>{$('tooltip').hidden=true};
+$('brain').addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.45,Math.min(4,zoom*Math.exp(-e.deltaY*.001)));drawBrain()},{passive:false});
+$('resetCamera').onclick=()=>{yaw=.2;pitch=-.35;zoom=1;draw()};
+$('expand').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else $('brainPanel').requestFullscreen().catch(()=>{})};
+function syncView(){const circuit=$('view').value==='circuit';
+  $('brain').hidden=circuit;$('circuitScroll').hidden=!circuit;
+  $('resetCamera').disabled=circuit;$('layout').disabled=circuit;$('edges').disabled=circuit;
+  $('stageHint').textContent=circuit?'Click a cell type to follow it into the neuron cloud':'Drag to orbit · Scroll to zoom · Click to inspect';
+  $('layoutNote').textContent=circuit?'Columns are synaptic hops from the injected neurons · order within a column is episode activation'
+    :$('layout').value==='anatomy'?'Measured annotation points · positions normalized for display':'Engineered policy roles · not anatomical positions';
+  circuitDrawn=false;draw()}
+$('view').onchange=syncView;
+$('search').oninput=()=>{const q=$('search').value.toLowerCase().trim();$('matches').replaceChildren();if(!q)return;
+  const matches=data.neurons.map((n,k)=>({n,k})).filter(({n,k})=>[n.id,n.cell_class,n.sub_class,n.super_class,n.nt_type,n.role,n.group,typeOf[k]].join(' ').toLowerCase().includes(q));
+  matches.slice(0,12).forEach(({n,k})=>{const b=document.createElement('button');b.textContent=`${n.id} · ${n.cell_class||n.super_class}`;b.onclick=()=>choose(k);$('matches').append(b)});
+  if(!matches.length)$('matches').textContent='No matching neuron in this subset.'};
+$('clear').onclick=()=>{focusType=null;choose(null)};
+$('group').onchange=()=>{if(selected!==null&&!visible(data.neurons[selected]))selected=null;details();renderFrame();draw()};
+$('color').onchange=()=>{legend();draw()};
+$('layout').onchange=syncView;
+$('edges').onchange=draw;
+function playState(){$('play').textContent=playing?'Pause':'Play'}
+$('play').onclick=()=>{if(!playing&&i===frames.length-1){i=0;clock=frames[0].time}playing=!playing;last=performance.now();playState();renderFrame();draw()};
+$('restart').onclick=()=>{i=0;clock=frames[0].time;playing=true;last=performance.now();playState();renderFrame();draw()};
+$('scrub').oninput=()=>{i=Number($('scrub').value);clock=frames[i].time;playing=false;playState();renderFrame();draw()};
+$('download').onclick=()=>{const blob=new Blob([JSON.stringify({graph_sha256:data.report.graph_sha256,neurons:data.neurons,
+    synaptic_hop_from_inputs:[...hop],cell_type:typeOf,edges:data.edges,normalized_weights:data.weights},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='flybot-neurons.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+
+/* ---- guided tour ---- */
+const tourSteps=[
+ {target:'#robotPanel',title:'A robot arm, wired through a fly',text:`Two synchronized camera views of one recorded episode. The arm reaches for a 48 mm cube, lifts it, carries it 17 cm and lets go. Nothing is scripted at playback: the ${outputCount} output neurons chose every move.`},
+ {target:'#brainPanel',title:'Every dot is a real neuron',text:`${N} neurons from the FlyWire connectome, drawn at their measured annotation points. Brightness is the activation the saved policy actually computed at this instant. Drag to orbit, scroll to zoom, click any dot to inspect it.`},
+ {target:'.toolbar',title:'Follow the signal, hop by hop',text:'Switch View to Circuit to see the same activity as cell types, arranged by how many synapses separate them from the neurons the observation is injected into. Colour the cloud by policy role, brain region, transmitter or activity.'},
+ {target:'#explorePanel',title:'Inspect anything',text:'Search a FlyWire root ID, read its transmitter prediction and classification, walk its strongest connections, and watch its activity trace. Science holds what was actually measured, including what it does not show.'},
+ {target:'#playbackPanel',title:'Scrub the episode',text:'Robot pose, camera frames, the 20 observation values, the 4 policy outputs and every neuron activation all come from the same recorded timestamp. Move the slider and the whole room moves with it.'}];
+let tourAt=0;
+function showTour(){const step=tourSteps[tourAt],target=document.querySelector(step.target);
+  $('tourTitle').textContent=step.title;$('tourText').textContent=step.text;
+  $('tourStep').textContent=`${tourAt+1} / ${tourSteps.length}`;$('tourBack').disabled=tourAt===0;
+  $('tourNext').textContent=tourAt===tourSteps.length-1?'Done':'Next';
+  const spot=$('tourSpot'),card=$('tourCard');
+  if(target){target.scrollIntoView({block:'nearest',behavior:'smooth'});
+    const box=target.getBoundingClientRect();
+    Object.assign(spot.style,{left:box.left-6+'px',top:box.top-6+'px',width:box.width+12+'px',height:box.height+12+'px',opacity:1});
+    const below=box.bottom+16+230<innerHeight;
+    card.style.left=Math.min(Math.max(12,box.left),Math.max(12,innerWidth-350))+'px';
+    card.style.top=(below?box.bottom+16:Math.max(12,box.top-240))+'px'}
+  else{spot.style.opacity=0;card.style.left='calc(50% - 165px)';card.style.top='30%'}}
+function endTour(){$('tour').hidden=true;try{localStorage.setItem('flybot.tour','done')}catch(e){}}
+$('tourBtn').onclick=()=>{tourAt=0;$('tour').hidden=false;showTour()};
+$('tourNext').onclick=()=>{tourAt+1<tourSteps.length?(tourAt++,showTour()):endTour()};
+$('tourBack').onclick=()=>{if(tourAt){tourAt--;showTour()}};
+$('tourSkip').onclick=endTour;$('tourVeil').onclick=endTour;
+addEventListener('keydown',e=>{if($('tour').hidden)return;
+  if(e.key==='Escape')endTour();else if(e.key==='ArrowRight')$('tourNext').click();else if(e.key==='ArrowLeft')$('tourBack').click()});
+
+/* ---- clock ---- */
+function tick(now){if(playing){clock+=(now-last)/1000*Number($('rate').value);const before=i;
+  while(i+1<frames.length&&frames[i+1].time<=clock)i++;
+  if(i===frames.length-1){playing=false;playState()}
+  if(i!==before){renderFrame();draw()}}
+  last=now;requestAnimationFrame(tick)}
+new ResizeObserver(()=>{circuitDrawn=false;draw();trace()}).observe($('stage'));
+legend();choose(data.neurons.findIndex(n=>n.role==='output'));renderFrame();draw();requestAnimationFrame(tick);
+let seen=false;try{seen=localStorage.getItem('flybot.tour')==='done'}catch(e){seen=false}
+if(!seen)setTimeout(()=>{$('tour').hidden=false;showTour()},700);
+</script></body></html>

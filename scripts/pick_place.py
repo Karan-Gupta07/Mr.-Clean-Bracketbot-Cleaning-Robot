@@ -84,6 +84,8 @@ def main():
     parser.add_argument("--record", action="store_true")
     parser.add_argument("--open", action="store_true", help="Open recorded HTML after completion")
     parser.add_argument("--view", action="store_true", help="Run a live MuJoCo viewer")
+    parser.add_argument("--gripper", choices=["padded", "urdf", "parallel"], default="padded",
+                        help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
     parser.add_argument("--output", type=Path, default=Path("out/pick_place"))
     args = parser.parse_args()
     if args.episodes < 1:
@@ -93,10 +95,10 @@ def main():
     if args.record and args.view:
         parser.error("Choose either --record or --view")
     args.output.mkdir(parents=True, exist_ok=True)
-    model = make_model(args.item)
+    model = make_model(args.item, args.gripper)
     reports = []
     for seed in range(args.seed, args.seed + args.episodes):
-        task = PickPlace(seed=seed, model=model, item_name=args.item)
+        task = PickPlace(seed=seed, model=model, item_name=args.item, gripper=args.gripper)
         if args.record:
             report = record(task, args.output if args.episodes == 1 else args.output / str(seed))
         elif args.view:

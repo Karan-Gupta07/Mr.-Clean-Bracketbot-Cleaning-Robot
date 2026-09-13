@@ -10,13 +10,28 @@ import math
 import mujoco
 import numpy as np
 
-from .arm import Arm, ArmIK, GRIPPER, down_quat
+from .arm import Arm, ArmIK, GRIPPER, OPEN, Gripper, down_quat
+from .gripper_pads import add_pads, PaddedGripper
 from .parallel_gripper import replace_grippers, ParallelGripper
 from .robot import ROOM
 from .room import TABLES
 
+# "padded" is the supplied hooked gripper with a contact pad on each blade: the
+# CAD meshes are untouched and still the visuals, so the hand looks the same.
+# "urdf" is that same gripper with nothing added, which does not grasp.
+# "parallel" is the sliding-jaw substitution, kept only so the recorded RL
+# results in docs/arm_rl.md stay reproducible; it is not the robot's hardware.
+GRIPPERS = ("padded", "urdf", "parallel")
 
-def make_model(item_name="cube_m"):
+
+def hand_for(model, side, gripper="padded"):
+    """The jaw-geometry model matching however this model's gripper was built."""
+    return {"parallel": ParallelGripper, "padded": PaddedGripper}.get(gripper, Gripper)(model, side)
+
+
+def make_model(item_name="cube_m", gripper="padded"):
+    if gripper not in GRIPPERS:
+        raise ValueError(f"gripper must be one of {GRIPPERS}")
     table = TABLES[1]
     spec = mujoco.MjSpec.from_file(str(ROOM))
     for key in list(spec.keys):
@@ -31,7 +46,10 @@ def make_model(item_name="cube_m"):
     for item in table.items:
         if item.name != item_name:
             spec.delete(spec.body(item.name))
-    replace_grippers(spec)
+    if gripper == "parallel":
+        replace_grippers(spec)
+    elif gripper == "padded":
+        add_pads(spec)
     return spec.compile()
 
 
@@ -44,21 +62,28 @@ class Phase:
 
 
 class PickPlace:
-    def __init__(self, seed=0, model=None, grasp_offset=(0, 0, 0), grip_force=8.0, item_name="cube_m"):
-        self.model = make_model(item_name) if model is None else model
+    def __init__(self, seed=0, model=None, grasp_offset=(0, 0, 0), grip_force=None,
+                 item_name="cube_m", gripper="padded"):
+        self.gripper = gripper
+        self.model = make_model(item_name, gripper) if model is None else model
         self.data = mujoco.MjData(self.model)
         self.seed = seed
         self.grasp_offset = np.asarray(grasp_offset, dtype=float)
-        for name in GRIPPER.values():
-            act = self.model.actuator(name).id
-            self.model.actuator_forcerange[act] = [-grip_force, grip_force]
-            self.model.actuator_gainprm[act, 0] = 800.0
-            self.model.actuator_biasprm[act, 1:3] = [-800.0, -8.0]
-        # Couple the sliding jaws firmly enough to maintain a symmetric aperture.
-        for side in ("left", "right"):
-            equality = self.model.equality(f"{side}_parallel_mimic").id
-            self.model.eq_solref[equality] = [0.004, 1.0]
-            self.model.eq_solimp[equality] = [0.99, 0.999, 0.001, 0.5, 2]
+        if grip_force is not None:
+            # An explicit servo limit from the caller; None keeps the URDF's own.
+            for name in GRIPPER.values():
+                self.model.actuator_forcerange[self.model.actuator(name).id] = [-grip_force, grip_force]
+        if gripper == "parallel":
+            # Drive and couple the substitute slides; the URDF gripper keeps its
+            # exported servo gains and its own <mimic> equality untouched.
+            for name in GRIPPER.values():
+                act = self.model.actuator(name).id
+                self.model.actuator_gainprm[act, 0] = 800.0
+                self.model.actuator_biasprm[act, 1:3] = [-800.0, -8.0]
+            for side in ("left", "right"):
+                equality = self.model.equality(f"{side}_parallel_mimic").id
+                self.model.eq_solref[equality] = [0.004, 1.0]
+                self.model.eq_solimp[equality] = [0.99, 0.999, 0.001, 0.5, 2]
         self.rng = np.random.default_rng(seed)
         self.object_name = item_name
         self.item = next(item for item in TABLES[1].items if item.name == item_name)
@@ -89,7 +114,7 @@ class PickPlace:
         best = None
         initial = self.data.qpos.copy()
         for side in ("right", "left"):
-            hand = ParallelGripper(self.model, side)
+            hand = hand_for(self.model, side, self.gripper)
             opening = hand.opening_for(self.item.width, clearance=0.035)
             for yaw in (0, math.pi / 2):
                 quat = down_quat(TABLES[1].dock[2] + yaw)
@@ -121,14 +146,19 @@ class PickPlace:
             raise RuntimeError("No continuous IK pick/place path")
         self.ik_error, self.side, self.opening, self.quat, chain = best
         self.arm = Arm(self.model, self.data, self.side)
-        self.hand = ParallelGripper(self.model, self.side)
+        self.hand = hand_for(self.model, self.side, self.gripper)
         a, b, c, d, e, f = [x.qpos for x in chain]
+        # Parallel jaws stall on the object when commanded shut. The supplied
+        # blades are a pincer and would scissor past it, so grip to its width.
+        shut = (self.hand.grip_command(self.item.width)
+                if hasattr(self.hand, "grip_command") else 0.0)
+        self.shut = shut
         return [Phase("approach", a, self.opening, 3.5),
                 Phase("descend", b, self.opening, 2.0),
-                Phase("grasp", b, 0.0, 1.5),
-                Phase("lift", c, 0.0, 2.5),
-                Phase("transfer", d, 0.0, 2.5),
-                Phase("lower", e, 0.0, 2.0),
+                Phase("grasp", b, shut, 1.5),
+                Phase("lift", c, shut, 2.5),
+                Phase("transfer", d, shut, 2.5),
+                Phase("lower", e, shut, 2.0),
                 Phase("release", e, self.opening, 1.5),
                 Phase("retreat", f, self.opening, 2.0),
                 Phase("verify", f, self.opening, 1.0)]
@@ -193,7 +223,10 @@ class PickPlace:
         return {"success": bool(success), "seed": self.seed, "phase": self.phase,
                 "time": float(self.data.time), "controller": "scripted IK and joint servos",
                 "base": "fixed at docking pose", "side": self.side,
-                "gripper": "parallel-jaw simulation replacement", "object_width": self.item.width,
+                "gripper": {"padded": "supplied hooked gripper with contact pads",
+                            "urdf": "supplied hooked gripper, unmodified",
+                            "parallel": "parallel-jaw simulation replacement"}[self.gripper],
+                "object_width": self.item.width,
                 "object": self.object_name, "start": self.start.tolist(), "goal": self.goal.tolist(),
                 "position": pos.tolist(), "distance": distance, "max_lift": self.max_lift,
                 "two_finger_contact_during_lift": self.lift_contact, "released": released,

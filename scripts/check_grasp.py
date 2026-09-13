@@ -33,6 +33,9 @@ from rlbot import BalanceController, Gains                        # noqa: E402
 from rlbot.arm import GRIPPER, SHUT, Arm, ArmIK, Gripper, down_quat  # noqa: E402
 from rlbot.robot import ROOM, State                               # noqa: E402
 from rlbot.room import GRASP_YAWS, TABLES, grasp_pose             # noqa: E402
+from rlbot.gripper_pads import add_pads                           # noqa: E402
+
+PADS = True   # contact pads on the supplied blades; --bare turns them off
 
 APPROACH = 0.12        # m above the grasp point to start from
 LIFT = 0.15            # m to raise the object
@@ -68,6 +71,8 @@ def welded_at(x, y, yaw):
         spec.delete(joint)
     root.pos = [x, y, 0.0]
     root.quat = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
+    if PADS:
+        add_pads(spec)
     return spec.compile()
 
 
@@ -273,9 +278,13 @@ def main() -> None:
     ap.add_argument("--table", default="all",
                     choices=["all"] + [t.name.split("_")[1] for t in TABLES])
     ap.add_argument("--item", help="just this object, by name")
+    ap.add_argument("--bare", action="store_true",
+                    help="Test the supplied blades with no contact pads")
     ap.add_argument("--balance", action="store_true",
                     help="stand on the wheels with the PD balancer running")
     args = ap.parse_args()
+    global PADS
+    PADS = not args.bare
 
     tables = [t for t in TABLES
               if args.table in ("all", t.name.split("_")[1])]

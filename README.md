@@ -20,7 +20,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
 | 2. SLAM navigation | Started. There is a room to map, with walls, a pillar and a divider, and a lidar mount on the robot. No SLAM code yet. |
-| 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test. Nothing lifts reliably yet - the gripper model is the blocker, see below. No VLA model yet. |
+| 3. VLA pick and place | Started. The arms have inverse kinematics and a grasp test, and the supplied gripper now lifts and places cubes once its blades are given contact pads. No VLA model yet. |
 
 ### What works today
 
@@ -29,7 +29,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 - **A room to work in.** A 6 x 4.5 m room with four walls, a pillar and a divider to map, and three tables: one with a ball and a crate, one with four cubes and a crate, one with a bowl, a mug and a crate. It is written twice - `models/room.xml` is the environment on its own, with no robot in it at all, and `models/room_scene.xml` is the same room with the robot added.
 - **A room the robot actually fits in.** `scripts/build_room.py` measures the robot's own footprint - 42 cm across, 1.7 m tall, read off its collision boxes - and checks the room against it before writing anything. 16.2 of the 27 m2 of floor is standable, all of it reachable from the middle, and each table's docking pose leaves 14.6 cm of daylight. It prints the map and refuses to write a room that fails.
 - **Arm control.** Inverse kinematics (IK) moves each 7-joint arm to a target pose. The arms and mast now have collision shapes, so they cannot pass through each other.
-- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along. Nothing currently survives the lift - see "What the room is built around".
+- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along. The supplied blades need contact pads to hold anything; `--bare` runs them without and lifts nothing.
 - **A small toy balancer.** `models/balancer.xml` is a simple two-wheeled robot. It loads in a second and is a quick way to catch controller bugs without loading the full robot.
 
 ## Setup
@@ -50,14 +50,23 @@ on a fresh checkout. The linked guide includes the tested Windows commands.
 
 ### Pick-and-place simulation variant
 
-The arm now has a contact-based cube pick-and-place demo with a **parallel-jaw
-gripper replacement and a fixed base**. It passed 25 tested starts across four
-cube sizes. This baseline uses scripted IK and servos. The supplied hooked gripper remains unresolved.
+The arm now has a contact-based cube pick-and-place demo with a **fixed base**.
+It passes 20 tested starts across four cube sizes on the supplied gripper with
+contact pads, and 25 on the older parallel-jaw replacement. This baseline uses
+scripted IK and servos.
 See [commands, results, and technical details](docs/pick_place.md).
 
 ```powershell
 .venv\Scripts\python.exe scripts/pick_place.py --record --open
 ```
+
+Models now use the **supplied hooked gripper with a contact pad on each blade**.
+The CAD blades are untouched and are still what you see; the pads are what the
+simulator collides, because MuJoCo collides each blade as its convex hull - 3.2x
+the mesh's real volume - which fills the hook in solid and lifts nothing. With
+pads the scripted baseline passes 20/20 across four cube sizes; with bare blades
+it passes 0/20. `--gripper urdf` runs the bare blades and `--gripper parallel`
+the older sliding-jaw replacement.
 
 A separate [continuous arm RL experiment](docs/arm_rl.md) trains a new FlyWire
 graph policy with demonstrations and PPO. Its four outputs select XYZ motion and
@@ -65,10 +74,16 @@ gripper opening; inference has no scripted phase controller. It uses the fixed
 base and parallel jaws with simulated pad friction increased to 3.0.
 
 ```powershell
-.venv\Scripts\python.exe scripts/train_arm.py --steps 0
-.venv\Scripts\python.exe scripts/train_arm.py --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750
-.venv\Scripts\python.exe scripts/run_arm.py --record --open
+.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --steps 0
+.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750
+.venv\Scripts\python.exe scripts/run_arm.py --gripper parallel --record --open
 ```
+
+The last command writes a standalone replay to `out/arm_rl_demo/index.html`: the
+robot views beside an orbitable cloud of the 512 mapped neurons, a circuit view
+that lays their cell types out by synaptic distance from the policy's inputs, and
+an Explore panel for searching any FlyWire root ID, reading its transmitter
+prediction and connections, and following its activity through the episode.
 
 The saved arm policy passed 20/20 tested starts. On a paired set of ten starts,
 the pre-PPO checkpoint passed 2/10 and PPO plus demonstration rehearsal passed

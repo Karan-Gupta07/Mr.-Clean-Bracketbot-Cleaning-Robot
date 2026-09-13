@@ -4,13 +4,20 @@ import gymnasium as gym
 from gymnasium import spaces
 import mujoco
 import numpy as np
-from .manipulation import make_model
-from .arm import Arm, ArmIK, down_quat, GRIPPER, FOLLOWER
+from .manipulation import make_model, hand_for
+from .arm import Arm, ArmIK, down_quat, GRIPPER, FOLLOWER, OPEN
+
+# Fully-open jaw command, and the factor that normalizes it for the observation.
+# "urdf" is the supplied gripper as exported. "parallel" reproduces the sliding-jaw
+# substitution exactly, including its 3.0 pad friction, so the checkpoint trained
+# against it still runs; those numbers are prototype values, not measured hardware.
+JAWS = {"padded": (OPEN, 1.0 / OPEN), "urdf": (OPEN, 1.0 / OPEN), "parallel": (.045, 20.0)}
 
 
 class ArmEnv(gym.Env):
-    def __init__(self):
-        self.model = make_model()
+    def __init__(self, gripper='padded'):
+        self.gripper = gripper
+        self.model = make_model(gripper=gripper)
         self.data = mujoco.MjData(self.model)
         self.scratch = mujoco.MjData(self.model)
         self.arm = Arm(self.model, self.data, 'right')
@@ -19,15 +26,46 @@ class ArmEnv(gym.Env):
         self.objq = self.model.jnt_qposadr[self.model.body_jntadr[self.object_id]]
         self.objgeom = self.model.body_geomadr[self.object_id]
         self.fingers = {self.model.body(f + '_finger__' + f + '_finger').id for f in ('left', 'right')}
-        # Prototype high-friction pads; this coefficient is not measured hardware data.
-        for geom in range(self.model.ngeom):
-            if self.model.geom_bodyid[geom] in self.fingers:
-                self.model.geom_friction[geom, 0] = 3.0
+        self.jaw_open, self.jaw_scale = JAWS[gripper]
+        if gripper == 'parallel':
+            for geom in range(self.model.ngeom):
+                if self.model.geom_bodyid[geom] in self.fingers:
+                    self.model.geom_friction[geom, 0] = 3.0
+            for side in ('left', 'right'):
+                eq = self.model.equality(side + '_parallel_mimic').id
+                self.model.eq_solref[eq] = [.004, 1]
+                self.model.eq_solimp[eq] = [.99, .999, .001, .5, 2]
         self.gripq = self.model.jnt_qposadr[self.model.joint(GRIPPER['right']).id]
-        for side in ('left', 'right'):
-            eq = self.model.equality(side + '_parallel_mimic').id
-            self.model.eq_solref[eq] = [.004, 1]
-            self.model.eq_solimp[eq] = [.99, .999, .001, .5, 2]
+        # What "closed on the cube" is for this gripper, as a normalized action.
+        # Parallel jaws stall when commanded shut; the supplied blades are a
+        # pincer and would scissor past the cube, so they stop at its width.
+        self.cube_width = 0.048
+        self.hand = hand_for(self.model, 'right', gripper)
+        closed = (self.hand.grip_command(self.cube_width)
+                  if hasattr(self.hand, 'grip_command') else 0.0)
+        if hasattr(self.hand, 'grip_command'):
+            # Cap the command at the approach opening rather than wide open. The
+            # supplied blades are a pincer: past about 0.6 their midpoint runs away
+            # from the wrist (35 mm at full open) and the arm would have to drive
+            # the hand through the tabletop to put the jaws on a cube.
+            self.jaw_open = self.hand.opening_for(self.cube_width, clearance=0.035)
+            self.jaw_scale = 1.0 / self.jaw_open
+        self.closed_action = float(np.clip(2 * closed / self.jaw_open - 1, -1, 1))
+        self.released_qpos = 0.82 * self.jaw_open
+        # Fraction of the full 80 mm/s the demonstration teacher may use per phase.
+        # The supplied blades grip at an angle and flick the cube out sideways if the
+        # carry starts at full rate; the parallel jaws clamp square and do not care.
+        self.carry_speed = ((1., 1., 1., .2, 1., 1., 1.) if gripper != 'parallel'
+                            else (1., 1., 1., 1., 1., 1., 1.))
+        # Jaw centre minus grip site, in world axes, fixed at the gripping command -
+        # the pose the cube has to be square in. Over the working range the offset
+        # barely moves (23.0 to 21.3 mm across the jaw), so one value serves, and
+        # chasing it live would walk the arm while it grips. Zero for the parallel
+        # substitute, which leaves that path untouched.
+        shift = np.zeros(3)
+        mujoco.mju_rotVecQuat(shift, np.asarray(self.hand.jaw_offset(closed), dtype=float),
+                              self.quat)
+        self.jaw_shift = shift
         self.action_space = spaces.Box(-1., 1., (4,), np.float32)
         self.observation_space = spaces.Box(-np.inf, np.inf, (20,), np.float32)
         self.horizon = 400
@@ -49,14 +87,16 @@ class ArmEnv(gym.Env):
         self.data.qpos[self.objq:self.objq+3] = self.start
         for side in ('right', 'left'):
             self.data.qpos[ArmIK(self.model, side).qadr[3]] = math.pi / 2
+        # open the jaws first: the jaw offset this pose is solved for depends on them
+        for name in (GRIPPER['right'], FOLLOWER['right']):
+            self.data.qpos[self.model.jnt_qposadr[self.model.joint(name).id]] = self.jaw_open
+        mujoco.mj_forward(self.model, self.data)
         self.target = self.start + [0, 0, .152]
         self.scratch.qpos[:] = self.data.qpos
-        solution = self.arm.ik.solve(self.scratch, self.target, self.quat)
+        solution = self.arm.ik.solve(self.scratch, self.site_for_jaws(self.target), self.quat)
         if not solution.ok:
             raise RuntimeError('Reset pose unreachable')
         self.data.qpos[self.arm.ik.qadr] = solution.qpos
-        for name in (GRIPPER['right'], FOLLOWER['right']):
-            self.data.qpos[self.model.jnt_qposadr[self.model.joint(name).id]] = .045
         for act in range(self.model.nu):
             j = self.model.actuator_trnid[act, 0]
             self.data.ctrl[act] = self.data.qpos[self.model.jnt_qposadr[j]]
@@ -71,29 +111,40 @@ class ArmEnv(gym.Env):
     def cube(self):
         return self.data.geom_xpos[self.objgeom].copy()
 
+    @property
+    def grip_point(self):
+        """Where the jaws actually close, which is what has to reach the cube."""
+        return self.arm.grip_pos + self.jaw_shift
+
+    def site_for_jaws(self, jaw_target):
+        """The site command that puts the jaws on `jaw_target`."""
+        return np.asarray(jaw_target, dtype=float) - self.jaw_shift
+
     def _obs(self):
         velocity = np.zeros(6)
         mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY, self.object_id, velocity, 0)
-        return np.concatenate([(self.arm.grip_pos - self.start)*10,
-            (self.cube-self.arm.grip_pos)*10, (self.goal-self.cube)*10,
-            velocity[3:]*10, [self.data.qpos[self.gripq]*20, self.contacts()/2],
-            (self.target-self.arm.grip_pos)*10, self.previous[:3]]).astype(np.float32)
+        grip = self.grip_point
+        return np.concatenate([(grip - self.start)*10,
+            (self.cube-grip)*10, (self.goal-self.cube)*10,
+            velocity[3:]*10, [self.data.qpos[self.gripq]*self.jaw_scale, self.contacts()/2],
+            (self.target-grip)*10, self.previous[:3]]).astype(np.float32)
 
     def _potential(self):
-        reach = np.linalg.norm(self.cube + [0,0,.008] - self.arm.grip_pos)
+        reach = np.linalg.norm(self.cube + [0,0,.008] - self.grip_point)
         lift = np.clip((self.cube[2]-.724)/.12, 0, 1)
         distance = np.linalg.norm(self.cube[:2]-self.goal[:2])
         return -3*reach + 2*lift + 4*(.17-distance)
 
     def step(self, action):
         action = np.clip(np.asarray(action), -1, 1)
+        # the box bounds where the jaws may go, so it means the same for any gripper
         self.target = np.clip(self.target + action[:3]*.004,
                               [-.42,-1.79,.731], [-.09,-1.63,.94])
         self.scratch.qpos[:] = self.data.qpos
-        solution = self.arm.ik.solve(self.scratch, self.target, self.quat,
+        solution = self.arm.ik.solve(self.scratch, self.site_for_jaws(self.target), self.quat,
                                     seed=self.data.ctrl[self.arm.acts], iters=12, restarts=1)
         self.arm.hold(solution.qpos)
-        self.arm.grip((action[3]+1)*.0225)
+        self.arm.grip((action[3]+1)/2*self.jaw_open)
         for _ in range(25):
             mujoco.mj_step(self.model, self.data)
             lift = float(self.cube[2]-.724)
@@ -106,7 +157,7 @@ class ArmEnv(gym.Env):
         mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY, self.object_id, velocity, 0)
         distance = float(np.linalg.norm(self.cube[:2]-self.goal[:2]))
         stable = (distance < .025 and abs(self.cube[2]-.724)<.008 and self.contacts()==0
-                  and np.linalg.norm(velocity[3:])<.025 and self.arm.grip_pos[2]>.80)
+                  and np.linalg.norm(velocity[3:])<.025 and self.grip_point[2]>.80)
         self.stable = self.stable+.05 if stable else 0.
         success = self.stable>=.5 and self.max_lift>.08 and self.held>.5
         potential = self._potential()

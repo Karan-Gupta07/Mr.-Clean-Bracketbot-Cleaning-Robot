@@ -17,6 +17,37 @@ from rlbot.arm_env import ArmEnv
 from pick_place import camera, jpeg
 
 
+def graph_payload(graph_path):
+    """Keep source IDs as strings: FlyWire IDs exceed JavaScript integer precision."""
+    import pandas as pd
+    graph_path=Path(graph_path)
+    with np.load(graph_path) as graph:
+        ids=graph['ids'].copy()
+        positions=graph['positions'].copy()
+        normalized=(positions-(positions.min(0)+positions.max(0))/2)/max(float(np.ptp(positions,axis=0).max()),1)
+        pre,post=graph['pre'],graph['post']
+        edges=np.stack([pre,post],axis=1).tolist()
+        weights=graph['weight'].tolist()
+        inputs,outputs=set(graph['inputs'].tolist()),set(graph['outputs'].tolist())
+        metadata={}
+        for filename in ('neurons.csv.gz','classification.csv.gz'):
+            path=graph_path.parent/filename
+            if path.exists():
+                table=pd.read_csv(path).fillna('')
+                for row in table[table.root_id.isin(ids)].to_dict('records'):
+                    metadata.setdefault(str(row.pop('root_id')),{}).update(row)
+        neurons=[]
+        for index,root_id in enumerate(ids):
+            row=metadata.get(str(root_id),{})
+            neurons.append(dict(id=str(root_id),role='input' if index in inputs else 'output' if index in outputs else 'internal',
+                super_class=str(row.get('super_class',graph['super_class'][index])),
+                cell_class=str(row.get('class','')),sub_class=str(row.get('sub_class','')),
+                nt_type=str(row.get('nt_type',graph['nt_type'][index])),nt_confidence=row.get('nt_type_score',None),
+                side=str(row.get('side','')),flow=str(row.get('flow','')),group=str(row.get('group','')),
+                position=positions[index].tolist(),incoming=int(np.sum(post==index)),outgoing=int(np.sum(pre==index))))
+    return dict(positions=normalized.tolist(),edges=edges,weights=weights,neurons=neurons)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--checkpoint',default='out/rl/arm_release/policy.zip')
@@ -25,11 +56,13 @@ def main():
     p.add_argument('--view',action='store_true')
     p.add_argument('--record',action='store_true')
     p.add_argument('--open',action='store_true')
+    p.add_argument('--gripper',choices=['padded','urdf','parallel'],default='padded',
+        help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
     p.add_argument('--output',type=Path,default=Path('out/arm_rl_demo'))
     a=p.parse_args()
     torch.set_num_threads(2)
     policy=PPO.load(a.checkpoint,device='cpu')
-    env=ArmEnv()
+    env=ArmEnv(gripper=a.gripper)
     frames=[]; gifs=[]; reports=[]
     options=mujoco.MjvOption(); options.geomgroup[3]=0
     overview=camera([-.26,-1.60,1.0],1.7,-60,-25)
@@ -48,6 +81,7 @@ def main():
             obs,_=env.reset(seed=seed)
             started=time.monotonic()
             for step in range(env.horizon):
+                policy_observation=obs.copy()
                 action,_=policy.predict(obs,deterministic=True)
                 obs,reward,terminated,truncated,info=env.step(action)
                 if renderer and (step%2==0 or terminated or truncated):
@@ -65,7 +99,8 @@ def main():
                         images.append(renderer.render().copy())
                     activity=policy.policy.features_extractor.last_activity[0].cpu().tolist()
                     frames.append(dict(**info,time=float(env.data.time),overview=jpeg(images[0]),
-                        detail=jpeg(images[1]),action=action.tolist(),activity=activity))
+                        detail=jpeg(images[1]),action=action.tolist(),activity=activity,
+                        observation=policy_observation.tolist(),reward=float(reward),seed=seed))
                     gifs.append(Image.fromarray(images[0]))
                 if viewer:
                     if not viewer.is_running(): break
@@ -80,18 +115,17 @@ def main():
     a.output.mkdir(parents=True,exist_ok=True)
     report=dict(checkpoint=a.checkpoint,checkpoint_sha256=hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
                 graph_sha256=policy.policy.features_extractor.graph_sha256,
-                controller='learned continuous Cartesian and gripper policy',pad_sliding_friction=3.0,
+                controller='learned continuous Cartesian and gripper policy',gripper=a.gripper,
+                pad_sliding_friction=3.0 if a.gripper=='parallel' else None,
                 successes=sum(x['success'] for x in reports),
                 episodes=len(reports),runs=reports)
     (a.output/'report.json').write_text(json.dumps(report,indent=2))
     if a.record:
-        with np.load(policy.policy.features_extractor.graph_path) as graph:
-            positions=graph['positions'].copy()
-            positions=(positions-(positions.min(0)+positions.max(0))/2)/max(float(np.ptp(positions,axis=0).max()),1)
-            edges=np.stack([graph['pre'][::4],graph['post'][::4]],axis=1).tolist()
-        payload=json.dumps(dict(report=report,frames=frames,positions=positions.tolist(),edges=edges),separators=(',',':'))
+        payload=json.dumps(dict(report=report,frames=frames,**graph_payload(policy.policy.features_extractor.graph_path)),separators=(',',':'),allow_nan=False)
+        (a.output/'episode.json').write_text(payload,encoding='utf-8')
         template=(ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
-        (a.output/'index.html').write_text(template.replace('__ARM_DATA__',payload),encoding='utf-8')
+        # Escape </ so no string in the payload can close the inlined <script> block.
+        (a.output/'index.html').write_text(template.replace('__ARM_DATA__',payload.replace('</','<\\/')),encoding='utf-8')
         gifs[0].save(a.output/'demo.gif',save_all=True,append_images=gifs[1:],duration=100,loop=0)
         gifs[-1].save(a.output/'preview.png')
         if a.open: webbrowser.open((a.output/'index.html').resolve().as_uri())
