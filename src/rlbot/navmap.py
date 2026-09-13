@@ -58,6 +58,96 @@ def table_tops():
             for t in TABLES]
 
 
+def _read_yaml(path) -> dict:
+    """The handful of `key: value` lines a map_server YAML has.
+
+    ponytail: flat keys plus one list is all map_saver ever writes; reach for
+    a real YAML parser the day it does not parse.
+    """
+    meta = {}
+    for line in Path(path).read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if ':' not in line:
+            raise ValueError(f'{path}: expected key: value in map metadata')
+        key, value = (part.strip() for part in line.split(':', 1))
+        if value.startswith(('\'', '"')):
+            end = value.find(value[0], 1)
+            if end < 0 or (value[end + 1:].strip() and not value[end + 1:].lstrip().startswith('#')):
+                raise ValueError(f'{path}: invalid quoted {key}')
+            meta[key] = value[1:end]
+        else:
+            value = value.split('#', 1)[0].strip()
+            if value.startswith('['):
+                if not value.endswith(']'):
+                    raise ValueError(f'{path}: invalid {key} list')
+                try:
+                    meta[key] = [float(v) for v in value[1:-1].split(',')]
+                except ValueError as exc:
+                    raise ValueError(f'{path}: invalid {key} list') from exc
+            else:
+                meta[key] = value
+    return meta
+
+
+def _read_pgm(path) -> np.ndarray:
+    """A binary (P5) or ASCII (P2) PGM as a float array scaled to 0..255."""
+    raw = Path(path).read_bytes()
+    i = 0
+
+    def token():
+        nonlocal i
+        while i < len(raw):
+            if raw[i:i+1].isspace():
+                i += 1
+            elif raw[i:i+1] == b'#':
+                while i < len(raw) and raw[i:i+1] not in (b'\r', b'\n'):
+                    i += 1
+            else:
+                break
+        start = i
+        while i < len(raw) and not raw[i:i+1].isspace() and raw[i:i+1] != b'#':
+            i += 1
+        return raw[start:i]
+
+    def integer():
+        value = token()
+        if not value.isdigit():
+            raise ValueError(f'{path}: expected a decimal PGM integer')
+        return int(value)
+
+    magic = token()
+    if magic not in (b'P5', b'P2'):
+        raise ValueError(f'{path}: not a PGM (magic {magic!r})')
+    try:
+        width, height, maxval = (integer() for _ in range(3))
+    except ValueError as exc:
+        raise ValueError(f'{path}: invalid or truncated PGM header') from exc
+    if width <= 0 or height <= 0 or not 1 <= maxval <= 65535:
+        raise ValueError(f'{path}: PGM dimensions must be positive and maxval must be in 1..65535')
+    count = width * height
+    if magic == b'P5':
+        if i >= len(raw) or not raw[i:i+1].isspace():
+            raise ValueError(f'{path}: missing PGM raster separator')
+        dtype = np.dtype(np.uint8 if maxval < 256 else '>u2')
+        size = count * dtype.itemsize
+        i += 2 if raw[i:i+2] == b'\r\n' and len(raw) - i >= size + 2 else 1
+        if len(raw) - i < size:
+            raise ValueError(f'{path}: PGM raster size does not match its dimensions')
+        pixels = np.frombuffer(raw, dtype=dtype, count=count, offset=i)
+    else:
+        try:
+            pixels = np.array([integer() for _ in range(count)], dtype=np.int64)
+        except (ValueError, OverflowError) as exc:
+            raise ValueError(f'{path}: invalid or truncated PGM pixels') from exc
+        if token():
+            raise ValueError(f'{path}: too many PGM pixels')
+    if ((pixels < 0) | (pixels > maxval)).any():
+        raise ValueError(f'{path}: PGM pixel outside 0..{maxval}')
+    return pixels.reshape(height, width).astype(float) * 255.0 / maxval
+
+
 @dataclass
 class OccupancyGrid:
     occupied: np.ndarray          # bool, (nx, ny); True where the robot cannot be
@@ -91,20 +181,78 @@ class OccupancyGrid:
                 continue
             pos, size = data.geom_xpos[g], model.geom_size[g]
             rot = data.geom_xmat[g].reshape(3, 3)
-            if model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER:
-                reach = float(size[1])
+            cylinder = model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER
+            reach = float(size[1]) if cylinder else float(np.abs(rot[2]) @ size[:3])
+            if pos[2] - reach > height or pos[2] + reach < 0:
+                continue
+            if cylinder:
                 inside = np.hypot(gx - pos[0], gy - pos[1]) <= size[0] + 1e-9
             else:                                   # box, yaw in the plane
-                reach = float(np.abs(rot[2]) @ size[:3])
                 dx, dy = gx - pos[0], gy - pos[1]
                 local_x = rot[0, 0] * dx + rot[1, 0] * dy
                 local_y = rot[0, 1] * dx + rot[1, 1] * dy
                 inside = ((np.abs(local_x) <= size[0] + 1e-9)
                           & (np.abs(local_y) <= size[1] + 1e-9))
-            if pos[2] - reach > height or pos[2] + reach < 0:
-                continue
             occupied |= inside
         return cls(occupied, resolution, (float(xs[0]), float(ys[0])))
+
+    @classmethod
+    def from_pgm(cls, yaml_path, extra_boxes=()):
+        """A map as SLAM Toolbox's save_map writes it: a PGM image and a YAML
+        with resolution, origin and thresholds.
+
+        Cells the mapper never saw count as occupied - the saver writes them
+        as 205, which with its own default free_thresh of 0.25 would reload
+        as free, and a planner that treats the unseen as open floor drives
+        into it.  `extra_boxes` are (x, y, yaw, half_x, half_y) rectangles
+        marked occupied on top: the table tops the lidar cannot see.
+        """
+        yaml_path = Path(yaml_path)
+        meta = _read_yaml(yaml_path)
+        for key in ('image', 'resolution', 'origin'):
+            if key not in meta:
+                raise ValueError(f'{yaml_path}: missing {key} in map metadata')
+        if not isinstance(meta['image'], str) or not meta['image']:
+            raise ValueError(f'{yaml_path}: image must be a nonempty path')
+        if meta.get('mode', 'trinary') != 'trinary':
+            raise ValueError(f'{yaml_path}: only trinary map mode is supported')
+
+        def number(key, default=None):
+            try:
+                value = float(meta.get(key, default))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f'{yaml_path}: invalid {key}') from exc
+            if not math.isfinite(value):
+                raise ValueError(f'{yaml_path}: {key} must be finite')
+            return value
+
+        resolution = number('resolution')
+        if resolution <= 0:
+            raise ValueError(f'{yaml_path}: resolution must be positive')
+        origin = meta['origin']
+        if not isinstance(origin, list) or len(origin) != 3 or not all(map(math.isfinite, origin)):
+            raise ValueError(f'{yaml_path}: origin must be a finite [x, y, yaw] list')
+        ox, oy, yaw = origin
+        if yaw != 0:
+            raise ValueError(f'{yaml_path}: nonzero origin yaw is unsupported by an axis-aligned grid')
+        negate = meta.get('negate', '0')
+        if negate not in ('0', '1'):
+            raise ValueError(f'{yaml_path}: negate must be 0 or 1')
+        free_thresh = number('free_thresh', 0.25)
+        occupied_thresh = number('occupied_thresh', 0.65)
+        if not 0 <= free_thresh < occupied_thresh <= 1:
+            raise ValueError(f'{yaml_path}: thresholds must satisfy 0 <= free_thresh < occupied_thresh <= 1')
+
+        image = _read_pgm(yaml_path.parent / meta['image'])     # (rows, cols), row 0 at the top
+        shade = image if int(negate) else 255.0 - image
+        occ = shade / 255.0
+        on_threshold = np.isclose(occ, free_thresh, rtol=0.0, atol=np.finfo(float).eps)
+        free = (occ < free_thresh) & ~on_threshold & (image != 205)
+        occupied = ~free.T[:, ::-1]        # (cols, rows), row axis flipped so index 0 is min y
+        grid = cls(np.ascontiguousarray(occupied), resolution, (ox + resolution / 2, oy + resolution / 2))
+        for box in extra_boxes:
+            grid.fill_box(*box)
+        return grid
 
     def inflate(self, radius: float) -> "OccupancyGrid":
         """Grow every occupied cell by `radius`.
@@ -115,7 +263,7 @@ class OccupancyGrid:
         """
         r = int(math.ceil(radius / self.resolution))
         offsets = [(di, dj) for di in range(-r, r + 1) for dj in range(-r, r + 1)
-                   if math.hypot(di, dj) * self.resolution <= radius]
+                   if math.hypot(di, dj) * self.resolution <= radius + 1e-9]
         nx, ny = self.occupied.shape
         src = np.pad(self.occupied, r, constant_values=True)
         out = np.zeros_like(self.occupied)
@@ -160,19 +308,47 @@ class OccupancyGrid:
 
     def line_free(self, p, q) -> bool:
         """True if the straight segment p -> q stays in free cells.
-        Sampled at half the cell size, which cannot skip a cell."""
+        Test the closed segment against cell boxes, including corner contact."""
         p, q = np.asarray(p, float)[:2], np.asarray(q, float)[:2]
-        n = max(2, int(np.ceil(np.linalg.norm(q - p) / (self.resolution / 2))) + 1)
-        return bool(self.free_at(p + np.linspace(0, 1, n)[:, None] * (q - p)).all())
+        lower = np.asarray(self.origin) - self.resolution / 2
+        upper = lower + np.asarray(self.occupied.shape) * self.resolution
+        if (not np.isfinite((p, q)).all()
+                or (np.minimum(p, q) < lower - 1e-9).any()
+                or (np.maximum(p, q) > upper + 1e-9).any()):
+            return False
+
+        cell_lower = np.argwhere(self.occupied) * self.resolution + lower - 1e-9
+        cell_upper = cell_lower + self.resolution + 2e-9
+        enter, leave = np.zeros(len(cell_lower)), np.ones(len(cell_lower))
+        for axis in range(2):
+            delta = q[axis] - p[axis]
+            if delta == 0:
+                enter[(p[axis] < cell_lower[:, axis])
+                      | (p[axis] > cell_upper[:, axis])] = np.inf
+            else:
+                t0 = (cell_lower[:, axis] - p[axis]) / delta
+                t1 = (cell_upper[:, axis] - p[axis]) / delta
+                enter = np.maximum(enter, np.minimum(t0, t1))
+                leave = np.minimum(leave, np.maximum(t0, t1))
+        return not bool((enter <= leave).any())
 
     def rect_free(self, x, y, yaw, half_x, half_y) -> bool:
-        """True if no occupied cell centre lies inside the oriented rectangle.
+        """True if the rectangle stays in bounds and covers no occupied cell centre.
 
         The robot's own footprint at a pose, on the raw grid.  This is what
         lets it park 0.24 m from a table when its circle would want 0.26.
         """
-        gx, gy = self._centres()
         c, s = math.cos(yaw), math.sin(yaw)
+        extent = np.array((abs(c) * half_x + abs(s) * half_y,
+                           abs(s) * half_x + abs(c) * half_y))
+        centre = np.array((x, y))
+        lower = np.asarray(self.origin) - self.resolution / 2
+        upper = lower + np.asarray(self.occupied.shape) * self.resolution
+        if ((centre - extent < lower - 1e-9).any()
+                or (centre + extent > upper + 1e-9).any()):
+            return False
+
+        gx, gy = self._centres()
         dx, dy = gx - x, gy - y
         local_x, local_y = c * dx + s * dy, -s * dx + c * dy
         inside = (np.abs(local_x) <= half_x + 1e-9) & (np.abs(local_y) <= half_y + 1e-9)
