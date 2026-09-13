@@ -5,8 +5,10 @@
 The layout itself lives in `src/rlbot/room.py`, so the grasp checker and any
 controller can read the same table of what is where.  This script turns it into
 MJCF and then argues with it: it solves IK for a top-down grasp on every object
-from its table's docking pose, with both arms and a spread of wrist angles, and
-refuses to write a room where something cannot be reached.
+from its table's docking pose, with both arms and a spread of wrist angles.  It
+writes `models/room.xml` and `models/room_scene.xml` first, then runs the
+clearance check and the arm-reach check, and exits nonzero if either fails,
+with the files already written.
 
 That is a kinematic test, not a proof of grasp - `scripts/check_grasp.py` closes
 the fingers on each object and lifts it.
@@ -28,6 +30,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from rlbot.arm import ArmIK, down_quat                            # noqa: E402
+from rlbot.navmap import MARGIN, OccupancyGrid, robot_footprint   # noqa: E402
 from rlbot.room import (                                          # noqa: E402
     DIVIDER, Item, LEG, MAX_GRASP_WIDTH, PILLAR, ROOM_X, ROOM_Y,
     TABLE_H, TABLE_L, TABLE_W, TABLES, TOP_T, Table, WALL_H, WALL_T,
@@ -295,11 +298,6 @@ def check_reach(model, verbose=True) -> list[str]:
     return problems
 
 
-ROBOT_MODEL = REPO / "models" / "bracketbot.xml"
-GRID = 0.05            # m, cell size of the clearance map
-MARGIN = 0.05          # m of daylight the robot should have on top of its own size
-
-
 def _rect(x, y, yaw, half):
     """The four corners of an oriented rectangle, and its two axes."""
     c, s = math.cos(yaw), math.sin(yaw)
@@ -353,69 +351,6 @@ def dock_gap(model, x, y, yaw, half) -> float:
     return gap
 
 
-def robot_footprint():
-    """The radius and height of the robot, read off its collision boxes.
-
-    Not a number typed in here: `build_mjcf.py` measures three boxes over the
-    chassis off the meshes, and this is what they come to - a 0.19 x 0.37 m
-    footprint, 1.70 m tall.
-    """
-    model = mujoco.MjModel.from_xml_path(str(ROBOT_MODEL))
-    half = np.zeros(2)
-    height = 0.0
-    for name in ("chassis_drive", "chassis_mast", "chassis_head"):
-        geom = model.geom(name)
-        half = np.maximum(half, geom.size[:2])
-        height = max(height, float(geom.pos[2] + geom.size[2]))
-    return float(math.hypot(*half)), height, half
-
-
-def occupancy(model, radius, height):
-    """Which cells of the floor the robot could stand on without hitting anything.
-
-    A geom counts if it reaches into the robot's own height band, which is why
-    the table tops block: the robot is 1.70 m tall and cannot drive under a
-    0.70 m table, however much room there is beneath it.
-    """
-    data = mujoco.MjData(model)
-    mujoco.mj_forward(model, data)
-
-    blockers = []
-    for g in range(model.ngeom):
-        if model.geom_type[g] == mujoco.mjtGeom.mjGEOM_PLANE:
-            continue
-        if model.geom_bodyid[g] and model.body_jntnum[model.geom_bodyid[g]]:
-            continue                     # loose objects are not architecture
-        pos, size = data.geom_xpos[g], model.geom_size[g]
-        rot = data.geom_xmat[g].reshape(3, 3)
-        reach = float(np.abs(rot[2]) @ size[:3]) if model.geom_type[g] == \
-            mujoco.mjtGeom.mjGEOM_BOX else float(size[1])
-        if pos[2] - reach > height or pos[2] + reach < 0:
-            continue
-        blockers.append((model.geom_type[g], pos, size, rot))
-
-    xs = np.arange(-ROOM_X / 2, ROOM_X / 2 + GRID, GRID)
-    ys = np.arange(-ROOM_Y / 2, ROOM_Y / 2 + GRID, GRID)
-    free = np.ones((len(xs), len(ys)), dtype=bool)
-    keep = radius + MARGIN
-
-    for kind, pos, size, rot in blockers:
-        for i, x in enumerate(xs):
-            for j, y in enumerate(ys):
-                if not free[i, j]:
-                    continue
-                offset = np.array([x - pos[0], y - pos[1], 0.0])
-                if kind == mujoco.mjtGeom.mjGEOM_CYLINDER:
-                    gap = float(np.linalg.norm(offset[:2])) - size[0]
-                else:                                   # box, yaw in the plane
-                    local = rot.T @ offset
-                    outside = np.maximum(np.abs(local[:2]) - size[:2], 0.0)
-                    gap = float(np.linalg.norm(outside))
-                if gap < keep:
-                    free[i, j] = False
-    return xs, ys, free
-
-
 def reachable(xs, ys, free, start):
     """Flood fill from the robot's start cell."""
     seen = np.zeros_like(free)
@@ -439,14 +374,17 @@ def reachable(xs, ys, free, start):
 def check_clearance(model) -> list[str]:
     """Is there room for this robot to stand, turn and get to every table?"""
     radius, height, half = robot_footprint()
-    xs, ys, free = occupancy(model, radius, height)
+    grid = OccupancyGrid.from_room().inflate(radius + MARGIN)
+    free = ~grid.occupied
+    xs = grid.origin[0] + grid.resolution * np.arange(free.shape[0])
+    ys = grid.origin[1] + grid.resolution * np.arange(free.shape[1])
     seen = reachable(xs, ys, free, (0.0, 0.0))
     problems = []
 
     print(f"\n  clearance for a {2 * radius * 100:.0f} cm wide, "
           f"{height * 100:.0f} cm tall robot, plus {MARGIN * 100:.0f} cm")
-    print(f"    floor it can stand on: {free.sum() * GRID ** 2:.1f} m2 of "
-          f"{ROOM_X * ROOM_Y:.1f} m2, and {seen.sum() * GRID ** 2:.1f} m2 of that "
+    print(f"    floor it can stand on: {free.sum() * grid.resolution ** 2:.1f} m2 of "
+          f"{ROOM_X * ROOM_Y:.1f} m2, and {seen.sum() * grid.resolution ** 2:.1f} m2 of that "
           f"reachable from the middle")
 
     for table in TABLES:
@@ -507,5 +445,5 @@ def build(check: bool = True) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-check", action="store_true",
-                    help="skip the reachability sweep")
+                    help="skip the clearance and arm-reach checks")
     build(check=not ap.parse_args().no_check)
