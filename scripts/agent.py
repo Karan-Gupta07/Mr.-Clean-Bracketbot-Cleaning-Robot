@@ -270,11 +270,11 @@ def sweep_planner(harness: Harness):
             if "picked up" in harness.run("pick", {"object": name}):
                 harness.run("place", {})
                 break
-        # Deliberately no `home` between objects.  Resetting the arm sounds
-        # tidy and costs more than it saves: the tuck path runs from over the
-        # crate down to beside the mast, straight across the table, and takes
-        # the next two objects with it.  Measured: 1 of 4 cubes crated with it,
-        # 3 of 4 without.
+        # Back to zero after every object.  Worth it once `home` goes up and
+        # back over the table edge before folding: 4 of 4 cubes crated with the
+        # reset, 3 of 4 without.  Folding straight from over the crate is what
+        # was costing objects, not the reset itself.
+        harness.run("home", {})
     harness.run("finished", {"summary": "swept the table"})
 
 

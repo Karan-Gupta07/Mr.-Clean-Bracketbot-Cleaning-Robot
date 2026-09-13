@@ -46,11 +46,13 @@ CAUSES = ("object_not_found", "hand_full", "no_free_hand", "not_holding",
           "unreachable", "grasp_failed", "place_failed")
 
 DROP_HEIGHT = 0.10     # m above the crate rim to open the fingers
-GRASP_TRIES = 4        # wrist angles and hands `pick` works through itself
+GRASP_TRIES = 8        # wrist angles and hands `pick` works through itself
 RETREAT_LIMIT = 1.0    # rad of arm travel allowed when backing out of the crate
 REPLAN_TRAVEL = 4.0    # rad of arm travel a from-scratch placement may cost
 RELEASE_OPEN = 0.30    # rad the jaws open to let go
 RELEASE_SECONDS = 1.0  # s taken to open them
+CLEAR_ABOVE = 0.20     # m above the crate to lift to before folding up
+NEAR_MAST = 0.10       # m in front of the mast to retract to first
 RETRY_CAP = 2          # times the harness will let the agent re-ask for the same thing
 
 # The one spot on the table both arms can reach.  It exists because this robot's
@@ -217,9 +219,15 @@ class Robot:
         if not sides:
             return self.out(False, "both hands are full", "no_free_hand")
 
+        # One wrist angle per attempt, rather than two orderings of the whole
+        # list.  `plan_waypoints` takes the first angle that solves, so passing
+        # it the list forwards and then backwards only ever produced two
+        # distinct grasps per hand - and this robot is sensitive enough that a
+        # 0.01 rad difference in the IK seed flips which branch it finds and
+        # whether the grasp holds.  More genuinely different attempts is the
+        # cheapest defence against that.
         item = self.items[obj]
-        forward, reversed_ = item.yaws, tuple(reversed(item.yaws))
-        tries = [(side, yaws) for side in sides for yaws in (forward, reversed_)]
+        tries = [(side, (yaw,)) for side in sides for yaw in item.yaws]
         reached = False
 
         for n, (side, yaws) in enumerate(tries[:GRASP_TRIES]):
@@ -405,21 +413,53 @@ class Robot:
         return self.out(True, f"put {obj} {landed}")
 
     def home(self, arm: str | None = None) -> Outcome:
-        """Arms back beside the mast - lifting clear of the table first.
+        """Both arms back to zero: carriage at the top of the rail, hinges at 0.
 
-        The rest pose is below and behind the table edge, so going straight to
-        it from anywhere over the table drags the whole arm across the work
-        surface.  Raise the carriage to the top of the rail before folding, and
-        the arm comes back over the top of everything instead of through it.
+        The path matters more than the destination.  The rest pose sits beside
+        the mast, below and behind the table edge, so interpolating to it from
+        anywhere over the table drags the whole arm across the work surface and
+        empties the crate on the way past - an earlier version of this cost
+        three of four cubes that had already been put away.
+
+        So: lift the hand clear of the crate rim first, at whatever angle it is
+        already holding, and only then fold.  The lift is vertical, which is the
+        one motion that cannot sweep anything.
         """
         for side in ([arm] if arm in self.arms else list(self.arms)):
             if self.holding[side]:
                 continue                    # do not fold up with a full hand
-            raised = self.data.qpos[self.arms[side].ik.qadr].copy()
-            raised[0] = 0.0                 # carriage to the top of the rail
-            move(self.rig, self.arms[side], raised, 1.2)
-            move(self.rig, self.arms[side], self.tucked(side), 1.4)
-        return self.out(True, "arms back at rest")
+            hand, gripper = self.arms[side], self.hands[side]
+            here = self.data.qpos[hand.ik.qadr].copy()
+            site = self.data.site_xpos[hand.site]
+            ceiling = self.data.body(self.crate).xpos[2] + CLEAR_ABOVE
+
+            # Up, then back over the table edge, then fold.  Lifting alone is
+            # not enough: the fold still swings the hand down and inward across
+            # the crate, and the fingers spend several hundred steps dragging
+            # through its wall.  The hand has to be off the table's footprint
+            # before any of the hinges go to zero.
+            quat = np.zeros(4)
+            mujoco.mju_mat2Quat(quat, self.data.site_xmat[hand.site])
+            rot = self.data.body("root").xmat.reshape(3, 3)
+            root = self.data.body("root").xpos
+            scratch = mujoco.MjData(self.model)
+
+            for goal in (np.array([site[0], site[1], ceiling]),
+                         root + rot[:, 0] * NEAR_MAST
+                         + rot[:, 1] * self.across_of(side) + [0, 0, ceiling]):
+                scratch.qpos[:] = self.data.qpos
+                mujoco.mj_kinematics(self.model, scratch)
+                step = hand.ik.solve(scratch, goal, quat,
+                                     seed=self.data.qpos[hand.ik.qadr])
+                if step.ok:
+                    move(self.rig, hand, step.qpos, 1.4)
+
+            move(self.rig, hand, np.zeros(len(here)), 1.8)
+        return self.out(True, "arms back at zero")
+
+    def across_of(self, side: str) -> float:
+        """How far out to the side that hand sits when the arm hangs at zero."""
+        return 0.10 if side == "left" else -0.10
 
     # ---- helpers ---------------------------------------------------------
     def free_spot_in(self, crate_name: str) -> np.ndarray:

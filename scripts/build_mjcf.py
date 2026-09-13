@@ -64,7 +64,18 @@ MIMIC = {
 # +-120 degrees on every hinge, which lets the arms fold into the mast; a
 # self-contact there would be an artefact of bad limits, not of the real robot,
 # and the balancer would have to fight it.
-ROBOT_CONTYPE, ROBOT_CONAFFINITY = 2, 1
+# Collision masks.  The world is 1/1.  The two arms get their own bits so that
+# they collide with the world and *with each other*, but never with themselves -
+# the URDF's joint limits are boilerplate +-120 degrees on every hinge, so a
+# link touching its own neighbour is an artefact of bad limits, while one arm
+# swinging through the other is a real collision that a real robot would have.
+# The chassis has a third bit so the arms can fold against the mast without
+# fighting it.
+WORLD = 1
+RIGHT_ARM, LEFT_ARM, CHASSIS = 2, 4, 8
+ARM_MASK = {"right": (RIGHT_ARM, WORLD | LEFT_ARM),
+            "left": (LEFT_ARM, WORLD | RIGHT_ARM)}
+ROBOT_CONTYPE, ROBOT_CONAFFINITY = CHASSIS, WORLD
 
 # Links that get a collision copy of their visual mesh.  Grasping happens on the
 # fingers and the palm between them; the arm links are here so a badly aimed
@@ -291,6 +302,8 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         for name in COLLIDING_LINKS:
             body = spec.body(name)
             finger = "finger" in name or name.endswith("hand__hand")
+            contype, conaffinity = ARM_MASK["left" if name.startswith("l_")
+                                            else "right"]
             visuals = [g for g in body.geoms if g.type == mujoco.mjtGeom.mjGEOM_MESH]
             for n, g in enumerate(visuals):
                 body.add_geom(
@@ -300,8 +313,8 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                     pos=g.pos,
                     quat=g.quat,
                     mass=0.0,
-                    contype=ROBOT_CONTYPE,
-                    conaffinity=ROBOT_CONAFFINITY,
+                    contype=contype,
+                    conaffinity=conaffinity,
                     group=3,
                     condim=4 if finger else 3,
                     friction=GRIP_FRICTION if finger else ARM_FRICTION,
@@ -424,11 +437,13 @@ def build(total_mass: float = TOTAL_MASS) -> None:
         model = spec.compile()
         for tag, (pos, quat, half) in finger_pads(model).items():
             finger, n = tag.split("#")
+            pad_type, pad_aff = ARM_MASK["left" if finger.startswith("l_")
+                                         else "right"]
             spec.body(finger).add_geom(
                 name=f"{finger}_pad{n}",
                 type=mujoco.mjtGeom.mjGEOM_BOX,
                 pos=pos, quat=quat, size=half, mass=0.0,
-                contype=ROBOT_CONTYPE, conaffinity=ROBOT_CONAFFINITY,
+                contype=pad_type, conaffinity=pad_aff,
                 group=3, condim=PAD_CONDIM, friction=GRIP_FRICTION,
                 solimp=[0.97, 0.99, 0.001, 0.5, 2],
                 rgba=[0.2, 0.9, 0.4, 0.6],

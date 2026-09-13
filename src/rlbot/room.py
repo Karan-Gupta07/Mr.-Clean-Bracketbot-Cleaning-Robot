@@ -194,7 +194,12 @@ TABLES = [
     ]),
     Table("table_ware", (-2.25, 0.90), math.radians(-90), [
         bowl("bowl", (-0.22, 0.0)),
-        cup("cup", (0.14, 0.0)),
+        # 0.22 m out, not 0.14.  Sat next to the crate it is picked up fine on
+        # an empty table and not at all once the bowl is in the crate: the hand
+        # has to come down 30 mm from a crate wall that now has something
+        # standing in it.  Whether an object is reachable depends on what has
+        # already been put away.
+        cup("cup", (0.22, 0.0)),
         crate("crate_ware", (0.00, 0.0)),
     ]),
 ]
