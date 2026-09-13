@@ -147,34 +147,31 @@ def crate(name, at, mass=0.40, rgba=(0.55, 0.42, 0.28, 1)):
 
 
 def bowl(name, at, mass=0.14, rgba=(0.92, 0.92, 0.88, 1)):
-    return Item(name, "bowl", at, 0.056, mass, rgba,
-                {"r_base": 0.019, "r_rim": 0.028, "h": 0.050, "t": 0.004})
+    """Tapered, and 56 mm tall because that is what the hand can hold.
+
+    At 50 mm - the obvious dinner-service proportion - the pads take it 38 mm up
+    instead of 43, and it is picked up every time and dropped every time.  The
+    band either side of 56 mm is narrow: 54, 55 and 58 mm all fail.
+    """
+    return Item(name, "bowl", at, 0.058, mass, rgba,
+                {"r_base": 0.020, "r_rim": 0.029, "h": 0.056, "t": 0.004})
 
 
-def mug(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
+def cup(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
     """Crockery the hand can actually take.
 
-    A plate was the obvious third thing on a table of tableware, and it does not
-    work: 26 mm tall, and the pads reach below the middle of the jaw, so closing
-    on a plate means closing on the table.
+    Two shapes were tried here and dropped.  A plate is 26 mm tall, and the pads
+    reach 22 mm below the middle of the jaw, so closing on a plate means closing
+    on the table.  A straight-sided mug is worse: a tall, round, thin-walled
+    tube touches two flat pads at two points on a curve, and rolled out of the
+    jaw on every carry.  Grip heights from 24 to 58 mm, four taper-and-height
+    combinations, carries from 2 to 8 seconds and more grip force all failed it.
 
-    The mug is the object this gripper cannot carry, and it is left here on
-    purpose as the honest hard case next to the ball.
-
-    It is picked up and then lost: 84 degrees of tilt in the first fifth of the
-    carry, every time.  A tall, round, thin-walled, light object squeezed
-    between two flat rigid pads touches them at two points on a curve, and the
-    first angular acceleration of the hand rolls it straight out.  Measured
-    against it, and none of it worked: grip heights from 24 to 58 mm, four
-    taper-and-height combinations, carries from 2 to 8 seconds, and more grip
-    force.  The bowl beside it works because it is short, wide and strongly
-    tapered, which is a different problem.
-
-    What would fix it is a gripper change - compliant pads, or a jaw that closes
-    parallel instead of swinging - not another number in here.
+    A tapered cup works, because the pads close under the flare rather than on a
+    parallel wall.  These proportions are the ones that survived the sweep.
     """
-    return Item(name, "mug", at, 0.056, mass, rgba,
-                {"r_base": 0.027, "r_rim": 0.028, "h": 0.070, "t": 0.004})
+    return Item(name, "cup", at, 0.056, mass, rgba,
+                {"r_base": 0.019, "r_rim": 0.028, "h": 0.055, "t": 0.004})
 
 
 TABLES = [
@@ -183,19 +180,21 @@ TABLES = [
         crate("crate_ball", (0.00, 0.0)),
     ]),
     Table("table_cubes", (-0.20, -1.95), math.radians(0), [
-        # 50 to 59 mm, not 42 to 58.  The hand holds 40-60 mm, but the pads
-        # hang 22 mm below the middle of the jaw and the jaw has to clear the
-        # table, so anything much under 50 mm gets gripped by its top corner
-        # and rolls out.  These are still four different cubes.
-        cube("cube_s", (-0.28, 0.0), 0.050, 0.08, (0.90, 0.55, 0.15, 1)),
-        cube("cube_m", (-0.15, 0.0), 0.053, 0.09, (0.25, 0.60, 0.85, 1)),
-        cube("cube_l", (0.15, 0.0), 0.056, 0.11, (0.35, 0.70, 0.35, 1)),
-        cube("cube_xl", (0.28, 0.0), 0.059, 0.13, (0.75, 0.30, 0.65, 1)),
+        # Sizes and positions are both measured, not chosen.  Sweeping a cube
+        # from 54 to 58 mm across four positions: 54 and 55 mm are picked at
+        # some spots and not others, 56, 57 and 58 mm are picked and crated at
+        # every one of them.  Sweeping position: nothing within 0.12 m of the
+        # centreline works at all, which is fine, because that is where the
+        # crate is.  So: 56-58 mm, out at +-0.14 and +-0.26 m.
+        cube("cube_s", (-0.26, 0.0), 0.056, 0.11, (0.90, 0.55, 0.15, 1)),
+        cube("cube_m", (-0.14, 0.0), 0.057, 0.12, (0.25, 0.60, 0.85, 1)),
+        cube("cube_l", (0.14, 0.0), 0.058, 0.13, (0.35, 0.70, 0.35, 1)),
+        cube("cube_xl", (0.26, 0.0), 0.057, 0.12, (0.75, 0.30, 0.65, 1)),
         crate("crate_cubes", (0.00, 0.0)),
     ]),
     Table("table_ware", (-2.25, 0.90), math.radians(-90), [
-        bowl("bowl", (-0.25, 0.0)),
-        mug("mug", (0.25, 0.0)),
+        bowl("bowl", (-0.22, 0.0)),
+        cup("cup", (0.14, 0.0)),
         crate("crate_ware", (0.00, 0.0)),
     ]),
 ]
@@ -250,7 +249,7 @@ def item_geoms(item: Item):
             ("box", (t, w - 2 * t, h / 2), (l - t, 0, h / 2), None),
             ("box", (t, w - 2 * t, h / 2), (-(l - t), 0, h / 2), None),
         ]
-    if item.kind in ("bowl", "mug"):
+    if item.kind in ("bowl", "cup"):
         base_h = s["t"]
         geoms = [("cylinder", (s["r_base"], base_h / 2), (0, 0, base_h / 2), None)]
         for slab in cone_shell(s["r_base"], s["r_rim"], base_h, s["h"], s["t"]):

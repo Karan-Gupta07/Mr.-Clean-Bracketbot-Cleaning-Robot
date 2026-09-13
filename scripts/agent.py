@@ -270,11 +270,11 @@ def sweep_planner(harness: Harness):
             if "picked up" in harness.run("pick", {"object": name}):
                 harness.run("place", {})
                 break
-        # Back to a known pose between objects.  Failed attempts leave the arm
-        # in whatever configuration it stalled in, and the next placement has to
-        # be planned out of that - which is how a crate the arm reached easily a
-        # minute ago comes back `unreachable`.
-        harness.run("home", {})
+        # Deliberately no `home` between objects.  Resetting the arm sounds
+        # tidy and costs more than it saves: the tuck path runs from over the
+        # crate down to beside the mast, straight across the table, and takes
+        # the next two objects with it.  Measured: 1 of 4 cubes crated with it,
+        # 3 of 4 without.
     harness.run("finished", {"summary": "swept the table"})
 
 

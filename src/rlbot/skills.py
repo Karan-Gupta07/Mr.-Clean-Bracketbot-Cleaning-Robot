@@ -274,7 +274,7 @@ class Robot:
 
         obj = self.holding[side]
         target = (self.spot() if into == HANDOVER
-                  else self.data.body(into).xpos + np.array([0, 0, DROP_HEIGHT]))
+                  else self.free_spot_in(into))
         if target is None:
             return self.out(False, "there is no clear space to set anything down",
                             "place_failed")
@@ -405,11 +405,51 @@ class Robot:
         return self.out(True, f"put {obj} {landed}")
 
     def home(self, arm: str | None = None) -> Outcome:
+        """Arms back beside the mast - lifting clear of the table first.
+
+        The rest pose is below and behind the table edge, so going straight to
+        it from anywhere over the table drags the whole arm across the work
+        surface.  Raise the carriage to the top of the rail before folding, and
+        the arm comes back over the top of everything instead of through it.
+        """
         for side in ([arm] if arm in self.arms else list(self.arms)):
+            if self.holding[side]:
+                continue                    # do not fold up with a full hand
+            raised = self.data.qpos[self.arms[side].ik.qadr].copy()
+            raised[0] = 0.0                 # carriage to the top of the rail
+            move(self.rig, self.arms[side], raised, 1.2)
             move(self.rig, self.arms[side], self.tucked(side), 1.4)
         return self.out(True, "arms back at rest")
 
     # ---- helpers ---------------------------------------------------------
+    def free_spot_in(self, crate_name: str) -> np.ndarray:
+        """Where in the crate to drop this one, given what is already in it.
+
+        Not always the middle.  Four cubes dropped on the same point land on
+        each other and knock the earlier ones back out - the run reports four
+        successful placements and the crate ends up with three.  The crate is
+        220 x 160 mm and the objects are under 60 mm, so there is room to put
+        each one down somewhere of its own.
+        """
+        crate = self.data.body(crate_name)
+        size = self.items[crate_name].size
+        rot = crate.xmat.reshape(3, 3)
+        inside = [self.data.body(n).xpos for n in self.items
+                  if n != crate_name and self.inside_crate(self.data.body(n).xpos)]
+
+        best, best_score = None, -1.0
+        span_l, span_w = size["l"] / 2 - 0.075, size["w"] / 2 - 0.055
+        for along in np.linspace(-span_l, span_l, 3):
+            for across in np.linspace(-span_w, span_w, 3):
+                here = crate.xpos + rot[:, 0] * along + rot[:, 1] * across
+                clear = min((float(np.linalg.norm(here[:2] - o[:2]))
+                             for o in inside), default=9.9)
+                # furthest from what is already in there, ties to the middle
+                score = clear - 0.05 * (abs(along) + abs(across))
+                if score > best_score:
+                    best, best_score = here, score
+        return best + np.array([0, 0, DROP_HEIGHT])
+
     def spot(self) -> np.ndarray | None:
         """A clear patch of table both arms can reach, for handing over.
 
