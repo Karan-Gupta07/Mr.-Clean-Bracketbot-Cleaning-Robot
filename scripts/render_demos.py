@@ -1,19 +1,24 @@
 """Render the cameras for recorded demonstrations, after the fact.
 
-    .venv/bin/python scripts/render_demos.py out/demos/cubes/ep_*.npz
-    .venv/bin/python scripts/render_demos.py out/demos/cubes --size 224 --preview
+    .venv/bin/python scripts/render_demos.py out/demos/ball
+    .venv/bin/python scripts/render_demos.py out/demos/ball/ep_*.npz --size 224 --preview
 
-Camera frames are a pure function of the joint positions, so `scripts/teleop.py`
-records only those and this puts the pictures back: every row of every episode
-is posed in the same model it was recorded in and shot from the head camera and
-both wrist cameras.  Rendering at recording time would have tied the frame size
-and camera set to a policy that did not exist yet, and costs more than the sim
-step itself.
+Camera frames are a pure function of the pose, so the recorders keep only the
+pose and this puts the pictures back: every row of every episode is posed in
+the room and shot from the head camera and both wrist cameras.  Rendering at
+recording time would have tied the frame size and camera set to a policy that
+did not exist yet, and costs more than the sim step itself.
 
-Writes `<episode>_frames.npz` next to each episode, with one uint8 array per
-camera of shape (rows, size, size, 3).  `--preview` also drops a PNG contact
-sheet of the first, middle and last rows, which is the quickest way to see
-whether the wrist camera can actually see the cube.
+Rows are posed by *name*, not by copying the recorded state vector back.  The
+room gets rebuilt, and a rebuild can move objects about in the state vector or
+take their joints away; an episode recorded before that would then pose the
+wrong thing.  So the robot's joints go in by joint name and every object on the
+table by body name, from the poses the recorder kept, and the state vector's
+layout at the time of recording does not matter.
+
+Writes `<episode>_frames.npz` next to each episode: one uint8 array per camera
+of shape (rows, size, size, 3), plus the cameras' vertical fields of view.
+`--preview` also drops a PNG contact sheet of the first, middle and last rows.
 """
 
 from __future__ import annotations
@@ -29,7 +34,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from rlbot.skills import Robot                                       # noqa: E402
-from rlbot.teleop import load_demo                                   # noqa: E402
+from rlbot.teleop import Poser, load_demo                            # noqa: E402
 
 CAMERAS = ("head_cam", "wrist_right_cam", "wrist_left_cam")
 
@@ -45,19 +50,19 @@ def episodes(paths) -> list[Path]:
     return out
 
 
-def render(robot: Robot, qpos: np.ndarray, size: int, cameras) -> dict:
+def render(robot: Robot, meta: dict, arrays: dict, size: int, cameras) -> dict:
     """One array per camera, rows posed one after another in the same model."""
-    model, data = robot.model, robot.data
+    model = robot.model
     model.vis.global_.offwidth = max(model.vis.global_.offwidth, size)
     model.vis.global_.offheight = max(model.vis.global_.offheight, size)
     renderer = mujoco.Renderer(model, size, size)
-    frames = {cam: np.empty((len(qpos), size, size, 3), dtype=np.uint8)
-              for cam in cameras}
-    for i, q in enumerate(qpos):
-        data.qpos[:] = q
-        mujoco.mj_forward(model, data)
+    pose = Poser(robot, meta)
+    n = len(arrays["qpos"])
+    frames = {cam: np.empty((n, size, size, 3), dtype=np.uint8) for cam in cameras}
+    for i in range(n):
+        pose(arrays["qpos"][i], arrays["obj_pos"][i], arrays["obj_quat"][i])
         for cam in cameras:
-            renderer.update_scene(data, camera=cam)
+            renderer.update_scene(robot.data, camera=cam)
             frames[cam][i] = renderer.render()
     renderer.close()
     return frames
@@ -88,27 +93,21 @@ def main() -> None:
     for path in episodes(args.paths):
         out = path.with_name(path.stem + "_frames.npz")
         if out.exists() and not args.force:
-            print(f"{path.name}: frames exist, skipping")
+            print(f"{path.name}: frames exist, skipping", flush=True)
             continue
         meta, arrays = load_demo(path)
         key = (meta["table"].split("_")[1], meta["balancing"])
         if key not in robots:
             robots[key] = Robot(key[0], balancing=key[1])
         robot = robots[key]
-        if arrays["qpos"].shape[1] != robot.model.nq:
-            raise SystemExit(f"{path.name}: {arrays['qpos'].shape[1]} qpos but "
-                             f"the model has {robot.model.nq} - was the room "
-                             f"rebuilt since this was recorded?")
 
-        # The crate is furniture with no joint, so its position is not in
-        # qpos.  Collected episodes move it; put it back where it was.
-        crate_pos = meta.get("layout", {}).get("crate_pos")
-        if crate_pos is not None:
-            robot.model.body_pos[robot.model.body(robot.crate).id][:2] = crate_pos
-        frames = render(robot, arrays["qpos"], args.size, args.cameras)
-        np.savez_compressed(out, **frames)
+        frames = render(robot, meta, arrays, args.size, args.cameras)
+        fovy = {cam: float(robot.model.cam_fovy[robot.model.camera(cam).id])
+                for cam in args.cameras}
+        np.savez_compressed(out, fovy=np.array([fovy[c] for c in args.cameras]),
+                            cameras=np.array(args.cameras), **frames)
         print(f"{path.name}: {len(arrays['qpos'])} rows x {len(frames)} cameras "
-              f"at {args.size}px -> {out.name}")
+              f"at {args.size}px -> {out.name}", flush=True)
         if args.preview:
             contact_sheet(frames, path.with_name(path.stem + "_preview.png"))
 

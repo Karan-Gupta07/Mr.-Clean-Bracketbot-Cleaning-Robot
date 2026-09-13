@@ -407,8 +407,12 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                       rgba=[0.2, 0.8, 0.3, 0.6])
         root.add_camera(
             name="head_cam", pos=[0.075, 0, 1.575],
-            # a MuJoCo camera looks down its own -z with +y up: -z -> +x world
-            xyaxes=[0, -1, 0, 0, 0, 1], fovy=58,
+            # a MuJoCo camera looks down its own -z with +y up.  Level, it
+            # never saw the table: from 1.575 m up the table top is 46 to 75
+            # degrees below the horizon, outside a 58 degree view.  So pitch
+            # it 62 degrees down - straight at the middle of a docked table -
+            # by tilting the up axis back by the same angle.
+            xyaxes=[0, -1, 0, 0.882948, 0, 0.469472], fovy=58,
         )
 
         model = spec.compile()
@@ -481,6 +485,14 @@ def build(total_mass: float = TOTAL_MASS) -> None:
             limit = max(URDF_EFFORT, SERVO_MARGIN * need)
             joint.actfrcrange = [-limit, limit]
             joint.actfrclimited = mujoco.mjtLimited.mjLIMITED_TRUE
+        # The gripper blades are all but massless and the follower has no
+        # servo, only the mimic constraint.  Closing on a ball, the follower
+        # slammed shut, whipped 0.9 rad open and rang for a third of a second
+        # before it settled.  A little rotor inertia on the four blade joints
+        # takes the ringing out - the close is one motion - without the
+        # viscous drag that damping adds, which cost every carry.
+        for name in (*MIMIC, *MIMIC.values()):
+            spec.joint(name).armature = 0.005
         model = spec.compile()
 
         xml = spec.to_xml()

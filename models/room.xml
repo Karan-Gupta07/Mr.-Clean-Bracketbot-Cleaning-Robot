@@ -61,7 +61,7 @@
     </body>
     <body name="ball" pos="2.04 -1.34 0.7">
       <freejoint/>
-      <geom name="ball_0" type="sphere" size="0.0275" pos="0 0 0.0275" mass="0.09" condim="6" friction="1.2 0.05 0.02" solimp="0.95 0.99 0.001" material="mat_ball"/>
+      <geom name="ball_0" type="sphere" size="0.025" pos="0 0 0.025" mass="0.09" condim="6" friction="1.2 0.05 0.02" solimp="0.95 0.99 0.001" material="mat_ball"/>
     </body>
     <body name="crate_ball" pos="2.04 -1.1 0.7">
       <freejoint/>

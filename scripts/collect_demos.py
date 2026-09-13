@@ -71,6 +71,10 @@ LIFTED = 0.05                  # m above the table an object still in the hand s
 # does it.  Everything else takes the across-the-table grasp the harness uses.
 GRASP_YAW = {"bowl": 45.0, "cup": 45.0}
 DEFAULT_YAW = 90.0
+# How much higher than the layout's grasp height to close, per kind.  The
+# ball's grasp point is its centre, which puts the pads a hair off the table;
+# 6 mm up doubles the pick rate.
+GRASP_LIFT = {"ball": 0.006}
 
 VIZ_FPS = 10                   # the recorder runs at 20 Hz; every other row
 VIZ_SIZE = (240, 320)          # rows, columns per panel
@@ -269,7 +273,7 @@ class Operator:
         # it is at rest, and a hand that starts its descent 18 mm off lands a
         # pad on the bowl's rim.  The second stop is with the pads just above
         # the rim, so the last few centimetres go in straight.
-        on = robot.jaw_target(obj)
+        on = robot.jaw_target(obj) + [0, 0, GRASP_LIFT.get(robot.items[obj].kind, 0.0)]
         above = on + [0, 0, APPROACH]
         if not (self.walk(above) or self.go(above)):
             return False, "unreachable"
@@ -300,9 +304,32 @@ class Operator:
         self.grip(False, RELEASE_WAIT)
         self.walk(self.jog.target + [0, 0, RETREAT])
         self.run(0.5)
-        if robot.inside_crate(robot.data.body(obj).xpos) and self.jog.held != obj:
+        if self.settled_in_crate(obj):
             return True, "in the crate"
         return False, "missed: " + robot.where(obj)
+
+    def settled_in_crate(self, obj: str) -> bool:
+        """In the crate, on its floor, clear of its walls, and not moving.
+
+        `inside_crate` answers a footprint test, which a ball bouncing off
+        the rim passes on its way out.  This waits a moment, then asks the
+        collision engine: touching the crate's floor, a positive distance to
+        every wall, and still.
+        """
+        robot, m, d = self.robot, self.robot.model, self.robot.data
+        before = d.body(obj).xpos.copy()
+        self.run(0.5)
+        if np.linalg.norm(d.body(obj).xpos - before) > 0.005:
+            return False                      # still rolling
+        if self.jog.held == obj or not robot.inside_crate(d.body(obj).xpos):
+            return False
+        crate = m.body(robot.crate).id
+        geoms = [g for g in range(m.ngeom) if m.geom_bodyid[g] == crate]
+        obj_geom = next(g for g in range(m.ngeom) if m.geom_bodyid[g] == m.body(obj).id)
+        fromto = np.zeros(6)
+        dist = [mujoco.mj_geomDistance(m, d, obj_geom, g, 0.2, fromto) for g in geoms]
+        floor, walls = dist[0], dist[1:]
+        return floor < 0.002 and all(w > 0.0 for w in walls)
 
 
 def reset(robot: Robot, layout: Layout, obj_at, crate_at) -> dict:

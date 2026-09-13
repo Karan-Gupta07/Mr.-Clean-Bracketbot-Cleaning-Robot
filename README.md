@@ -80,6 +80,10 @@ pip install -r requirements.txt
 # Drive one arm by hand and record pick-and-place demonstrations for the VLA.
 .venv/bin/mjpython scripts/teleop.py --cube m
 
+# Collect demonstrations without an operator: 200 episodes each, layouts randomized.
+.venv/bin/python scripts/collect_demos.py --table ball --episodes 200
+.venv/bin/python scripts/collect_demos.py --table ware --object bowl --episodes 200
+
 # Put the camera frames back onto recorded demonstrations, and preview them.
 .venv/bin/python scripts/render_demos.py out/demos/cubes --preview
 
@@ -111,6 +115,7 @@ scripts/room.py             Live viewer you can drive the robot around the room 
 scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed policy.
 scripts/teleop.py           Keyboard teleop of one arm, recording demonstrations for the VLA.
 scripts/render_demos.py     Renders the cameras for recorded demonstrations, after the fact.
+scripts/collect_demos.py    Scripted demonstrations: the teleop controller driven by code, layouts randomized.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
@@ -135,6 +140,19 @@ The URDF we got is a shape export from Onshape, not a physics model. Six things 
 5. **Every joint had the same fake strength limit.** 10 N cannot hold the arm carriage up, so the arms slid down the rail. Limits are now sized from the real gravity load.
 6. **The second gripper finger was getting its own motor.** It should only follow the first finger. The extra motor was removed.
 7. **The fingers could not hold anything.** MuJoCo treats a mesh as its convex hull, and each finger is a hooked claw with a hollow inside. Hulled, the two of them fill the gap solid: a 55 mm cube placed dead centre between fingers 139 mm apart was already touching both of them, and closing shot it across the room. Each blade now gets a flat pad fitted to its real inner face instead, traced off the mesh slice by slice.
+
+8. **The head camera never saw the table.** It was mounted level at 1.575 m, and
+   from there a docked table's top is 46 to 75 degrees below the horizon, outside
+   a 58 degree view: every head frame was floor. It is now pitched 62 degrees
+   down, straight at the middle of a docked table.
+
+9. **The second finger rang like a bell.** It has no servo, only a mimic
+   constraint tying it to the first, and next to no mass. Closing on a ball it
+   slammed shut, whipped 0.9 rad open and settled a third of a second later,
+   which showed up as a flickering gripper in every replay. Damping fixed the
+   ringing and cost every carry - the drag changes where the blade settles and
+   the ball comes out. Rotor inertia does not: `armature="0.005"` on the four
+   blade joints, and the close is one motion with the same pick rate.
 
 ## Numbers
 
@@ -272,11 +290,33 @@ as one `.npz`: at 20 Hz, the full `qpos`, `qvel` and `ctrl`, both arms' joints
 and gripper commands, the jaw pose, the jaw target and wrist yaw, whether the
 hand is closed and what it holds, and every object's pose; plus the task text,
 the key presses, and the success flag. Camera frames are not recorded. They are
-a function of `qpos`, so `scripts/render_demos.py` renders them afterwards from
-the head and both wrist cameras at whatever size the model wants.
+a function of the pose, so `scripts/render_demos.py` renders them afterwards
+from the head and both wrist cameras at whatever size the model wants, into
+`<episode>_frames.npz`: one uint8 array per camera, rows x 224 x 224 x 3, plus
+each camera's vertical field of view. Rows are posed by joint name and object
+name rather than by copying the state vector back, so a room rebuilt after the
+recording still replays it.
 
 `--jitter 0.02` scatters the cubes by up to 2 cm on each reset, for variety.
 `--balance` runs the same thing on the wheels with the station keeper.
+
+### Collecting without an operator
+
+`scripts/collect_demos.py` drives the same controller from code: over the
+object, down in two settled stops, close, lift, one slow joint-space ramp to a
+clear spot in the crate, let go, back off. Every episode moves both the object
+and the crate - the object anywhere in the band either arm can reach (0.14 to
+0.28 m from the centreline, either side, 4 cm either way in depth), the crate
+up to 8 cm along and 5 cm deep from the middle, never overlapping. The crate
+has no joint, so it is moved by editing its body position in the compiled
+model, and that position is saved in the episode's metadata for the renderer.
+
+Episodes are scored the way the operator's are and only successes count.
+Failures are kept under `failed/` for the record. Every tenth success is also
+rendered to a GIF under `viz/`, over-the-shoulder beside the working wrist
+camera. Rates at the time of writing: the ball crates about 7 in 10 attempts,
+the bowl about 1 in 5 - the bowl grasp is marginal with this hand and the
+wrist angle barely moves it - at two to three seconds an attempt.
 
 Driven by a script rather than a hand, the same controller picks and crates
 every cube on the table with either arm, at key-repeat rate and at tap rate.
