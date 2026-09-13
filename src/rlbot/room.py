@@ -155,9 +155,23 @@ def mug(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
     """Crockery the hand can actually take.
 
     A plate was the obvious third thing on a table of tableware, and it does not
-    work: 26 mm tall, and the pads reach 28 mm below the middle of the jaw, so
-    closing on a plate means closing on the table.  A mug is the same idea -
-    thin-walled, open, easy to tip - at a height the hand can get hold of.
+    work: 26 mm tall, and the pads reach below the middle of the jaw, so closing
+    on a plate means closing on the table.
+
+    The mug is the object this gripper cannot carry, and it is left here on
+    purpose as the honest hard case next to the ball.
+
+    It is picked up and then lost: 84 degrees of tilt in the first fifth of the
+    carry, every time.  A tall, round, thin-walled, light object squeezed
+    between two flat rigid pads touches them at two points on a curve, and the
+    first angular acceleration of the hand rolls it straight out.  Measured
+    against it, and none of it worked: grip heights from 24 to 58 mm, four
+    taper-and-height combinations, carries from 2 to 8 seconds, and more grip
+    force.  The bowl beside it works because it is short, wide and strongly
+    tapered, which is a different problem.
+
+    What would fix it is a gripper change - compliant pads, or a jaw that closes
+    parallel instead of swinging - not another number in here.
     """
     return Item(name, "mug", at, 0.056, mass, rgba,
                 {"r_base": 0.027, "r_rim": 0.028, "h": 0.070, "t": 0.004})
@@ -269,15 +283,24 @@ def lowest_point(geoms) -> float:
 
 
 PAD_REACH = 0.022      # m the pads extend below the jaw centre, plus a margin
+RIM_GRIP = 0.012       # m below the rim to take a bowl or a mug
 
 
 def grasp_pose(item: Item, table: Table):
     """Where the jaws have to be to take this item.
 
-    Halfway up the object, which is where closing squeezes it instead of
-    levering it over - aiming at its lower third tipped an 85 mm cube onto its
-    face every time.  Except for anything under 56 mm tall: the pads reach
-    PAD_REACH below the middle of the jaw, and below that they close on the
-    table before they close on the object.
+    Two heights fight here.  The pads reach PAD_REACH below the middle of the
+    jaw, so any lower and they close on the table before they close on the
+    object.  Any higher and the jaw is above a short object altogether.
+
+    Above that floor, where to grip depends on the shape:
+
+      * A cube or a ball: halfway up, which is where closing squeezes it rather
+        than levering it over.
+      * A bowl or a mug: just under the rim.  These are tapered, and `width` is
+        measured across the rim - grip them at their waist and the jaw opens for
+        a diameter the object does not have there.  It is also where a tapered
+        wall gives the pads a lip to close under, which is the difference
+        between carrying a mug and knocking it over.
     """
     return table.place(item) + np.array([0, 0, max(PAD_REACH, item.height / 2)])

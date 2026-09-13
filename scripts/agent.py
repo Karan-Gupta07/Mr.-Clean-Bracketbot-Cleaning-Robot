@@ -3,6 +3,7 @@
     .venv/bin/python scripts/agent.py --table cubes                 # needs an API key
     .venv/bin/python scripts/agent.py --table cubes --planner sweep # no key needed
     .venv/bin/python scripts/agent.py --table ware --video out/ware.mp4
+    .venv/bin/mjpython scripts/agent.py --table ware --view          # watch it live
 
 The robot is docked at one table and does not drive: the base is welded at the
 docking pose, so the wheels never turn.  Navigation is a separate problem and
@@ -27,10 +28,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
 from pathlib import Path
+
+import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
@@ -138,6 +142,57 @@ TOOLS = [
         "strict": True,
     },
 ]
+
+
+class Pacer:
+    """Drives a live viewer from inside the simulation loop.
+
+    The rig calls this every step.  Syncing the window 500 times a second is
+    wasted work, so it only refreshes at a frame rate, and sleeps the difference
+    to keep the run at something like real time - otherwise the arm crosses the
+    table in a blink and there is nothing to watch.  Unlike the recorder it
+    holds no frames, which matters: filming the cubes table buffers about 3000
+    of them before ffmpeg sees any.
+    """
+
+    def __init__(self, viewer, model, speed: float = 1.0, fps: int = 60):
+        self.viewer, self.model, self.speed = viewer, model, speed
+        self.every = max(1, round(1 / (fps * model.opt.timestep)))
+        self.count = 0
+        self.clock = time.time()
+
+    def __call__(self, data) -> None:
+        self.count += 1
+        if self.count % self.every:
+            return
+        self.viewer.sync()
+        ahead = self.every * self.model.opt.timestep / self.speed - (
+            time.time() - self.clock)
+        if ahead > 0:
+            time.sleep(ahead)
+        self.clock = time.time()
+
+
+def watch(robot: Robot, run, speed: float) -> None:
+    """Open a window on this robot, run the job in it, and leave it open."""
+    import mujoco.viewer
+
+    with mujoco.viewer.launch_passive(robot.model, robot.data) as viewer:
+        rot = robot.data.body("root").xmat.reshape(3, 3)
+        viewer.cam.lookat[:] = (robot.data.body("root").xpos
+                                + rot[:, 0] * 0.45 + np.array([0, 0, 0.3]))
+        viewer.cam.distance = 1.8
+        viewer.cam.elevation = -20
+        viewer.cam.azimuth = math.degrees(math.atan2(rot[1, 0], rot[0, 0])) + 150
+        robot.rig.on_step = Pacer(viewer, robot.model, speed)
+        viewer.sync()
+
+        run()
+
+        print("\ndone - the window stays open, close it to finish")
+        while viewer.is_running():
+            viewer.sync()
+            time.sleep(0.05)
 
 
 class Harness:
@@ -272,6 +327,10 @@ def main() -> None:
     ap.add_argument("--effort", default="high",
                     choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--video", help="write an mp4 of the run here")
+    ap.add_argument("--view", action="store_true",
+                    help="watch it live (run with mjpython, not python)")
+    ap.add_argument("--speed", type=float, default=1.0,
+                    help="playback speed for --view; 2 runs twice real time")
     ap.add_argument("--budget", type=int, default=STEP_BUDGET)
     args = ap.parse_args()
 
@@ -292,11 +351,17 @@ def main() -> None:
         recorder.attach(robot.model)
     harness = Harness(robot, budget=args.budget)
 
+    def job():
+        if args.planner == "sweep":
+            sweep_planner(harness)
+        else:
+            fable_planner(harness, args.table, args.effort)
+
     started = time.time()
-    if args.planner == "sweep":
-        sweep_planner(harness)
+    if args.view:
+        watch(robot, job, args.speed)
     else:
-        fable_planner(harness, args.table, args.effort)
+        job()
 
     loose = [n for n, i in robot.items.items() if i.graspable]
     crated = [n for n in loose if robot.where(n) == "in the crate"]
