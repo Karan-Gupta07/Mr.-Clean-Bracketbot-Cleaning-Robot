@@ -93,12 +93,23 @@ PAD_BANDS = ((-0.044, -0.004),)    # m, depth along the blade
 PAD_SKIN = 0.004           # m, how far in from a slice's extreme counts as face
 PAD_SLICES = 12            # slices along the blade used to trace that face
 PAD_HALF = (0.014, 0.003, 0.018)   # m, half sizes: across, through, along
-# Rubber pads, and deliberately grippy.  At mu = 1.2 the solver let a 50 g cube
-# creep 80 mm out of a 10 N pinch in three seconds - twenty times the friction
-# it needed on paper, lost to the way MuJoCo trades normal impedance against
-# friction impedance.  Raising both this and the scene's impratio stops it dead:
-# 3 mm in three seconds, which is a grasp.
-GRIP_FRICTION = [3.0, 0.05, 0.005]   # sliding, torsional, rolling
+# Compliant rubber pads, in the only way a rigid-body solver can have them:
+# all three friction dimensions, on condim 6 contacts.
+#
+# Sliding friction stops the object creeping out of the pinch.  At mu = 1.2 the
+# solver let a 50 g cube slide 80 mm out of a 10 N grip in three seconds -
+# twenty times the friction it needed on paper, lost to the way MuJoCo trades
+# normal impedance against friction impedance.  That and the scene's impratio
+# fixed the sliding.
+#
+# What it did not fix was rolling.  A round object between two flat rigid pads
+# touches each at a point, and nothing resists it turning about the line between
+# them: the mug tilted 84 degrees in the first fifth of every carry and the ball
+# could not be picked up at all.  That is exactly what a soft pad prevents in
+# real life - it deforms around the curve - and `condim 6` with a rolling
+# friction term is how you say so here.  With it, both of them are carried.
+PAD_CONDIM = 6
+GRIP_FRICTION = [3.0, 0.05, 0.015]   # sliding, torsional, rolling
 ARM_FRICTION = [0.6, 0.005, 0.0001]
 
 # Three boxes spanning the chassis, each sized to the meshes inside its own
@@ -418,7 +429,7 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                 type=mujoco.mjtGeom.mjGEOM_BOX,
                 pos=pos, quat=quat, size=half, mass=0.0,
                 contype=ROBOT_CONTYPE, conaffinity=ROBOT_CONAFFINITY,
-                group=3, condim=4, friction=GRIP_FRICTION,
+                group=3, condim=PAD_CONDIM, friction=GRIP_FRICTION,
                 solimp=[0.97, 0.99, 0.001, 0.5, 2],
                 rgba=[0.2, 0.9, 0.4, 0.6],
             )

@@ -48,6 +48,7 @@ CAUSES = ("object_not_found", "hand_full", "no_free_hand", "not_holding",
 DROP_HEIGHT = 0.10     # m above the crate rim to open the fingers
 GRASP_TRIES = 4        # wrist angles and hands `pick` works through itself
 RETREAT_LIMIT = 1.0    # rad of arm travel allowed when backing out of the crate
+REPLAN_TRAVEL = 4.0    # rad of arm travel a from-scratch placement may cost
 RELEASE_OPEN = 0.30    # rad the jaws open to let go
 RELEASE_SECONDS = 1.0  # s taken to open them
 RETRY_CAP = 2          # times the harness will let the agent re-ask for the same thing
@@ -335,6 +336,26 @@ class Robot:
             travel = float(np.abs(got.qpos - here).sum())
             if over is None or travel < over[0]:
                 over, over_quat = (travel, got), quat
+        # Last resort: re-plan from scratch rather than from where the arm
+        # happens to be.  A seeded solve inherits the arm's current
+        # configuration, and after a few failed picks that configuration can be
+        # one from which no small motion reaches the crate - the same placement
+        # that works from a clean start reports `unreachable`.
+        if over is None:
+            for extra in angles:
+                quat = np.zeros(4)
+                mujoco.mju_mulQuat(quat, np.array([math.cos(extra / 2), 0, 0,
+                                                   math.sin(extra / 2)]), base)
+                scratch.qpos[:] = self.data.qpos
+                mujoco.mj_kinematics(self.model, scratch)
+                got = hand.ik.solve(scratch,
+                                    gripper.site_target(target, quat, opening),
+                                    quat)
+                travel = float(np.abs(got.qpos - here).sum())
+                if got.ok and travel < REPLAN_TRAVEL:
+                    over, over_quat = (travel, got), quat
+                    break
+
         if over is not None:
             travel, over = over
             move(self.rig, hand, over.qpos, max(3.0, 2.5 * travel))
