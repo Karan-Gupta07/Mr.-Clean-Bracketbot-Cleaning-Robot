@@ -9,6 +9,21 @@ from rlbot.arm_env import ArmEnv
 
 
 class ArmEnvironmentTests(unittest.TestCase):
+    def test_pick_station_replaces_ball_and_uses_original_hinges(self):
+        import mujoco
+        from rlbot.arm import GRIPPER, FOLLOWER
+        env=ArmEnv()
+        self.assertEqual(env.object_name,'pick_cube')
+        self.assertEqual(env.model.body('table_pick').name,'table_pick')
+        self.assertEqual(mujoco.mj_name2id(env.model,mujoco.mjtObj.mjOBJ_BODY,'ball'),-1)
+        for joint in (*GRIPPER.values(),*FOLLOWER.values()):
+            self.assertEqual(env.model.joint(joint).type[0],mujoco.mjtJoint.mjJNT_HINGE)
+        point=np.array([-.34,-1.71,.7])
+        np.testing.assert_allclose(env.to_task(env.to_world(point)),point,atol=1e-12)
+        obs,_=env.reset(seed=99)
+        self.assertEqual(obs.shape,(20,))
+        self.assertLess(np.linalg.norm(env.cube[:2]-env.start[:2]),1e-8)
+
     def test_policy_actions_select_motion_without_scripted_planner(self):
         with patch('rlbot.manipulation.PickPlace.plan',side_effect=AssertionError('script invoked')):
             env=ArmEnv()

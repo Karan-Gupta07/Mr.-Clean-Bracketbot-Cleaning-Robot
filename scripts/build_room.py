@@ -474,12 +474,12 @@ def check_clearance(model) -> list[str]:
 
 
 def build(check: bool = True) -> None:
-    ROOM_ONLY.write_text(scene_xml(robot=False))
+    ROOM_ONLY.write_text(scene_xml(robot=False), newline="\n")
     mujoco.MjModel.from_xml_path(str(ROOM_ONLY))     # it has to compile on its own
 
-    OUT.write_text(scene_xml())
+    OUT.write_text(scene_xml(), newline="\n")
     model = mujoco.MjModel.from_xml_path(str(OUT))
-    OUT.write_text(scene_xml(keyframe_block(model)))
+    OUT.write_text(scene_xml(keyframe_block(model)), newline="\n")
     model = mujoco.MjModel.from_xml_path(str(OUT))
 
     items = [i for t in TABLES for i in t.items]

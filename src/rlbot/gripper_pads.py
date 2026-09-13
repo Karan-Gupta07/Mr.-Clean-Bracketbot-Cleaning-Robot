@@ -32,7 +32,7 @@ HALF_SPAN = (0.013, THICKNESS / 2, 0.0165)  # half-extents: across, thick, along
 # smaller face loses the 42 mm cube, which the blades grip above its centre
 # and which then rolls out during the carry; a larger one fouls the 54 mm and
 # 58 mm cubes on the way in.
-FRICTION = (3.0, 0.02, 0.002)
+FRICTION = (5.0, 0.02, 0.002)
 SOLREF = (0.008, 1.0)  # slightly soft, so a pad settles onto a face instead of skidding
 
 

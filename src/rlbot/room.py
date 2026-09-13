@@ -146,9 +146,8 @@ def mug(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
 
 
 TABLES = [
-    Table("table_ball", (2.25, -1.10), math.radians(90), [
-        ball("ball", (-0.20, 0.0)),
-        crate("crate_ball", (0.22, 0.0)),
+    Table("table_pick", (2.25, -1.10), math.radians(90), [
+        cube("pick_cube", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
     ]),
     Table("table_cubes", (-0.20, -1.95), math.radians(0), [
         cube("cube_s", (-0.26, 0.03), 0.042, 0.05, (0.90, 0.55, 0.15, 1)),

@@ -121,16 +121,15 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 <section class="tab" id="pane-input" role="tabpanel" aria-labelledby="tab-input" hidden><h2>What the policy sees</h2>
 <p class="note">The actual 20-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×20; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
 <h3>Control path</h3><p class="note">Simulator state → learned input adapter → 4 graph propagation rounds → actor → XYZ increments and jaw opening → <span class="term" tabindex="0" data-term="inverse kinematics">inverse kinematics</span> → joint servos.</p>
-<p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; the fourth requests a per-jaw opening between 0 and 45 mm. Wrist orientation is fixed downward.</p>
+<p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; wrist orientation is fixed downward.</p><p class="note" id="jawMapping"></p>
 <p class="note">The <b id="ioCount"></b> mapped nodes are engineering interfaces. Those roles do not mean the biological neurons encode robot coordinates.</p></section>
 
 <section class="tab" id="pane-science" role="tabpanel" aria-labelledby="tab-science" hidden><h2>What was measured</h2>
-<p class="note">Full-task success for the arm policy. One training seed (7), 48 <span class="term" tabindex="0" data-term="PPO">PPO</span> epochs over 8,192 environment actions:</p>
+<p class="note">Results from the loaded checkpoint's training report, with <span id="trainingSteps"></span> PPO environment actions. Success includes lift, transfer, release, and withdrawal.</p>
 <table class="sci"><tr><th>Checkpoint</th><th>Success</th></tr>
-<tr><td>Demonstrations + release corrections, before PPO (seeds 3000–3009)</td><td>2/10</td></tr>
-<tr><td>Same start, after PPO + rehearsal (seeds 3000–3009)</td><td>10/10</td></tr>
-<tr><td>Final checkpoint, held-out seeds 2000–2009</td><td>10/10</td></tr></table>
-<p class="note">Final placement error across those twenty starts was 6.2–10.7 mm.</p>
+<tr><td>Before PPO (validation seeds 1000?1004)</td><td id="beforeScore"></td></tr>
+<tr><td>After PPO + rehearsal (seeds 2000?2009)</td><td id="afterScore"></td></tr></table>
+<p class="note">These use different evaluation starts. Neither score is a general hardware success rate.</p>
 <div class="caveat">PPO always ran alongside demonstration rehearsal, so this comparison does not separate reinforcement learning from the extra imitation updates.</div>
 <h3>Does the fly wiring help?</h3>
 <p class="note">This arm experiment has <b>no matched conventional-network control run</b>, so it cannot answer that. The companion navigation experiment does have one, and the answer there was no:</p>
@@ -235,10 +234,18 @@ $('pillNeurons').textContent=`${N} mapped neurons`;
 $('aboutNeurons').textContent=N.toLocaleString();$('aboutEdges').textContent=data.edges.length.toLocaleString();
 $('inputCount').textContent=inputCount;$('outputCount').textContent=outputCount;$('ioCount').textContent=`${inputCount} input and ${outputCount} output`;
 const gripper=data.report.gripper||'parallel';
-$('gripperNote').textContent=gripper==='urdf'?'supplied URDF gripper':'parallel-jaw simulation';
-$('gripperScope').textContent=gripper==='urdf'
-  ?'the supplied hooked gripper exactly as the URDF exports it.'
-  :'simulated parallel jaws with pad sliding friction 3.0 — an engineering value, not a measured hardware coefficient, and not the supplied gripper.';
+$('gripperNote').textContent=gripper==='padded'?'original hinged gripper + matching contact pads':gripper==='urdf'?'supplied URDF gripper':'parallel-jaw simulation';
+$('gripperScope').textContent=gripper==='padded'
+  ?`the original meshes and hinge joints, with matching-color pads (simulated sliding friction ${data.report.pad_sliding_friction}). Pads provide the blade contacts; the inflated blade hulls do not collide.`
+  :gripper==='urdf'?'the supplied gripper with no added pads.':'the archived parallel-jaw substitution.';
+$('jawScale').textContent=Number(data.report.jaw_observation_scale||20).toFixed(3);
+$('jawMapping').textContent=gripper==='padded'
+  ?`The fourth output requests a hinge angle from ${data.report.jaw_command_range[0].toFixed(3)} to ${data.report.jaw_command_range[1].toFixed(3)} rad, with a 0.3 rad/s command ramp. URDF joint limits and actuator force limits are unchanged.`
+  :'Jaw commands follow the gripper model recorded in this episode.';
+const training=data.report.training;
+$('trainingSteps').textContent=(data.report.ppo_steps||0).toLocaleString();
+$('beforeScore').textContent=training?`${training.before_ppo.successes}/${training.before_ppo.episodes}`:'Not recorded';
+$('afterScore').textContent=training?`${training.after_ppo.successes}/${training.after_ppo.episodes}`:'Not recorded';
 $('provenance').textContent=`Checkpoint ${data.report.checkpoint_sha256}\nGraph ${data.report.graph_sha256}`;$('provenance').style.overflowWrap='anywhere';
 [...new Set(data.neurons.map(n=>n.super_class))].sort().forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g.replaceAll('_',' ');$('group').append(o)});
 $('scrub').max=frames.length-1;$('status').textContent=`${data.report.successes}/${data.report.episodes} complete`;

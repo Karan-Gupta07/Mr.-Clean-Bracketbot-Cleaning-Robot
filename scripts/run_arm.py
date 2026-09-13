@@ -50,7 +50,8 @@ def graph_payload(graph_path):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--checkpoint',default='out/rl/arm_release/policy.zip')
+    p.add_argument('--checkpoint',default='out/rl/arm_original/policy.zip')
+    p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--seed',type=int,default=2000)
     p.add_argument('--episodes',type=int,default=1)
     p.add_argument('--view',action='store_true')
@@ -62,11 +63,15 @@ def main():
     a=p.parse_args()
     torch.set_num_threads(2)
     policy=PPO.load(a.checkpoint,device='cpu')
-    env=ArmEnv(gripper=a.gripper)
+    config=getattr(policy,'arm_config',None)
+    if a.gripper=='padded' and (not config or config.get('control_version')!=2 or config.get('gripper')!=a.gripper):
+        p.error('This checkpoint was not trained for the current original-gripper controls. Train scripts/train_arm.py first.')
+    env=ArmEnv(gripper=a.gripper,station=a.station)
     frames=[]; gifs=[]; reports=[]
     options=mujoco.MjvOption(); options.geomgroup[3]=0
-    overview=camera([-.26,-1.60,1.0],1.7,-60,-25)
-    detail=camera([-.28,-1.72,.79],.65,100,-30)
+    yaw_degrees=float(np.degrees(env.frame_yaw))
+    overview=camera(env.to_world([-.26,-1.60,1.0]),1.7,-60+yaw_degrees,-25)
+    detail=camera(env.to_world([-.28,-1.72,.79]),.65,100+yaw_degrees,-30)
     env.model.vis.map.znear=.003/env.model.stat.extent
     renderer=mujoco.Renderer(env.model,height=480,width=640) if a.record else None
     viewer=None
@@ -74,7 +79,7 @@ def main():
         import mujoco.viewer as mjviewer
         viewer=mjviewer.launch_passive(env.model,env.data)
         viewer.cam.lookat[:]=overview.lookat
-        viewer.cam.distance,viewer.cam.azimuth,viewer.cam.elevation=1.7,-60,-25
+        viewer.cam.distance,viewer.cam.azimuth,viewer.cam.elevation=1.7,-60+yaw_degrees,-25
         viewer.opt.geomgroup[3]=0
     try:
         for seed in range(a.seed,a.seed+a.episodes):
@@ -92,9 +97,10 @@ def main():
                         for axis in range(2):
                             for sign in (-1,1):
                                 pos=env.goal.copy(); pos[2]=.703; pos[axis]+=sign*.038
+                                pos=env.to_world(pos)
                                 size=np.array([.038,.038,.001]); size[axis]=.001
                                 mujoco.mjv_initGeom(scene.geoms[scene.ngeom],mujoco.mjtGeom.mjGEOM_BOX,
-                                    size,pos,np.eye(3).ravel(),np.array([.2,1,.6,1],dtype=np.float32))
+                                    size,pos,env.frame_rotation.ravel(),np.array([.2,1,.6,1],dtype=np.float32))
                                 scene.ngeom+=1
                         images.append(renderer.render().copy())
                     activity=policy.policy.features_extractor.last_activity[0].cpu().tolist()
@@ -113,10 +119,15 @@ def main():
         if renderer: renderer.close()
         if viewer: viewer.close()
     a.output.mkdir(parents=True,exist_ok=True)
+    training_path=Path(a.checkpoint).parent/'report.json'
+    training=json.loads(training_path.read_text()) if training_path.exists() else None
     report=dict(checkpoint=a.checkpoint,checkpoint_sha256=hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
                 graph_sha256=policy.policy.features_extractor.graph_sha256,
                 controller='learned continuous Cartesian and gripper policy',gripper=a.gripper,
-                pad_sliding_friction=3.0 if a.gripper=='parallel' else None,
+                station=a.station,environment=config,
+                jaw_command_range=[env.jaw_closed,env.jaw_open],jaw_observation_scale=env.jaw_scale,
+                ppo_steps=policy.num_timesteps,training=training,
+                pad_sliding_friction=3.0 if a.gripper=='parallel' else float(env.model.geom_friction[env.model.geom('left_finger__left_finger_pad').id,0]) if a.gripper=='padded' else None,
                 successes=sum(x['success'] for x in reports),
                 episodes=len(reports),runs=reports)
     (a.output/'report.json').write_text(json.dumps(report,indent=2))

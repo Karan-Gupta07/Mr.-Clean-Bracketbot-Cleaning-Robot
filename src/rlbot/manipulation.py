@@ -29,10 +29,10 @@ def hand_for(model, side, gripper="padded"):
     return {"parallel": ParallelGripper, "padded": PaddedGripper}.get(gripper, Gripper)(model, side)
 
 
-def make_model(item_name="cube_m", gripper="padded"):
+def make_model(item_name="cube_m", gripper="padded", table_index=1):
     if gripper not in GRIPPERS:
         raise ValueError(f"gripper must be one of {GRIPPERS}")
-    table = TABLES[1]
+    table = TABLES[table_index]
     spec = mujoco.MjSpec.from_file(str(ROOM))
     for key in list(spec.keys):
         spec.delete(key)

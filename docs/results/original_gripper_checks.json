@@ -1,0 +1,191 @@
+{
+  "urdf_sha256": "4ea3652f2a19141952f93eb1de162d36c95aa851ec59bb942a3dcebcdd3a7d57",
+  "urdf_unchanged": true,
+  "bare": {
+    "successes": 0,
+    "episodes": 3,
+    "runs": [
+      {
+        "seed": 1000,
+        "success": false,
+        "distance": 0.17922129265219716,
+        "max_lift": 0.0,
+        "held_seconds": 0.0,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1001,
+        "success": false,
+        "distance": 0.17740277139014723,
+        "max_lift": 0.006237023662711394,
+        "held_seconds": 0.0,
+        "stable_seconds": 0.0,
+        "steps": 400
+      },
+      {
+        "seed": 1002,
+        "success": false,
+        "distance": 0.17857389241584845,
+        "max_lift": 0.0047507573513577706,
+        "held_seconds": 0.0,
+        "stable_seconds": 0.0,
+        "steps": 400
+      }
+    ]
+  },
+  "pad_sweep": [
+    {
+      "friction": 5,
+      "halfheight": 0.0165,
+      "squeeze": 0.004,
+      "results": {
+        "successes": 3,
+        "episodes": 3,
+        "runs": [
+          {
+            "seed": 1000,
+            "success": true,
+            "distance": 0.011195119708188907,
+            "max_lift": 0.14382728804520573,
+            "held_seconds": 10.156000000000061,
+            "stable_seconds": 0.5499999999999999,
+            "steps": 292
+          },
+          {
+            "seed": 1001,
+            "success": true,
+            "distance": 0.014310173716584364,
+            "max_lift": 0.14433689081066559,
+            "held_seconds": 10.718000000000249,
+            "stable_seconds": 0.5499999999999999,
+            "steps": 304
+          },
+          {
+            "seed": 1002,
+            "success": true,
+            "distance": 0.009295403187617811,
+            "max_lift": 0.14356053003059244,
+            "held_seconds": 10.136000000000054,
+            "stable_seconds": 0.5499999999999999,
+            "steps": 292
+          }
+        ]
+      }
+    },
+    {
+      "friction": 3,
+      "halfheight": 0.022,
+      "squeeze": 0.004,
+      "results": {
+        "successes": 0,
+        "episodes": 3,
+        "runs": [
+          {
+            "seed": 1000,
+            "success": false,
+            "distance": 0.1099136567050679,
+            "max_lift": 0.1442326614109536,
+            "held_seconds": 6.845999999999468,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1001,
+            "success": false,
+            "distance": 0.0993936761507228,
+            "max_lift": 0.14411847655849785,
+            "held_seconds": 6.909999999999461,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1002,
+            "success": false,
+            "distance": 0.11943968291974377,
+            "max_lift": 0.1431673352420164,
+            "held_seconds": 6.401999999999517,
+            "stable_seconds": 0.0,
+            "steps": 400
+          }
+        ]
+      }
+    },
+    {
+      "friction": 5,
+      "halfheight": 0.022,
+      "squeeze": 0.004,
+      "results": {
+        "successes": 0,
+        "episodes": 3,
+        "runs": [
+          {
+            "seed": 1000,
+            "success": false,
+            "distance": 0.1167535719662429,
+            "max_lift": 0.14280578206587802,
+            "held_seconds": 7.527999999999393,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1001,
+            "success": false,
+            "distance": 0.11145576928807509,
+            "max_lift": 0.14267560504605903,
+            "held_seconds": 7.871999999999355,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1002,
+            "success": false,
+            "distance": 0.11516629359101144,
+            "max_lift": 0.1428240852348006,
+            "held_seconds": 7.677999999999376,
+            "stable_seconds": 0.0,
+            "steps": 400
+          }
+        ]
+      }
+    },
+    {
+      "friction": 3,
+      "halfheight": 0.0165,
+      "squeeze": 0.007,
+      "results": {
+        "successes": 1,
+        "episodes": 3,
+        "runs": [
+          {
+            "seed": 1000,
+            "success": false,
+            "distance": 0.016736669007416386,
+            "max_lift": 0.14617935727766052,
+            "held_seconds": 13.74600000000126,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1001,
+            "success": false,
+            "distance": 0.010815155711339957,
+            "max_lift": 0.14888119451407322,
+            "held_seconds": 13.872000000001302,
+            "stable_seconds": 0.0,
+            "steps": 400
+          },
+          {
+            "seed": 1002,
+            "success": true,
+            "distance": 0.01021497942931219,
+            "max_lift": 0.14090136094481742,
+            "held_seconds": 9.919999999999982,
+            "stable_seconds": 0.5499999999999999,
+            "steps": 288
+          }
+        ]
+      }
+    }
+  ]
+}

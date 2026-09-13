@@ -6,6 +6,7 @@ import mujoco
 import numpy as np
 from .manipulation import make_model, hand_for
 from .arm import Arm, ArmIK, down_quat, GRIPPER, FOLLOWER, OPEN
+from .room import TABLES
 
 # Fully-open jaw command, and the factor that normalizes it for the observation.
 # "urdf" is the supplied gripper as exported. "parallel" reproduces the sliding-jaw
@@ -15,14 +16,23 @@ JAWS = {"padded": (OPEN, 1.0 / OPEN), "urdf": (OPEN, 1.0 / OPEN), "parallel": (.
 
 
 class ArmEnv(gym.Env):
-    def __init__(self, gripper='padded'):
+    def __init__(self, gripper='padded', station='pick'):
         self.gripper = gripper
-        self.model = make_model(gripper=gripper)
+        self.station = station
+        table_index = 0 if station == 'pick' else 1
+        self.object_name = 'pick_cube' if station == 'pick' else 'cube_m'
+        table = TABLES[table_index]
+        self.frame_yaw = table.yaw
+        c, s = math.cos(table.yaw), math.sin(table.yaw)
+        self.frame_rotation = np.array([[c,-s,0],[s,c,0],[0,0,1.]])
+        self.frame_origin = np.array([*table.centre,0.])
+        self.reference_origin = np.array([-.20,-1.95,0.])
+        self.model = make_model(item_name=self.object_name,gripper=gripper,table_index=table_index)
         self.data = mujoco.MjData(self.model)
         self.scratch = mujoco.MjData(self.model)
         self.arm = Arm(self.model, self.data, 'right')
-        self.quat = down_quat(0)
-        self.object_id = self.model.body('cube_m').id
+        self.quat = down_quat(self.frame_yaw)
+        self.object_id = self.model.body(self.object_name).id
         self.objq = self.model.jnt_qposadr[self.model.body_jntadr[self.object_id]]
         self.objgeom = self.model.body_geomadr[self.object_id]
         self.fingers = {self.model.body(f + '_finger__' + f + '_finger').id for f in ('left', 'right')}
@@ -51,6 +61,11 @@ class ArmEnv(gym.Env):
             self.jaw_open = self.hand.opening_for(self.cube_width, clearance=0.035)
             self.jaw_scale = 1.0 / self.jaw_open
         self.closed_action = float(np.clip(2 * closed / self.jaw_open - 1, -1, 1))
+        # A bounded command range prevents pincer blades crossing through the cube.
+        # These are controller bounds, not altered URDF joints or force limits.
+        self.jaw_closed = closed if gripper == 'padded' else 0.0
+        if gripper == 'padded':
+            self.closed_action = -1.0
         self.released_qpos = 0.82 * self.jaw_open
         # Fraction of the full 80 mm/s the demonstration teacher may use per phase.
         # The supplied blades grip at an angle and flick the cube out sideways if the
@@ -70,6 +85,12 @@ class ArmEnv(gym.Env):
         self.observation_space = spaces.Box(-np.inf, np.inf, (20,), np.float32)
         self.horizon = 400
 
+    def to_world(self, point):
+        return self.frame_origin + self.frame_rotation @ (np.asarray(point)-self.reference_origin)
+
+    def to_task(self, point):
+        return self.reference_origin + self.frame_rotation.T @ (np.asarray(point)-self.frame_origin)
+
     def contacts(self):
         touching = set()
         for c in self.data.contact:
@@ -84,7 +105,8 @@ class ArmEnv(gym.Env):
         self.start = np.array([-.34, -1.71, .70])
         self.start[:2] += self.np_random.uniform(-.008, .008, 2)
         self.goal = self.start + [.17, 0, .024]
-        self.data.qpos[self.objq:self.objq+3] = self.start
+        self.data.qpos[self.objq:self.objq+3] = self.to_world(self.start)
+        self.data.qpos[self.objq+3:self.objq+7] = [math.cos(self.frame_yaw/2),0,0,math.sin(self.frame_yaw/2)]
         for side in ('right', 'left'):
             self.data.qpos[ArmIK(self.model, side).qadr[3]] = math.pi / 2
         # open the jaws first: the jaw offset this pose is solved for depends on them
@@ -109,16 +131,16 @@ class ArmEnv(gym.Env):
 
     @property
     def cube(self):
-        return self.data.geom_xpos[self.objgeom].copy()
+        return self.to_task(self.data.geom_xpos[self.objgeom])
 
     @property
     def grip_point(self):
         """Where the jaws actually close, which is what has to reach the cube."""
-        return self.arm.grip_pos + self.jaw_shift
+        return self.to_task(self.arm.grip_pos + self.jaw_shift)
 
     def site_for_jaws(self, jaw_target):
         """The site command that puts the jaws on `jaw_target`."""
-        return np.asarray(jaw_target, dtype=float) - self.jaw_shift
+        return self.to_world(jaw_target) - self.jaw_shift
 
     def _obs(self):
         velocity = np.zeros(6)
@@ -126,7 +148,7 @@ class ArmEnv(gym.Env):
         grip = self.grip_point
         return np.concatenate([(grip - self.start)*10,
             (self.cube-grip)*10, (self.goal-self.cube)*10,
-            velocity[3:]*10, [self.data.qpos[self.gripq]*self.jaw_scale, self.contacts()/2],
+            (self.frame_rotation.T @ velocity[3:])*10, [self.data.qpos[self.gripq]*self.jaw_scale, self.contacts()/2],
             (self.target-grip)*10, self.previous[:3]]).astype(np.float32)
 
     def _potential(self):
@@ -144,7 +166,12 @@ class ArmEnv(gym.Env):
         solution = self.arm.ik.solve(self.scratch, self.site_for_jaws(self.target), self.quat,
                                     seed=self.data.ctrl[self.arm.acts], iters=12, restarts=1)
         self.arm.hold(solution.qpos)
-        self.arm.grip((action[3]+1)/2*self.jaw_open)
+        jaw_target = self.jaw_closed + (action[3]+1)/2*(self.jaw_open-self.jaw_closed)
+        if self.gripper == 'padded':
+            # Rate-limit the requested angle, like a real motor command ramp.
+            current = self.data.ctrl[self.arm.grip_act]
+            jaw_target = np.clip(jaw_target, current-.015, current+.015)
+        self.arm.grip(jaw_target)
         for _ in range(25):
             mujoco.mj_step(self.model, self.data)
             lift = float(self.cube[2]-.724)

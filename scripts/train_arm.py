@@ -65,12 +65,13 @@ def main():
     p.add_argument('--resume',type=Path,help='Initialize from an existing arm checkpoint')
     p.add_argument('--correct-release',action='store_true',help='Collect training-only corrections on resumed policy states')
     p.add_argument('--correction-episodes',type=int,default=5)
+    p.add_argument('--station',choices=['pick','cubes'],default='pick')
     p.add_argument('--gripper',choices=['padded','urdf','parallel'],default='padded',
         help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
-    p.add_argument('--output',type=Path,default=Path('out/rl/arm_friction3'))
+    p.add_argument('--output',type=Path,default=Path('out/rl/arm_original'))
     a=p.parse_args()
     torch.set_num_threads(2)
-    env=ArmEnv(gripper=a.gripper)
+    env=ArmEnv(gripper=a.gripper,station=a.station)
     if a.teacher_check:
         print(json.dumps(evaluate(None,env,3),indent=2),flush=True); return
     a.output.mkdir(parents=True,exist_ok=True)
@@ -94,8 +95,10 @@ def main():
         if not kept:
             raise RuntimeError('No successful demonstrations to imitate')
         print(f'kept {kept}/{a.episodes} demonstrations, {len(observations)} transitions',flush=True)
-        np.savez_compressed(demos,observations=observations,actions=actions)
+        np.savez_compressed(demos,observations=observations,actions=actions,gripper=a.gripper,control_version=2)
     d=np.load(demos)
+    if a.gripper=='padded' and ('control_version' not in d or int(d['control_version'])!=2 or str(d['gripper'])!=a.gripper):
+        raise ValueError('Collect new demonstrations for the bounded original-gripper action mapping')
     obs=torch.tensor(d['observations']); actions=torch.tensor(d['actions'])
     if a.resume and (a.resume.parent/'release_corrections.npz').exists():
         previous=np.load(a.resume.parent/'release_corrections.npz')
@@ -106,6 +109,7 @@ def main():
         n_steps=512,batch_size=128,n_epochs=3,vf_coef=.01,ent_coef=0.,seed=7,verbose=0)
     if a.resume:
         model.policy.load_state_dict(PPO.load(a.resume,device='cpu').policy.state_dict())
+    model.arm_config=dict(gripper=a.gripper,station=a.station,control_version=2)
     if a.correct_release:
         if not a.resume:
             p.error('--correct-release requires --resume')
@@ -147,6 +151,7 @@ def main():
     model.save(a.output/'policy')
     after=evaluate(model,env,10,2000)
     report=dict(ppo_steps=model.num_timesteps,imitation_updates=a.updates,before_ppo=before,after_ppo=after,
+                environment=model.arm_config,
                 resume=str(a.resume) if a.resume else None,bc_learning_rate=a.bc_lr,
                 release_corrections=a.correct_release,training_examples=len(obs),
                 graph_sha256=model.policy.features_extractor.graph_sha256,
