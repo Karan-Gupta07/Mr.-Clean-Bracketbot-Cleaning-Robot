@@ -53,9 +53,13 @@ def prepare_flybrain(checkpoint, seed, view=False):
             or report.get('checkpoint_sha256') != hashlib.sha256(checkpoint.read_bytes()).hexdigest()):
         raise RuntimeError('Flybrain checkpoint has not passed its recorded evaluation; use scripts/run_arm.py for diagnostics')
     torch.set_num_threads(2)
-    env = ArmEnv(gripper='padded', station='pick')
     policy = PPO.load(checkpoint, device='cpu')
-    validate_arm_config(getattr(policy, 'arm_config', None), env.configuration)
+    config = getattr(policy, 'arm_config', None)
+    if not isinstance(config, dict):
+        raise RuntimeError('Flybrain checkpoint is missing environment metadata')
+    env = ArmEnv(gripper='padded', station='pick', history=config.get('history_length', 1),
+                 motion_deadband=config.get('motion_deadband', 0.))
+    validate_arm_config(config, env.configuration)
     validate_arm_config(report.get('environment'), env.configuration)
 
     def execute():

@@ -52,6 +52,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--checkpoint',default='out/rl/arm_observable/policy.zip')
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
+    p.add_argument('--history',type=int,default=1,help='Observation history length used to train the checkpoint')
+    p.add_argument('--motion-deadband',type=float,default=0.,help='Cartesian command deadband recorded in the checkpoint')
     p.add_argument('--seed',type=int,default=2000)
     p.add_argument('--episodes',type=int,default=1)
     p.add_argument('--view',action='store_true')
@@ -64,7 +66,7 @@ def main():
     torch.set_num_threads(2)
     policy=PPO.load(a.checkpoint,device='cpu')
     config=getattr(policy,'arm_config',None)
-    env=ArmEnv(gripper=a.gripper,station=a.station)
+    env=ArmEnv(gripper=a.gripper,station=a.station,history=a.history,motion_deadband=a.motion_deadband)
     try:
         validate_arm_config(config,env.configuration)
     except ValueError as error:
@@ -109,7 +111,7 @@ def main():
                         images.append(renderer.render().copy())
                     activity=policy.policy.features_extractor.last_activity[0].cpu().tolist()
                     frames.append(dict(**info,time=float(env.data.time),overview=jpeg(images[0]),
-                        detail=jpeg(images[1]),action=action.tolist(),activity=activity,
+                        detail=jpeg(images[1]),action=action.tolist(),applied_action=env.previous.tolist(),activity=activity,
                         observation=policy_observation.tolist(),reward=float(reward),seed=seed))
                     gifs.append(Image.fromarray(images[0]))
                 if viewer:
@@ -128,12 +130,17 @@ def main():
     report=dict(checkpoint=a.checkpoint,checkpoint_sha256=hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
                 graph_sha256=policy.policy.features_extractor.graph_sha256,
                 controller='learned continuous Cartesian and gripper policy',gripper=a.gripper,
-                station=a.station,environment=config,
+                station=a.station,environment=config,calibration=getattr(policy,'arm_calibration',None),
                 jaw_command_range=[env.jaw_closed,env.jaw_open],jaw_observation_scale=env.jaw_scale,
                 ppo_steps=policy.num_timesteps,training=training,
                 pad_sliding_friction=3.0 if a.gripper=='parallel' else float(env.model.geom_friction[env.model.geom('left_finger__left_finger_pad').id,0]) if a.gripper=='padded' else None,
                 successes=sum(x['success'] for x in reports),
                 episodes=len(reports),runs=reports)
+    validation_path=Path(a.checkpoint).parent/'validation/report.json'
+    if a.record and validation_path.is_file():
+        validation=json.loads(validation_path.read_text())
+        if validation.get('checkpoint_sha256')==report['checkpoint_sha256']:
+            report['validation']={key:validation[key] for key in ('successes','episodes')}
     (a.output/'report.json').write_text(json.dumps(report,indent=2))
     if a.record:
         payload=json.dumps(dict(report=report,frames=frames,**graph_payload(policy.policy.features_extractor.graph_path)),separators=(',',':'),allow_nan=False)

@@ -119,18 +119,20 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 <p class="note" style="margin-top:10px">Bars show each type's mean activation at the current frame, relative to the strongest type's episode peak. Links are summed absolute model weights between types, not measured synapse counts.</p></section>
 
 <section class="tab" id="pane-input" role="tabpanel" aria-labelledby="tab-input" hidden><h2>What the policy sees</h2>
-<p class="note">The actual <span id="observationSize"></span>-value observation used to compute this frame's action. Positions and velocities are scaled ×10; jaw opening ×<span id="jawScale">20</span>; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
+<p class="note">The policy uses <span id="observationSize"></span> values across <span id="historyLength"></span> sampled states. The latest state is shown below; earlier states remain in the recorded observation. Positions and velocities are scaled ×10; jaw opening ×<span id="jawScale">20</span>; contacts ÷2. The camera images are for display only and are not policy inputs.</p><div id="observations"></div>
 <h3>Control path</h3><p class="note">Simulator state → learned input adapter → 4 graph propagation rounds → actor → XYZ increments and jaw opening → <span class="term" tabindex="0" data-term="inverse kinematics">inverse kinematics</span> → joint servos.</p>
-<p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; wrist orientation is fixed downward.</p><p class="note" id="jawMapping"></p>
+<p class="note">Every 50 ms the first three outputs move the commanded grip position by up to 4 mm per axis; wrist orientation is fixed downward.</p><p class="note" id="motionMapping"></p><p class="note" id="jawMapping"></p>
 <p class="note">The <b id="ioCount"></b> mapped nodes are engineering interfaces. Those roles do not mean the biological neurons encode robot coordinates.</p></section>
 
 <section class="tab" id="pane-science" role="tabpanel" aria-labelledby="tab-science" hidden><h2>What was measured</h2>
 <p class="note">Results from the loaded checkpoint's training report, with <span id="trainingSteps"></span> PPO environment actions. Success includes lift, transfer, release, and withdrawal.</p>
 <table class="sci"><tr><th>Checkpoint</th><th>Success</th></tr>
 <tr><td>Before PPO (validation seeds 1000–1004)</td><td id="beforeScore"></td></tr>
-<tr><td>After PPO + rehearsal (seeds 2000–2009)</td><td id="afterScore"></td></tr></table>
+<tr><td>After PPO + rehearsal (seeds 2000–2009)</td><td id="afterScore"></td></tr>
+<tr><td>Post-training calibration (development evaluation)</td><td id="calibratedScore"></td></tr>
+<tr><td>Held-out evaluation (checkpoint-matched)</td><td id="heldoutScore"></td></tr></table>
 <p class="note">These use different evaluation starts. Neither score is a general hardware success rate.</p>
-<div class="caveat">PPO always ran alongside demonstration rehearsal, so this comparison does not separate reinforcement learning from the extra imitation updates.</div>
+<div class="caveat">When PPO is used, it runs alongside demonstration rehearsal; that comparison does not separate reinforcement learning from extra imitation updates. A zero PPO step count means this checkpoint has not undergone reinforcement-learning fine-tuning.</div>
 <h3>Does the fly wiring help?</h3>
 <p class="note">This arm experiment has <b>no matched conventional-network control run</b>, so it cannot answer that. The companion navigation experiment does have one, and the answer there was no:</p>
 <table class="sci"><tr><th>Navigation policy</th><th>Seeds 2000–2019</th></tr>
@@ -141,7 +143,7 @@ footer{padding:0 24px 18px;color:var(--muted);font-size:11px;display:flex;justif
 
 <section class="tab about" id="pane-about" role="tabpanel" aria-labelledby="tab-about" hidden><h2>Measured wiring. Learned control.</h2>
 <p>This controller uses a <b id="aboutNeurons"></b>-neuron subset of the <span class="term" tabindex="0" data-term="FlyWire">FlyWire</span> FAFB v783 <span class="term" tabindex="0" data-term="connectome">connectome</span>, joined by <b id="aboutEdges"></b> measured directed neuron pairs. Neuron IDs, <span class="term" tabindex="0" data-term="neurotransmitter">transmitter</span> predictions and classifications come from the source tables.</p>
-<p>The policy was initialized from demonstrations by <span class="term" tabindex="0" data-term="behavioral cloning">behavioral cloning</span>, then trained with PPO plus demonstration rehearsal. It chooses arm motion and gripper opening; IK and servos execute those commands. No scripted phase sequence or timer selects movements at playback.</p>
+<p>The policy learned from demonstrations by <span class="term" tabindex="0" data-term="behavioral cloning">behavioral cloning</span>. <span id="trainingMethod"></span> It chooses arm motion and gripper opening; IK and servos execute those commands. No scripted phase sequence or timer selects movements at playback.</p>
 <h3>What the animation means</h3>
 <p>Node brightness and size show the saved policy's actual activations. The trace follows the same replay clock as the robot. This is finite <span class="term" tabindex="0" data-term="message passing">message passing</span>, not a biological spiking simulation and not a whole fly brain. Edges show connectivity, not measured information flow.</p>
 <p>One source annotation point represents each neuron; these dots are not complete neuron morphologies. “Policy interfaces” is a conceptual input/internal/output layout, not anatomical position or synaptic hop count.</p>
@@ -209,9 +211,9 @@ const glossary={
  'ALLN':'Antennal-lobe local neuron: wires glomeruli to each other inside the antennal lobe, and is mostly inhibitory.',
  'MBON':'Mushroom body output neuron, which reads out the mushroom body — the fly’s best-studied centre for smell learning and memory.',
  'CX':'Central complex: a midline structure that in real flies tracks heading direction and steers the animal.',
- 'message passing':'One propagation round multiplies the current neuron values by the fixed connection matrix, adds the injected observation, and squashes the result. This controller runs four rounds per action and carries nothing between actions.',
+ 'message passing':'One propagation round multiplies the current neuron values by the fixed connection matrix, adds the injected observation, and squashes the result. This controller runs four rounds per action. Neural activity resets for each action; its input may include a history of sampled robot states.',
  'activation':'A dimensionless number this model computes per neuron: the mean absolute value across its four learned channels. It is not a firing rate and not a spike count.',
- 'PPO':'Proximal Policy Optimization, the reinforcement-learning algorithm that improved this policy after demonstrations initialized it.',
+ 'PPO':'Proximal Policy Optimization, an optional reinforcement-learning stage after demonstration training. Check the recorded PPO step count for this checkpoint.',
  'behavioral cloning':'Supervised training that copies a demonstration’s actions. It initializes this policy before reinforcement learning starts.',
  'inverse kinematics':'Solving for the joint angles that put the gripper at a commanded position. The policy commands positions; IK turns them into seven joint targets.',
  'flow':'FlyWire’s classification of signal direction: afferent neurons bring signals into the brain, efferent neurons carry them out, intrinsic neurons stay inside it.',
@@ -244,8 +246,15 @@ $('jawMapping').textContent=gripper==='padded'
   :'Jaw commands follow the gripper model recorded in this episode.';
 const training=data.report.training;
 $('trainingSteps').textContent=(data.report.ppo_steps||0).toLocaleString();
-$('beforeScore').textContent=training?`${training.before_ppo.successes}/${training.before_ppo.episodes}`:'Not recorded';
-$('afterScore').textContent=training?`${training.after_ppo.successes}/${training.after_ppo.episodes}`:'Not recorded';
+const score=result=>result?`${result.successes}/${result.episodes}`:'Not recorded';
+$('beforeScore').textContent=score(training?.before_ppo);
+$('afterScore').textContent=score(training?.after_ppo);
+$('calibratedScore').textContent=score(training?.evaluation);
+$('heldoutScore').textContent=score(data.report.validation);
+$('trainingMethod').textContent=data.report.ppo_steps>0?'It then underwent PPO plus demonstration rehearsal.':'This checkpoint uses imitation learning without PPO fine-tuning.';
+if(data.report.calibration?.jaw_output_gain) $('jawMapping').textContent+=` Recorded jaw-output gain: ${data.report.calibration.jaw_output_gain}.`;
+const deadband=data.report.environment?.motion_deadband||0;
+$('motionMapping').textContent=deadband?`Cartesian outputs with magnitude below ${deadband} are held at zero. Action bars show the raw policy outputs; the recording also includes the applied commands.`:'No Cartesian motion deadband is configured.';
 $('provenance').textContent=`Checkpoint ${data.report.checkpoint_sha256}\nGraph ${data.report.graph_sha256}`;$('provenance').style.overflowWrap='anywhere';
 [...new Set(data.neurons.map(n=>n.super_class))].sort().forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g.replaceAll('_',' ');$('group').append(o)});
 $('scrub').max=frames.length-1;$('status').textContent=`${data.report.successes}/${data.report.episodes} complete`;
@@ -253,6 +262,7 @@ $('scrub').max=frames.length-1;$('status').textContent=`${data.report.successes}
   row.innerHTML=`<span>${label}</span><div class="track"><div id="bar${k}" class="fill"></div></div><span id="value${k}"></span>`;$('actions').append(row)});
 const observationSize=frames[0].observation?.length||20;
 $('observationSize').textContent=observationSize;
+$('historyLength').textContent=data.report.environment?.history_length||1;
 const obsNames=['Grip / start X','Grip / start Y','Grip / start Z','Cube / grip X','Cube / grip Y','Cube / grip Z','Goal / cube X','Goal / cube Y','Goal / cube Z','Cube velocity X','Cube velocity Y','Cube velocity Z','Jaw opening','Finger contacts','Command error X','Command error Y','Command error Z','Previous action X','Previous action Y','Previous action Z','Jaw command','Jaw velocity','Previous jaw action'].slice(0,observationSize);
 obsNames.forEach((name,k)=>{const row=document.createElement('div');row.className='observation';
   const label=document.createElement('span');label.textContent=name;const value=document.createElement('b');value.id='obs'+k;row.append(label,value);$('observations').append(row)});
@@ -421,7 +431,7 @@ function renderFrame(){const f=frames[i];
   $('time').textContent=`${f.time.toFixed(1)} / ${frames.at(-1).time.toFixed(1)} s`;
   $('distance').textContent=(f.distance*1000).toFixed(1);$('lift').textContent=(f.max_lift*100).toFixed(1);$('held').textContent=f.held_seconds.toFixed(1);
   f.action.forEach((v,k)=>{$('bar'+k).style.left=(v<0?50+v*50:50)+'%';$('bar'+k).style.width=Math.abs(v)*50+'%';$('value'+k).textContent=v.toFixed(3)});
-  obsNames.forEach((_,k)=>$('obs'+k).textContent=f.observation?.[k]?.toFixed(4)??'Unavailable');
+  obsNames.forEach((_,k)=>$('obs'+k).textContent=f.observation?.[observationSize-obsNames.length+k]?.toFixed(4)??'Unavailable');
   $('activity').textContent=selected!==null?f.activity[selected].toFixed(4):focusType?types.get(focusType).mean[i].toFixed(4):'—';
   trace();updateLog();typeList();
   $('topActive').replaceChildren();

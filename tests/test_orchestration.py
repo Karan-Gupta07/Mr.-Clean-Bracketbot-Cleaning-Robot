@@ -3,9 +3,10 @@ import math
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'scripts')]
 from rlbot.orchestration import (Dispatcher, Recognition, Target, ToolResult,
                                  classify_scene, route_for, station_at)
 from rlbot.room import TABLES
@@ -86,6 +87,67 @@ class RoutingTests(unittest.TestCase):
         for point in ((0,0), (math.nan,0), (1,), (99,99)):
             with self.assertRaises(ValueError):
                 station_at(point)
+
+
+class FlybrainPreflightTests(unittest.TestCase):
+    def setUp(self):
+        import hashlib
+        import tempfile
+        from rlbot.arm_env import ArmEnv
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.checkpoint = Path(directory.name)/'policy.zip'
+        self.checkpoint.write_bytes(b'test checkpoint, not a learned policy')
+        self.report_path = self.checkpoint.parent/'validation/report.json'
+        self.report_path.parent.mkdir()
+        self.config = ArmEnv(history=16,motion_deadband=.05).configuration
+        self.report = dict(episodes=20, successes=20, environment=self.config,
+                           checkpoint_sha256=hashlib.sha256(self.checkpoint.read_bytes()).hexdigest())
+
+    def write_report(self, **changes):
+        import json
+        self.report_path.write_text(json.dumps(dict(self.report, **changes)))
+
+    def test_failed_missing_and_different_checkpoint_reports_never_load_policy(self):
+        from orchestrate import prepare_flybrain
+        with patch('stable_baselines3.PPO.load') as load:
+            with self.assertRaisesRegex(RuntimeError, 'no validation report'):
+                prepare_flybrain(self.checkpoint, 3000)
+            for changes in (dict(episodes=19, successes=19), dict(successes=0),
+                            dict(checkpoint_sha256='different checkpoint')):
+                self.write_report(**changes)
+                with self.subTest(changes=changes), self.assertRaises(RuntimeError):
+                    prepare_flybrain(self.checkpoint, 3000)
+            load.assert_not_called()
+
+    def test_history_preflight_selects_matching_input_without_running_actions(self):
+        from orchestrate import prepare_flybrain
+        self.write_report()
+        policy = Mock(arm_config=self.config)
+        with patch('stable_baselines3.PPO.load', return_value=policy), \
+                patch('rlbot.arm_env.ArmEnv') as factory:
+            factory.return_value.configuration = self.config
+            execute = prepare_flybrain(self.checkpoint, 3000)
+            factory.assert_called_once_with(gripper='padded', station='pick', history=16, motion_deadband=.05)
+            self.assertTrue(callable(execute))
+            policy.predict.assert_not_called()
+            factory.return_value.step.assert_not_called()
+
+    def test_history_report_and_checkpoint_must_both_match_environment(self):
+        from orchestrate import prepare_flybrain
+        policy = Mock(arm_config=self.config)
+        self.write_report(environment=dict(self.config, history_length=8))
+        with patch('stable_baselines3.PPO.load', return_value=policy):
+            with self.assertRaises(ValueError):
+                prepare_flybrain(self.checkpoint, 3000)
+            self.write_report()
+            policy.arm_config = dict(self.config, station='cubes')
+            with self.assertRaises(ValueError):
+                prepare_flybrain(self.checkpoint, 3000)
+            policy.arm_config = None
+            with self.assertRaisesRegex(RuntimeError, 'missing environment metadata'):
+                prepare_flybrain(self.checkpoint, 3000)
+        policy.predict.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -28,6 +28,40 @@ class ArmEnvironmentTests(unittest.TestCase):
         self.assertEqual(obs.shape,(23,))
         self.assertLess(np.linalg.norm(env.cube[:2]-env.start[:2]),1e-8)
 
+    def test_history_is_causal_and_reset_does_not_leak_previous_episodes(self):
+        env=ArmEnv(history=16)
+        first,_=env.reset(seed=99)
+        self.assertEqual(env.observation_space.shape,(16*23,))
+        np.testing.assert_array_equal(first.reshape(16,23),np.tile(env._obs(),(16,1)))
+        second,*_=env.step([0,0,-1,1])
+        np.testing.assert_array_equal(second.reshape(16,23)[:-1],first.reshape(16,23)[1:])
+        np.testing.assert_array_equal(second[-23:],env._obs())
+        self.assertFalse(np.array_equal(first,second))
+        second[:]=123
+        reset,_=env.reset(seed=99)
+        np.testing.assert_array_equal(first,reset)
+        self.assertFalse(hasattr(env,'phase'))
+        self.assertFalse(hasattr(env,'teacher'))
+
+    def test_motion_deadband_suppresses_only_small_cartesian_commands(self):
+        env=ArmEnv(history=16,motion_deadband=.05)
+        env.reset(seed=99)
+        initial=env.target.copy()
+        observation,*_=env.step([.04,.06,-.03,-.5])
+        np.testing.assert_allclose(env.target-initial,[0,.00024,0],atol=1e-12)
+        np.testing.assert_allclose(env.previous,[0,.06,0,-.5])
+        np.testing.assert_allclose(observation[-23:][17:20],[0,.06,0])
+        self.assertEqual(env.configuration['control_version'],6)
+        self.assertEqual(env.configuration['motion_deadband'],.05)
+        for value in (-.1,1,np.nan,np.inf):
+            with self.subTest(deadband=value), self.assertRaises(ValueError):
+                ArmEnv(motion_deadband=value)
+
+    def test_history_rejects_invalid_lengths(self):
+        for history in (0,-1,65,1.5,True):
+            with self.subTest(history=history), self.assertRaises(ValueError):
+                ArmEnv(history=history)
+
     def test_grasp_width_matches_the_selected_station_cube(self):
         for station in ('pick','cubes'):
             env=ArmEnv(station=station)

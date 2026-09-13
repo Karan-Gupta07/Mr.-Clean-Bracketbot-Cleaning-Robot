@@ -31,6 +31,109 @@ class ArmCompatibilityTests(unittest.TestCase):
             with self.subTest(config=bad), self.assertRaises(ValueError):
                 validate_arm_config(bad, env.configuration)
 
+    def test_history_metadata_cannot_be_used_with_a_single_frame_checkpoint(self):
+        single = ArmEnv()
+        history = ArmEnv(history=16)
+        self.assertEqual(single.configuration['control_version'], 4)
+        self.assertEqual(history.configuration['control_version'], 5)
+        self.assertEqual(history.configuration['history_length'], 16)
+        self.assertEqual(history.configuration['observation_size'], 368)
+        for key in ('physics_sha256','robot_sha256','scene_sha256'):
+            self.assertEqual(single.configuration[key], history.configuration[key])
+        with self.assertRaises(ValueError):
+            validate_arm_config(single.configuration, history.configuration)
+        with self.assertRaises(ValueError):
+            validate_arm_config(history.configuration, single.configuration)
+        calibrated = ArmEnv(history=16,motion_deadband=.05)
+        with self.assertRaises(ValueError):
+            validate_arm_config(history.configuration, calibrated.configuration)
+        self.assertEqual(history.configuration['physics_sha256'],calibrated.configuration['physics_sha256'])
+
+    def test_deadband_matches_external_command_filtering(self):
+        reference = ArmEnv(history=16)
+        env = ArmEnv(history=16,motion_deadband=.05)
+        reference.reset(seed=99)
+        env.reset(seed=99)
+        for _ in range(20):
+            action = np.array([.04,.06,-.03,-.5])
+            filtered = action.copy()
+            filtered[:3] = np.where(np.abs(filtered[:3])<.05,0,filtered[:3])
+            expected, *expected_result = reference.step(filtered)
+            actual, *actual_result = env.step(action)
+            np.testing.assert_array_equal(actual,expected)
+            self.assertEqual(actual_result,expected_result)
+
+    def test_history_matches_gym_frame_stacking(self):
+        import gymnasium as gym
+        reference = gym.wrappers.FlattenObservation(gym.wrappers.FrameStackObservation(ArmEnv(), 16))
+        env = ArmEnv(history=16)
+        expected, _ = reference.reset(seed=99)
+        actual, _ = env.reset(seed=99)
+        np.testing.assert_array_equal(actual, expected)
+        for _ in range(20):
+            expected, *expected_result = reference.step([0,0,-.1,1])
+            actual, *actual_result = env.step([0,0,-.1,1])
+            np.testing.assert_array_equal(actual, expected)
+            self.assertEqual(actual_result, expected_result)
+
+    def test_history_distinguishes_the_teacher_open_close_transition(self):
+        env = ArmEnv(history=16)
+        observation, _ = env.reset(seed=1000)
+        teacher = Teacher()
+        records = []
+        for step in range(39):
+            action = teacher.action(env)
+            if step in (37, 38):
+                records.append((observation.copy(), action.copy()))
+            observation, *_ = env.step(action)
+        before, after = records
+        self.assertEqual(before[1][3], 1)
+        self.assertEqual(after[1][3], -1)
+        self.assertLess(np.linalg.norm(before[0][-23:]-after[0][-23:]), .002)
+        self.assertGreater(np.linalg.norm(before[0]-after[0]), 1)
+
+    def test_jaw_calibration_only_scales_the_learned_jaw_output(self):
+        from types import SimpleNamespace
+        import torch
+        from train_arm import calibrate_jaw
+        actor = torch.nn.Linear(3,4)
+        model = SimpleNamespace(policy=SimpleNamespace(action_net=actor))
+        observations = torch.arange(15,dtype=torch.float32).reshape(5,3)/10
+        before = actor(observations).detach().clone()
+        calibrate_jaw(model,1.25)
+        after = actor(observations).detach()
+        torch.testing.assert_close(after[:,:3],before[:,:3])
+        torch.testing.assert_close(after[:,3],before[:,3]*1.25)
+        self.assertEqual(model.arm_calibration,dict(jaw_output_gain=1.25))
+        for bad in (0,-1,np.nan,np.inf):
+            with self.subTest(gain=bad), self.assertRaises(ValueError):
+                calibrate_jaw(model,bad)
+            torch.testing.assert_close(actor(observations).detach(),after)
+
+    def test_jaw_recalibration_preserves_deadband_unless_explicitly_changed(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        import torch
+        import train_arm
+        original = ArmEnv(history=16,motion_deadband=.05).configuration
+        with tempfile.TemporaryDirectory() as output:
+            for arguments, expected in (([],.05),(['--motion-deadband','0.03'],.03)):
+                policy = SimpleNamespace(action_net=torch.nn.Linear(3,4),
+                                         features_extractor=SimpleNamespace(graph_sha256='test graph'))
+                model = SimpleNamespace(policy=policy,arm_config=original.copy(),
+                                        num_timesteps=0,save=Mock())
+                argv = ['train_arm.py','--history','16','--resume','test.zip',
+                        '--calibrate-jaw','1.25','--output',output,*arguments]
+                with patch.object(sys,'argv',argv), patch.object(train_arm.PPO,'load',return_value=model), \
+                        patch.object(train_arm,'evaluate',return_value=dict(successes=0,episodes=10)), \
+                        patch('builtins.print'):
+                    train_arm.main()
+                self.assertEqual(model.arm_config['motion_deadband'],expected)
+                self.assertEqual(model.arm_config['history_length'],16)
+                self.assertEqual(model.arm_calibration,dict(jaw_output_gain=1.25))
+                model.save.assert_called_once()
+
     def test_rate_limiter_command_is_visible_to_the_policy(self):
         env = ArmEnv()
         observation, _ = env.reset(seed=99)
@@ -83,6 +186,27 @@ class ArmCompatibilityTests(unittest.TestCase):
         result = subprocess.run([node,'--check'],input=script,encoding='utf-8',capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
 
+    def test_replay_handles_imitation_only_and_calibrated_training_reports(self):
+        import json
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('Node is optional for the replay metadata check')
+        template = (ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
+        section = 'const training=' + template.split('const training=',1)[1].split("$('provenance')",1)[0]
+        script = "const elements={}; const $=id=>elements[id]??={};\n"
+        script += "const data={report:{ppo_steps:0,training:{evaluation:{successes:9,episodes:10}}}};\n"
+        script += section + '\nconsole.log(JSON.stringify(elements));'
+        result = subprocess.run([node],input=script,encoding='utf-8',capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        fields = json.loads(result.stdout)
+        self.assertEqual(fields['beforeScore']['textContent'],'Not recorded')
+        self.assertEqual(fields['afterScore']['textContent'],'Not recorded')
+        self.assertEqual(fields['calibratedScore']['textContent'],'9/10')
+        self.assertEqual(fields['heldoutScore']['textContent'],'Not recorded')
+        self.assertIn('without PPO',fields['trainingMethod']['textContent'])
+
     def test_replay_has_targets_for_recorded_gripper_metadata(self):
         from html.parser import HTMLParser
         class Elements(HTMLParser):
@@ -94,7 +218,7 @@ class ArmCompatibilityTests(unittest.TestCase):
         parser = Elements()
         parser.feed((ROOT/'demo/arm_rl.html').read_text(encoding='utf-8'))
         self.assertTrue({'jawScale','jawMapping','beforeScore','afterScore',
-                         'gripperScope','gripperNote','trainingSteps','observationSize'} <= parser.ids)
+                         'gripperScope','gripperNote','trainingSteps','observationSize','historyLength'} <= parser.ids)
 
     def test_teacher_can_release_and_withdraw_before_timeout(self):
         env = ArmEnv()

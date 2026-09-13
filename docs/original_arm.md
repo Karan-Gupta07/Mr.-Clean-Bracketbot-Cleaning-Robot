@@ -59,10 +59,50 @@ New training goes to `out/rl/arm_observable`; the failed artifacts are preserved
 The replay reads the observation count from the actual recording. This version
 also failed: **0/10** evaluation starts and **0/20** held-out starts (3000–3019).
 The missing-input fix is verified, but it is not a working learned grasp policy.
-Increasing the jaw-output gain in diagnostic trials did not recover a grasp and
-was not adopted. Dispatch remains blocked. Further work must repair the learned
-grip transitions rather than reuse the scripted teacher as a hidden fallback.
-Measured integration results are in `docs/results/integration.json`.
+Increasing the jaw-output gain in that single-frame experiment did not recover
+a grasp and was not adopted. The later history-based experiment below has a
+different result. Measured integration results are in `docs/results/integration.json`.
+
+### History and output calibration
+
+The teacher's private wait counter gave nearly identical single-frame inputs
+opposing open/close labels. Optional `--history 16` supplies 368 values from
+16 causal observations, with episode-reset padding and no teacher phase or
+future state. Control version 5 records that history length; version 4 and its
+single-frame checkpoints remain the default for backward compatibility.
+
+After 4,000 imitation updates on 17 successful demonstrations, history alone
+still passed **0/5** development starts. A recorded **1.25x learned jaw-output
+gain** then passed **9/10** development starts and **17/20** fresh held-out starts
+(4000–4019). The gain scales the actor's jaw-output weights; command bounds,
+rate limits, URDF and physics are unchanged. It does not invoke a teacher.
+
+An additional Cartesian command deadband of **0.05** passed **9/10** development
+starts and **18/20** new held-out starts (5000–5019). It suppresses outputs below
+0.2 mm per control step, without choosing task phases. Control version 6 records
+the deadband, and replay data includes both raw outputs and applied commands.
+Seeds 5011 and 5012 still failed release/placement. The two held-out sets differ;
+they are not a paired ablation. Both calibrated candidates are **imitation-only**
+(zero PPO steps), not successful PPO runs. They remain blocked by the unchanged
+20/20 dispatch requirement, and no default checkpoint was replaced.
+
+The saved candidates are `out/rl/arm_history_calibrated/policy.zip` and
+`out/rl/arm_history_deadband/policy.zip`, with checkpoint-bound reports in each
+`validation/` directory. A diagnostic replay of the first candidate is in
+`out/arm_history_demo/index.html`; its successful displayed episode is separate
+from its 17/20 held-out score. All these artifacts remain local and ignored.
+
+To reproduce the history training and explicit calibration in new directories:
+
+```powershell
+.venv\Scripts\python.exe scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_reproduction
+.venv\Scripts\python.exe scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_reproduction/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_calibrated_reproduction
+.venv\Scripts\python.exe scripts/run_arm.py --history 16 --motion-deadband 0.05 --checkpoint out/rl/arm_calibrated_reproduction/policy.zip --episodes 20 --seed 5000 --output out/rl/arm_calibrated_reproduction/validation
+```
+
+Reusing a published evaluation seed set is a regression check, not a new
+held-out result after further tuning. Further release robustness and optional
+PPO fine-tuning remain outstanding; neither may hide a scripted fallback.
 
 Checkpoints and demonstration datasets must match the gripper, station, control
 version, horizon, physics fingerprint, and generated robot/room hashes. This

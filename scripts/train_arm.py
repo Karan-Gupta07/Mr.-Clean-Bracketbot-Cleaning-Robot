@@ -41,6 +41,16 @@ class Teacher:
         return np.r_[np.clip((target-env.target)/.004,-rate,rate),grip].astype(np.float32)
 
 
+def calibrate_jaw(model, gain):
+    if not np.isfinite(gain) or gain <= 0:
+        raise ValueError('Jaw output gain must be finite and positive')
+    with torch.no_grad():
+        model.policy.action_net.weight[3].mul_(gain)
+        model.policy.action_net.bias[3].mul_(gain)
+    previous = (getattr(model,'arm_calibration',None) or {}).get('jaw_output_gain',1.)
+    model.arm_calibration = dict(jaw_output_gain=previous*gain)
+
+
 def evaluate(model, env, count, start=1000):
     runs=[]
     for seed in range(start,start+count):
@@ -66,17 +76,43 @@ def main():
     p.add_argument('--dagger-updates',type=int,default=1000)
     p.add_argument('--demonstrations',type=Path,help='Reuse a collected demonstration dataset')
     p.add_argument('--resume',type=Path,help='Initialize from an existing arm checkpoint')
+    p.add_argument('--calibrate-jaw',type=float,help='Only scale a saved policy jaw output and evaluate it; requires --resume')
     p.add_argument('--correct-release',action='store_true',help='Collect training-only corrections on resumed policy states')
     p.add_argument('--correction-episodes',type=int,default=5)
     p.add_argument('--station',choices=['pick','cubes'],default='pick')
+    p.add_argument('--history',type=int,default=1,help='Number of causal observations per action (1 to 64)')
+    p.add_argument('--motion-deadband',type=float,help='Cartesian output deadband; defaults to zero for training or the saved value for calibration')
     p.add_argument('--gripper',choices=['padded','urdf','parallel'],default='padded',
         help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
     p.add_argument('--output',type=Path,default=Path('out/rl/arm_observable'))
     a=p.parse_args()
     torch.set_num_threads(2)
-    env=ArmEnv(gripper=a.gripper,station=a.station)
+    env=ArmEnv(gripper=a.gripper,station=a.station,history=a.history,
+               motion_deadband=0. if a.motion_deadband is None else a.motion_deadband)
     if a.teacher_check:
         print(json.dumps(evaluate(None,env,3),indent=2),flush=True); return
+    if a.calibrate_jaw is not None:
+        if not a.resume or not np.isfinite(a.calibrate_jaw) or a.calibrate_jaw <= 0:
+            p.error('--calibrate-jaw requires --resume and a finite positive gain')
+        model=PPO.load(a.resume,device='cpu')
+        prior_config=getattr(model,'arm_config',None)
+        prior_deadband=prior_config.get('motion_deadband',0.) if isinstance(prior_config,dict) else 0.
+        prior_env=ArmEnv(gripper=a.gripper,station=a.station,history=a.history,motion_deadband=prior_deadband)
+        validate_arm_config(prior_config,prior_env.configuration)
+        if a.motion_deadband is None:
+            env=prior_env
+        calibrate_jaw(model,a.calibrate_jaw)
+        model.arm_config=env.configuration
+        a.output.mkdir(parents=True,exist_ok=True)
+        model.save(a.output/'policy')
+        score=evaluate(model,env,10,2000)
+        report=dict(operation='post-training jaw-output and motion-deadband calibration',resume=str(a.resume),
+                    environment=model.arm_config,calibration=model.arm_calibration,
+                    ppo_steps=model.num_timesteps,evaluation=score,
+                    graph_sha256=model.policy.features_extractor.graph_sha256)
+        (a.output/'report.json').write_text(json.dumps(report,indent=2))
+        print('Calibrated evaluation',score,flush=True)
+        return
     a.output.mkdir(parents=True,exist_ok=True)
     demos=a.demonstrations or a.output/'demonstrations.npz'
     if not demos.exists():
@@ -148,7 +184,9 @@ def main():
     for i in range(a.updates):
         ids=torch.randint(len(obs),(256,))
         loss=(model.policy.get_distribution(obs[ids]).distribution.mean-actions[ids]).square().mean()
-        optimizer.zero_grad(); loss.backward(); optimizer.step()
+        optimizer.zero_grad(); loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.policy.parameters(),1.0)
+        optimizer.step()
         if (i+1)%250==0: print('BC',i+1,float(loss.detach()),flush=True)
     dagger=[]
     rng=np.random.default_rng(7)
@@ -169,7 +207,9 @@ def main():
         for _ in range(a.dagger_updates):
             ids=torch.randint(len(obs),(256,))
             loss=(model.policy.get_distribution(obs[ids]).distribution.mean-actions[ids]).square().mean()
-            optimizer.zero_grad(); loss.backward(); optimizer.step()
+            optimizer.zero_grad(); loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.policy.parameters(),1.0)
+            optimizer.step()
         score=evaluate(model,env,3)
         dagger.append(score)
         print('DAgger validation',round_index,score,flush=True)
