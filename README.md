@@ -90,14 +90,23 @@ shoulder at 30 fps and pipes to `ffmpeg`; it runs headless.
 tool calls from a top-level agent. The agent has three tools.
 
 ```
-prompt
-  │
-  ▼
-top-level agent (Claude Fable 5.1, or keyword routing with --planner sweep)
-  │
-  ├── go_to(station)     A* route, curved trajectory, balancing drive, park
-  ├── manipulate()       the controller bolted to the table the robot is parked at
-  └── finished(summary)  stop
+prompt  "clean the cubes, then pick up the blue cube, then go to the ACT table"
+│
+└── top-level agent ─────────── Claude Fable 5.1, or keyword routing with --planner sweep
+    │                           scripts/demo.py · TOP_TOOLS
+    │
+    ├── go_to(station) ───────── src/rlbot/live.py → src/rlbot/navigate.py
+    │   ├── plan                 A* on the inflated room grid        planner.py · navmap.py
+    │   ├── drive                exit → turn → curve → dock, replan between phases
+    │   └── park                 weld chassis to world (data.eq_active), impratio 200
+    │
+    ├── manipulate() ─────────── dispatches on the table the robot is parked at
+    │   ├── cubes                Fable skills agent, nested          scripts/agent.py · skills.py
+    │   │   └── look · pick · place · home · give_up · finished
+    │   ├── pick                 fly-brain arm policy                live_arm.py · connectome.py
+    │   └── ball                 ACT, one closed-loop episode        act.py
+    │
+    └── finished(summary) ────── stop
 ```
 
 `manipulate` dispatches on the station:
@@ -646,75 +655,95 @@ Live viewers (`mjpython`):
 ## Folder layout
 
 ```
-models/bracketbot/          The original URDF and 50 meshes. Never edited.
-models/bracketbot.xml       The robot in MuJoCo format. Made by build_mjcf.py.
-models/room.xml             The room alone. models/room_scene.xml adds the robot.
-models/balancer.xml         A toy two-wheeler for quick controller checks.
-
-checkpoints/                ACT weights and configs, the fly-brain arm policy, graph_512.npz.
-demo/                       Recordings: tour.mov, ACT.mov, pick_place.gif, fly_brain_point_goal_pilot.gif.
-docs/                       arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
-
-scripts/demo.py             One prompt, one simulation. The main entry point.
-scripts/agent.py            The cubes skills agent, Fable or sweep.
-scripts/orchestrate.py      Deterministic recognition-to-tool dispatch.
-scripts/live_demo.py        Older two-window demo.
-scripts/build_mjcf.py       URDF to MuJoCo, with the fixes.
-scripts/build_room.py       Writes the room, checks clearance and reach.
-scripts/evaluate.py         Headless balance test, optional shove.
-scripts/balance.py          Balance viewer.  scripts/room.py: drive around.
-scripts/plan_path.py        Plans and draws the nine routes.
-scripts/navigate.py         Drives the nine routes in the sim.
-scripts/check_navigation.py Unit checks for grid, planner, navigator.
-scripts/validate_ik.py      IK checks.
-scripts/check_grasp.py      Grasp probe on every object.
-scripts/check_arm_clearance.py  Arm-to-chassis clearance. Broken; see Known issues.
-scripts/check_slam_inputs.py    Local lidar/odometry checks. Broken; see Known issues.
-scripts/record_slam_inputs.py   Records wheel, IMU, odometry and scans to an .npz.
-scripts/check_ros_mapping.py    The ROS 2 SLAM acceptance gate; runs inside Docker.
-scripts/teleop.py           Keyboard teleop, records demonstrations.
-scripts/collect_demos.py    Scripted demonstrations.
-scripts/render_demos.py     Renders cameras for recorded demonstrations.
-scripts/audit_demos.py      Cuts bad demonstrations, writes a manifest.
-scripts/train_act.py        Trains ACT.  scripts/rollout_act.py: runs it.
-scripts/run_act.py          Describes or checks the shipped ACT checkpoint.
-scripts/replay_demo.py      Plays recorded episodes back.
-scripts/prepare_connectome.py   Downloads FlyWire tables, builds the graph.
-scripts/train_connectome.py     Fly-brain navigation pilot.
-scripts/evaluate_navigation.py  Scores navigation checkpoints.
-scripts/record_brain_demo.py    Records the point-goal pilot to a GIF.
-scripts/benchmark_connectome.py Full-graph forward-pass timing.
-scripts/train_arm.py        Fly-brain arm policy: teacher, BC, PPO, calibration.
-scripts/run_arm.py          Runs an arm checkpoint; viewer, record, validation.
-scripts/pick_place.py       Scripted fixed-base pick-and-place baseline.
-scripts/view_cameras.py     Shows the head and wrist cameras.
-
-src/rlbot/robot.py          Load the robot, read its state, step the sim.
-src/rlbot/control.py        PD balance and drive controllers.
-src/rlbot/room.py           What is on each table and where.
-src/rlbot/sensing.py        Lidar and wheel odometry.
-src/rlbot/sensors.py        Lidar used by the ROS bridge and the recorder.
-src/rlbot/odometry.py       Wheel and gyro odometry integration.
-src/rlbot/navmap.py         Occupancy grids, inflation, footprint checks.
-src/rlbot/planner.py        A*, splines, speed schedules.
-src/rlbot/navigate.py       The phase-at-a-time navigator.
-src/rlbot/navigation.py     Gymnasium env for the fly-brain navigation pilot.
-src/rlbot/live.py           The one-model continuous simulation: drive, park, pads.
-src/rlbot/live_arm.py       Runs the fly-brain arm policy on the live sim.
-src/rlbot/arm.py            Arm IK.
-src/rlbot/grasp.py          Grasp motions, the station keeper, the Rig.
-src/rlbot/gripper_pads.py   Fitted pads for the fly-brain gripper.
-src/rlbot/skills.py         The six skills the cubes agent calls.
-src/rlbot/orchestration.py  Recognition validation and dispatch.
-src/rlbot/act.py            ACT model, data loader, checkpoints.
-src/rlbot/arm_env.py        Fly-brain arm env.
-src/rlbot/connectome.py     ConnectomeFeatures.
-src/rlbot/teleop.py         Jog controller and demonstration recorder.
-src/rlbot/filming.py        Records a run to mp4.
-src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' IK library (Linux arm64).
-
-ros2_ws/src/rlbot_bridge/   ROS 2 Jazzy package: simulation bridge, save_map, navigate.
-docker/, Dockerfile         The rlbot:jazzy image.
+RL-BOT
+├── models/
+│   ├── bracketbot/                 The original URDF and 50 meshes. Never edited.
+│   ├── bracketbot.xml              The robot in MuJoCo format. Made by build_mjcf.py.
+│   ├── room.xml                    The room alone.
+│   ├── room_scene.xml              The room with the robot in it.
+│   └── balancer.xml                A toy two-wheeler for quick controller checks.
+│
+├── checkpoints/                    ACT weights and configs, the fly-brain arm policy, graph_512.npz.
+├── demo/                           Recordings: tour.mov, ACT.mov, pick_place.gif, fly_brain_point_goal_pilot.gif.
+├── docs/                           arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
+│
+├── scripts/
+│   │  ── demo ──
+│   ├── demo.py                     One prompt, one simulation. The main entry point.
+│   ├── agent.py                    The cubes skills agent, Fable or sweep.
+│   ├── orchestrate.py              Deterministic recognition-to-tool dispatch.
+│   ├── live_demo.py                Older two-window demo.
+│   │  ── simulation ──
+│   ├── build_mjcf.py               URDF to MuJoCo, with the fixes.
+│   ├── build_room.py               Writes the room, checks clearance and reach.
+│   ├── evaluate.py                 Headless balance test, optional shove.
+│   ├── balance.py                  Balance viewer.
+│   ├── room.py                     Drive around the room by keyboard.
+│   ├── view_cameras.py             Shows the head and wrist cameras.
+│   ├── validate_ik.py              IK checks.
+│   ├── check_grasp.py              Grasp probe on every object.
+│   ├── check_arm_clearance.py      Arm-to-chassis clearance. Broken; see Known issues.
+│   │  ── path finding ──
+│   ├── plan_path.py                Plans and draws the nine routes.
+│   ├── navigate.py                 Drives the nine routes in the sim.
+│   ├── check_navigation.py         Unit checks for grid, planner, navigator.
+│   ├── check_slam_inputs.py        Local lidar/odometry checks. Broken; see Known issues.
+│   ├── record_slam_inputs.py       Records wheel, IMU, odometry and scans to an .npz.
+│   ├── check_ros_mapping.py        The ROS 2 SLAM acceptance gate; runs inside Docker.
+│   │  ── ACT ──
+│   ├── teleop.py                   Keyboard teleop, records demonstrations.
+│   ├── collect_demos.py            Scripted demonstrations.
+│   ├── render_demos.py             Renders cameras for recorded demonstrations.
+│   ├── audit_demos.py              Cuts bad demonstrations, writes a manifest.
+│   ├── replay_demo.py              Plays recorded episodes back.
+│   ├── train_act.py                Trains ACT.
+│   ├── rollout_act.py              Runs a trained ACT checkpoint in the sim.
+│   ├── run_act.py                  Describes or checks the shipped ACT checkpoint.
+│   │  ── fly brain ──
+│   ├── prepare_connectome.py       Downloads FlyWire tables, builds the graph.
+│   ├── benchmark_connectome.py     Full-graph forward-pass timing.
+│   ├── train_connectome.py         Point-goal navigation pilot.
+│   ├── evaluate_navigation.py      Scores navigation checkpoints.
+│   ├── record_brain_demo.py        Records the point-goal pilot to a GIF.
+│   ├── train_arm.py                Arm policy: teacher, BC, PPO, calibration.
+│   ├── run_arm.py                  Runs an arm checkpoint; viewer, record, validation.
+│   └── pick_place.py               Scripted fixed-base pick-and-place baseline.
+│
+├── src/rlbot/
+│   │  ── robot and room ──
+│   ├── robot.py                    Load the robot, read its state, step the sim.
+│   ├── control.py                  PD balance and drive controllers.
+│   ├── room.py                     What is on each table and where.
+│   ├── arm.py                      Arm IK.
+│   ├── grasp.py                    Grasp motions, the station keeper, the Rig.
+│   ├── manipulation.py             Fixed-base pick-and-place baseline: model builder and task.
+│   ├── gripper_pads.py             Fitted pads for the fly-brain gripper.
+│   ├── parallel_gripper.py         The historical parallel-jaw gripper variant.
+│   │  ── sensing and path finding ──
+│   ├── sensing.py                  Lidar and wheel odometry.
+│   ├── sensors.py                  Lidar used by the ROS bridge and the recorder.
+│   ├── odometry.py                 Wheel and gyro odometry integration.
+│   ├── navmap.py                   Occupancy grids, inflation, footprint checks.
+│   ├── planner.py                  A*, splines, speed schedules.
+│   ├── navigate.py                 The phase-at-a-time navigator.
+│   │  ── demo ──
+│   ├── live.py                     The one-model continuous simulation: drive, park, pads.
+│   ├── live_arm.py                 Runs the fly-brain arm policy on the live sim.
+│   ├── skills.py                   The six skills the cubes agent calls.
+│   ├── orchestration.py            Recognition validation and dispatch.
+│   ├── filming.py                  Records a run to mp4.
+│   │  ── learning ──
+│   ├── act.py                      ACT model, data loader, checkpoints.
+│   ├── teleop.py                   Jog controller and demonstration recorder.
+│   ├── connectome.py               ConnectomeFeatures.
+│   ├── arm_env.py                  Fly-brain arm env.
+│   ├── navigation.py               Gymnasium env for the point-goal pilot.
+│   └── hybrid_ik.py                ctypes binding for the sponsors' IK library (Linux arm64).
+│
+├── tests/                          One unittest file per subsystem.
+├── ros2_ws/src/rlbot_bridge/       ROS 2 Jazzy package: simulation bridge, save_map, navigate.
+├── docker/, Dockerfile             The rlbot:jazzy image.
+└── requirements*.txt               Base; -agent (Anthropic SDK); -rl (torch, SB3); -train.
 ```
 
 ## Known issues and limits
