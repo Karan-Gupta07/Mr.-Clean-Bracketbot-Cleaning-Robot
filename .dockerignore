@@ -1,7 +1,5 @@
 .git
-.devin
 .venv
-.env*
 out
 **/__pycache__
 **/*.pyc

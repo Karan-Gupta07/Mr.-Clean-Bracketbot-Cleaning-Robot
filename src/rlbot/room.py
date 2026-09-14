@@ -154,33 +154,6 @@ def crate(name, at, mass=0.40, rgba=(0.55, 0.42, 0.28, 1)):
                 {"l": 0.220, "w": 0.160, "h": 0.080, "t": 0.006})
 
 
-def bowl(name, at, mass=0.14, rgba=(0.92, 0.92, 0.88, 1)):
-    """Tapered, and 56 mm tall because that is what the hand can hold.
-
-    At 50 mm - the obvious dinner-service proportion - the pads take it 38 mm up
-    instead of 43, and it is picked up every time and dropped every time.  The
-    band either side of 56 mm is narrow: 54, 55 and 58 mm all fail.
-    """
-    return Item(name, "bowl", at, 0.058, mass, rgba,
-                {"r_base": 0.020, "r_rim": 0.029, "h": 0.056, "t": 0.004})
-
-
-def cup(name, at, mass=0.13, rgba=(0.80, 0.84, 0.90, 1)):
-    """Crockery the hand can actually take.
-
-    Two shapes were tried here and dropped.  A plate is 26 mm tall, and the pads
-    reach 22 mm below the middle of the jaw, so closing on a plate means closing
-    on the table.  A straight-sided mug is worse: a tall, round, thin-walled
-    tube touches two flat pads at two points on a curve, and rolled out of the
-    jaw on every carry.  Grip heights from 24 to 58 mm, four taper-and-height
-    combinations, carries from 2 to 8 seconds and more grip force all failed it.
-
-    A tapered cup works, because the pads close under the flare rather than on a
-    parallel wall.  These proportions are the ones that survived the sweep.
-    """
-    return Item(name, "cup", at, 0.056, mass, rgba,
-                {"r_base": 0.019, "r_rim": 0.028, "h": 0.055, "t": 0.004})
-
 
 TABLES = [
     Table("table_ball", (2.25, -1.10), math.radians(90), [
@@ -204,17 +177,6 @@ TABLES = [
         cube("pick_cube", (-0.14, -0.03), 0.048, 0.07, (0.25, 0.60, 0.85, 1)),
     ]),
 ]
-
-TABLEWARE = Table("table_ware", (-2.25, 0.90), math.radians(-90), [
-    bowl("bowl", (-0.22, 0.0)),
-    # 0.22 m out, not 0.14.  Sat next to the crate it is picked up fine on
-    # an empty table and not at all once the bowl is in the crate: the hand
-    # has to come down 30 mm from a crate wall that now has something
-    # standing in it.  Whether an object is reachable depends on what has
-    # already been put away.
-    cup("cup", (0.22, 0.0)),
-    crate("crate_ware", (0.00, 0.0)),
-])
 
 # ---- fixed furniture, so the map is not four bare walls -------------------
 PILLAR = (1.15, 1.30, 0.14)        # x, y, radius
@@ -299,7 +261,6 @@ def lowest_point(geoms) -> float:
 
 
 PAD_REACH = 0.022      # m the pads extend below the jaw centre, plus a margin
-RIM_GRIP = 0.012       # m below the rim to take a bowl or a mug
 
 
 def grasp_pose(item: Item, table: Table):

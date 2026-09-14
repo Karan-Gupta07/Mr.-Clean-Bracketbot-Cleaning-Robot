@@ -252,22 +252,6 @@ def load_checkpoint(path: Path, device):
     return torch.load(path, map_location=device, weights_only=False)
 
 
-def export_checkpoint(src: Path, dst: Path) -> None:
-    """A copy fit for git: weights in half precision, no optimiser state.
-
-    A training checkpoint is 263 MB, most of it AdamW moments.  The 22M
-    weights are 44 MB in fp16, which `load_state_dict` widens back to fp32
-    on load, and GitHub refuses files over 100 MB.
-    """
-    ck = torch.load(src, map_location="cpu", weights_only=False)
-    slim = {"model": {k: v.half() if v.is_floating_point() else v
-                      for k, v in ck["model"].items()},
-            "step": ck["step"], "norm": ck["norm"], "config": ck["config"],
-            "best_val": ck["best_val"]}
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(slim, dst)
-
-
 def write_json(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, indent=1))
 

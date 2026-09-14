@@ -40,11 +40,6 @@ from .grasp import (APPROACH, LIFT, Rig, StationDriver, hold_everything, in_hand
 from .robot import ROOM
 from .room import TABLE_H, TABLES, grasp_pose
 
-# Closed vocabulary.  An agent that sees a new cause string every failure cannot
-# learn anything from it; one that sees the same six can.
-CAUSES = ("object_not_found", "hand_full", "no_free_hand", "not_holding",
-          "unreachable", "grasp_failed", "place_failed")
-
 DROP_HEIGHT = 0.10     # m above the crate rim to open the fingers
 GRASP_TRIES = 8        # wrist angles and hands `pick` works through itself
 RETREAT_LIMIT = 1.0    # rad of arm travel allowed when backing out of the crate
