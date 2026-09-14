@@ -41,6 +41,8 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
+# The shipped Flybrain policy; its FlyWire graph sits next to it as checkpoints/graph_512.npz.
+FLYBRAIN_CHECKPOINT = REPO / "checkpoints" / "flybrain_arm_padded_calibrated.zip"
 
 from agent import (MODEL, STEP_BUDGET, Harness, Pacer,                # noqa: E402
                    fable_planner, sweep_planner)
@@ -433,8 +435,9 @@ def main(argv=None) -> int:
     parser.add_argument("--effort", default="high",
                         choices=["low", "medium", "high", "xhigh", "max"])
     parser.add_argument("--checkpoint", type=Path,
-                        help="Flybrain policy for the pick table; without it "
-                             "that table refuses rather than falling back")
+                        default=FLYBRAIN_CHECKPOINT if FLYBRAIN_CHECKPOINT.exists() else None,
+                        help=f"Flybrain policy for the pick table (default {FLYBRAIN_CHECKPOINT.name}); "
+                             "without one that table refuses rather than falling back")
     parser.add_argument("--act-checkpoint", type=Path,
                         help=f"ACT checkpoint for the ball table (default {DEFAULT_CHECKPOINT.name})")
     parser.add_argument("--seed", type=int, default=3000)
