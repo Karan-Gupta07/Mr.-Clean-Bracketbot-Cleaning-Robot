@@ -69,8 +69,6 @@ def record(task, output):
     payload = json.dumps({"report": report, "frames": frames}, separators=(",", ":"), allow_nan=False)
     output.mkdir(parents=True, exist_ok=True)
     (output / "episode.json").write_text(payload)
-    template = (REPO / "demo/pick_place.html").read_text(encoding="utf-8")
-    (output / "index.html").write_text(template.replace("__PICK_PLACE_DATA__", payload), encoding="utf-8")
     gif[0].save(output / "demo.gif", save_all=True, append_images=gif[1:], duration=100, loop=0)
     gif[-1].save(output / "preview.png")
     return report
@@ -82,7 +80,7 @@ def main():
     parser.add_argument("--item", choices=["cube_s", "cube_m", "cube_l", "cube_xl"], default="cube_m")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--record", action="store_true")
-    parser.add_argument("--open", action="store_true", help="Open recorded HTML after completion")
+    parser.add_argument("--open", action="store_true", help="Open the recorded GIF after completion")
     parser.add_argument("--view", action="store_true", help="Run a live MuJoCo viewer")
     parser.add_argument("--gripper", choices=["padded", "urdf", "parallel"], default="padded",
                         help="Gripper model: 'padded' is the supplied hooked gripper with contact pads; 'urdf' is that gripper untouched, which does not grasp; 'parallel' is the sliding-jaw substitution the recorded RL results used")
@@ -124,7 +122,7 @@ def main():
     result = {"episodes": len(reports), "successes": sum(r["success"] for r in reports), "runs": reports}
     (args.output / "report.json").write_text(json.dumps(result, indent=2) + "\n", newline="\n")
     if args.open and args.episodes == 1:
-        webbrowser.open((args.output / "index.html").resolve().as_uri())
+        webbrowser.open((args.output / "demo.gif").resolve().as_uri())
     print(f"{result['successes']}/{result['episodes']} picked, placed, and released", flush=True)
     return 0 if result["successes"] == result["episodes"] else 1
 

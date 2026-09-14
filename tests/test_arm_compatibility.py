@@ -287,51 +287,6 @@ class ArmCompatibilityTests(unittest.TestCase):
         sensors = tuple(bot.model.sensor(n).adr[0] for n in ('gyro','vel_left','vel_right'))
         self.assertAlmostEqual(read_state(bot.model, bot.data, sensors).pitch, bot.state().pitch)
 
-    def test_replay_javascript_syntax(self):
-        import shutil
-        import subprocess
-        node = shutil.which('node')
-        if node is None:
-            self.skipTest('Node is optional for the replay syntax check')
-        template = (ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
-        script = template.split('<script>',1)[1].split('</script>',1)[0]
-        result = subprocess.run([node,'--check'],input=script,encoding='utf-8',capture_output=True)
-        self.assertEqual(result.returncode,0,result.stderr)
-
-    def test_replay_handles_imitation_only_and_calibrated_training_reports(self):
-        import json
-        import shutil
-        import subprocess
-        node = shutil.which('node')
-        if node is None:
-            self.skipTest('Node is optional for the replay metadata check')
-        template = (ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
-        section = 'const training=' + template.split('const training=',1)[1].split("$('provenance')",1)[0]
-        script = "const elements={}; const $=id=>elements[id]??={};\n"
-        script += "const data={report:{ppo_steps:0,training:{evaluation:{successes:9,episodes:10}}}};\n"
-        script += section + '\nconsole.log(JSON.stringify(elements));'
-        result = subprocess.run([node],input=script,encoding='utf-8',capture_output=True)
-        self.assertEqual(result.returncode,0,result.stderr)
-        fields = json.loads(result.stdout)
-        self.assertEqual(fields['beforeScore']['textContent'],'Not recorded')
-        self.assertEqual(fields['afterScore']['textContent'],'Not recorded')
-        self.assertEqual(fields['calibratedScore']['textContent'],'9/10')
-        self.assertEqual(fields['heldoutScore']['textContent'],'Not recorded')
-        self.assertIn('without PPO',fields['trainingMethod']['textContent'])
-
-    def test_replay_has_targets_for_recorded_gripper_metadata(self):
-        from html.parser import HTMLParser
-        class Elements(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.ids = set()
-            def handle_starttag(self, tag, attrs):
-                self.ids.add(dict(attrs).get('id'))
-        parser = Elements()
-        parser.feed((ROOT/'demo/arm_rl.html').read_text(encoding='utf-8'))
-        self.assertTrue({'jawScale','jawMapping','beforeScore','afterScore',
-                         'gripperScope','gripperNote','trainingSteps','observationSize','historyLength'} <= parser.ids)
-
     def test_teacher_can_release_and_withdraw_before_timeout(self):
         env = ArmEnv()
         env.reset(seed=1000)

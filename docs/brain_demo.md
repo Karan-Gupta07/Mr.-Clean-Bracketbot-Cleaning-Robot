@@ -18,40 +18,27 @@ BracketBot body. We take the connectivity from
 [FlyWire](https://www.nature.com/articles/s41586-024-07558-y). Source URLs and
 SHA-256 checksums are saved beside the generated graph.
 
-## The replay page
+## The recording
 
-`scripts/record_brain_demo.py` writes `out/demo/index.html`. Open it in a
-browser.
-
-```bash
-open out/demo/index.html
-```
+`scripts/record_brain_demo.py` writes `out/demo/demo.gif`: the room render
+beside the neuron graph, one frame per policy step. It also writes
+`episode.json` (timestamps, states, actions, activities, and a checkpoint hash)
+and `report.json` (final outcome, dataset provenance, target, and seed).
 
 Everything under `out/` is generated locally and ignored by git. A fresh clone
-has none of it. Two replay page templates ship instead: `demo/index.html` for this
-navigation demo, and `demo/arm_rl.html` for the arm policy. The recorder fills the
-`__DEMO_DATA__` placeholder in `demo/index.html`.
+has none of it. A recorded run ships as
+[../demo/fly_brain_point_goal_pilot.gif](../demo/fly_brain_point_goal_pilot.gif):
+a fresh 53 s training run on seed 7, 20 of 20 goals before and after PPO,
+reaching the demo goal in 6.5 s. This pilot is not the navigator the main
+demo uses. The demo drives with A* and the phase navigator; see the README.
 
-The page pairs the room render, the head camera, and the recorded policy activity
-at each simulation timestamp. Play and pause it. Scrub the timeline. Drag the
-neuron graph to rotate it. Hover a neuron to read its source ID.
+What the GIF shows:
 
-What the page shows:
-
-- The page draws the 500 strongest edges. The policy uses all 8,688.
-- The GIF draws 200 edges for clarity.
+- The GIF draws the 200 strongest edges. The policy uses all 8,688.
 - Activity colors are mean absolute artificial activation on a fixed 0–1 scale.
 - Coordinates are annotated points on source neurons. They are not reconstructed
   morphology or guaranteed soma positions.
 - This is **recorded replay**, not a live neural recording.
-- The head camera is display-only.
-- Terminal-frame commands are predictions. Nothing applies them after the episode
-  ends.
-
-The recorder writes three more files. `out/demo/demo.gif` is a shareable
-animation. `episode.json` holds timestamps, states, actions, activities, and a
-checkpoint hash. `report.json` holds the final outcome, dataset provenance,
-target, and seed.
 
 ## Rebuild from a fresh checkout
 
@@ -76,7 +63,7 @@ the demo.
 .venv/bin/python scripts/train_connectome.py --policy mlp --output out/rl/mlp_final
 .venv/bin/python scripts/evaluate_navigation.py out/rl/connectome_final/imitation.zip out/rl/connectome_final/policy.zip out/rl/mlp_final/imitation.zip out/rl/mlp_final/policy.zip
 .venv/bin/python scripts/record_brain_demo.py
-open out/demo/index.html
+open out/demo/demo.gif
 ```
 
 CPU wheel installation differs by platform. On Windows, replace
@@ -87,7 +74,7 @@ To change the target, rerun the recorder.
 
 ```bash
 .venv/bin/python scripts/record_brain_demo.py --goal 0.8 -0.4 --yaw 0 --seed 2026 --seconds 20 --output out/demo_other
-open out/demo_other/index.html
+open out/demo_other/demo.gif
 ```
 
 The policy has no obstacle avoidance. Choose clear routes near the room center.

@@ -120,9 +120,9 @@ replaced.
 
 The saved candidates are `out/rl/arm_history_calibrated/policy.zip` and
 `out/rl/arm_history_deadband/policy.zip`. Each holds a checkpoint-bound report in
-its `validation/` directory. A diagnostic replay of the first candidate is in
-`out/arm_history_demo/index.html`. Its successful displayed episode is separate
-from its 17/20 held-out score.
+its `validation/` directory. A diagnostic recording of the first candidate was
+made locally under `out/arm_history_demo/`. Its one successful episode is
+separate from its 17/20 held-out score.
 
 ### The shipped checkpoint
 
@@ -160,7 +160,7 @@ window:
 ```bash
 .venv/bin/mjpython scripts/run_arm.py --view --history 16 --motion-deadband 0.05 --checkpoint checkpoints/flybrain_arm_padded_calibrated.zip
 
-# Record the neuron-explorer replay and open it in a browser.
+# Record a GIF of the policy and open it.
 .venv/bin/python scripts/run_arm.py --record --open --history 16 --motion-deadband 0.05 --checkpoint checkpoints/flybrain_arm_padded_calibrated.zip
 ```
 
@@ -178,8 +178,8 @@ environment. The orchestrator also requires a matching 20-episode validation
 report with every trial successful. `run_arm.py` remains available for
 failed-policy diagnostics. It exits nonzero when any requested episode fails.
 
-The neuron explorer shows source neuron IDs and annotations, actual policy
-activations, input values and action outputs. It reads its gripper description and
-RL results from the recording. It does not copy them from the old parallel-jaw
-experiment. The historical parallel-jaw results in [arm_rl.md](arm_rl.md) are a
-separate experiment.
+The recording's `episode.json` holds source neuron IDs and annotations, actual
+policy activations, input values and action outputs. Its `report.json` reads
+the gripper description and RL results from the checkpoint. It does not copy
+them from the old parallel-jaw experiment. The historical parallel-jaw results
+in [arm_rl.md](arm_rl.md) are a separate experiment.
