@@ -14,30 +14,16 @@ fly-brain point-goal pilot.
 
 ## Contents
 
-1. [Status](#status)
-2. [Quick start](#quick-start)
-3. [System overview](#system-overview)
-4. [Simulation](#simulation)
-5. [Path finding](#path-finding)
-6. [Agent](#agent)
-7. [ACT](#act)
-8. [Fly brain](#fly-brain)
-9. [Verification](#verification)
-10. [Folder layout](#folder-layout)
-11. [Known issues and limits](#known-issues-and-limits)
-
-## Status
-
-| Part | State |
-| --- | --- |
-| Simulation | Done. The robot loads, stands, balances, and survives a 300 N shove. |
-| Path finding | Done in simulation. A* plus curved trajectories. All nine routes arrive within 10 cm and 5 degrees. ROS 2 SLAM mapping and localization pass in Docker. |
-| Agent | Done. Claude Fable 5.1 calls three top-level tools. A keyword planner runs the same tools with no API key. |
-| Cubes table (Fable skills) | Works. 4 of 4 cubes into the crate. |
-| Pick table (fly brain) | Works on the live demo. Imitation-only policy, no PPO. 4 of 10 on its fixed-base test seeds. |
-| Ball table (ACT) | Runs, misses. 2 of 14 random layouts on the fixed-base sim. 0 of 10 on the shipped layout. |
-
-Every result above is a simulation result. No hardware has been tested.
+1. [Quick start](#quick-start)
+2. [System overview](#system-overview)
+3. [Simulation](#simulation)
+4. [Path finding](#path-finding)
+5. [Agent](#agent)
+6. [ACT](#act)
+7. [Fly brain](#fly-brain)
+8. [Verification](#verification)
+9. [Folder layout](#folder-layout)
+10. [Known issues and limits](#known-issues-and-limits)
 
 ## Quick start
 
