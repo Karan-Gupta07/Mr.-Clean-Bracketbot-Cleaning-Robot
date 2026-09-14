@@ -23,6 +23,9 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT runs from `checkpoints/act_ball_run1_noaug.pt` (2 of 14 random layouts in the fixed-base sim); live Fable still needs a locally configured API key. |
 
 
+To see it without installing anything, [`demo/`](demo/) holds a screen recording
+of ACT and three self-contained HTML replays - open any of them in a browser.
+
 ### What works today
 
 - **The BracketBot model.** It was converted from a URDF file into MuJoCo format by `scripts/build_mjcf.py`. The wheels spin, the robot can stand on the floor, and the mass numbers are fixed. See "How the robot model was fixed" below.
@@ -412,6 +415,7 @@ scripts/train_act.py        Trains ACT on demonstration folders, checkpointing a
 scripts/rollout_act.py      Runs a trained ACT policy closed-loop in the sim and scores it.
 scripts/replay_demo.py      Plays recorded episodes or rollouts back in the viewer.
 checkpoints/                Trained ACT policies, weights only, with their configs and logs.
+demo/                       Standalone captures and replays to show without running anything.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
