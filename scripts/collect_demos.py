@@ -40,6 +40,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from rlbot.act import BLADE_ARMATURE, set_blade_armature # noqa: E402
 from rlbot.grasp import APPROACH, LIFT, hold_everything                 # noqa: E402
 from rlbot.room import TABLE_H, Table                                   # noqa: E402
 from rlbot.skills import Robot                                          # noqa: E402
@@ -361,6 +362,7 @@ def main() -> None:
     args = ap.parse_args()
 
     robot = Robot(args.table)
+    set_blade_armature(robot.model, BLADE_ARMATURE)   # what the policy will run with
     obj = args.object or next(n for n, i in robot.items.items() if i.graspable)
     if obj not in robot.items or not robot.items[obj].graspable:
         raise SystemExit(f"nothing called {obj!r} to pick on {robot.table.name}")

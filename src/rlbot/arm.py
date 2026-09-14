@@ -231,7 +231,7 @@ class Gripper:
         self.lo, self.hi = model.jnt_range[joint]
 
         prefix = "" if side == "right" else "l_"
-        self.pads = [model.geom(f"{prefix}{f}_finger__{f}_finger_pad0").id
+        self.pads = [self._pad(model, f"{prefix}{f}_finger__{f}_finger")
                      for f in ("left", "right")]
         self.q = np.linspace(self.lo, self.hi, samples)
         self.centre = np.zeros((samples, 3))   # jaw centre, in the site frame
@@ -246,6 +246,18 @@ class Gripper:
             self.centre[i] = faces.mean(0)
             self.gap[i] = self._narrowest(model, data)
             self.splay[i] = self._splay(model, data)
+
+    @staticmethod
+    def _pad(model, finger: str) -> int:
+        """That blade's contact pad: `_pad0` as scripts/build_mjcf.py lays it,
+        or `_pad` when rlbot.gripper_pads has refitted it.  Same slab, same
+        role; only the build that put it there differs."""
+        for suffix in ("_pad0", "_pad"):
+            try:
+                return model.geom(finger + suffix).id
+            except KeyError:
+                continue
+        raise KeyError(f"{finger} carries no contact pad")
 
     def _faces(self, model, data):
         """The two pads' gripping faces, in the site frame."""

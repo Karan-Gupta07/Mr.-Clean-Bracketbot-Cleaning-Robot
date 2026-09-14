@@ -486,14 +486,11 @@ def build(total_mass: float = TOTAL_MASS) -> None:
             limit = max(URDF_EFFORT, SERVO_MARGIN * need)
             joint.actfrcrange = [-limit, limit]
             joint.actfrclimited = mujoco.mjtLimited.mjLIMITED_TRUE
-        # The gripper blades are all but massless and the follower has no
-        # servo, only the mimic constraint.  Closing on a ball, the follower
-        # slammed shut, whipped 0.9 rad open and rang for a third of a second
-        # before it settled.  A little rotor inertia on the four blade joints
-        # takes the ringing out - the close is one motion - without the
-        # viscous drag that damping adds, which cost every carry.
-        for name in (*MIMIC, *MIMIC.values()):
-            spec.joint(name).armature = 0.005
+        # No rotor inertia on the blade joints here.  ACT's demonstrations
+        # were recorded with armature 0.005 on all four (it stops the follower
+        # ringing on the ball), but with it on the skills place 0 of 4 cubes
+        # against 4 of 4 without: rlbot.act applies BLADE_ARMATURE for its own
+        # episodes and puts it back.
         model = spec.compile()
 
         xml = spec.to_xml()

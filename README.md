@@ -10,7 +10,7 @@ The project has three steps. Each step builds on the one before it.
 
 1. **Put the BracketBot in the sim.** Load the robot model, make it stand up, and make it balance. This is the base for everything else.
 2. **Drive around a room with SLAM.** SLAM stands for "Simultaneous Localization and Mapping". The robot builds a map of the room while it figures out where it is on that map. Then it can drive from one spot to another without bumping into things.
-3. **Pick up and put down objects with task-specific controllers.** The current demo routes colored cubes to Fable, the red ball to ACT (Action Chunking with Transformers, awaiting integration), and the blue-cube/rectangle task to Flybrain. A deterministic selector replaces the proposed VLM orchestrator.
+3. **Pick up and put down objects with task-specific controllers.** The current demo routes colored cubes to Fable, the red ball to ACT (Action Chunking with Transformers, trained on teleoperated demonstrations), and the blue-cube/rectangle task to Flybrain. A deterministic selector replaces the proposed VLM orchestrator.
 
 Put together: the robot maps the room, drives to an object, picks it up, drives to where it belongs, and puts it down.
 
@@ -20,7 +20,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
 | 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Custom curved navigation passes all nine sim routes on the true pose, and a ROS node drives the same navigator on the SLAM pose in Docker (two routes hand-tested). Nav2 is not implemented. |
-| 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT awaits its controller/checkpoint; live Fable still needs a locally configured API key. |
+| 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT runs from `checkpoints/act_ball_run1_noaug.pt` (2 of 14 random layouts in the fixed-base sim); live Fable still needs a locally configured API key. |
 
 
 ### What works today
@@ -72,15 +72,16 @@ arrival. Manipulation uses a **separate fixed-base simulation** at the docking
 pose; this is not yet a continuous balancing-to-manipulation handoff. Navigation
 uses simulator truth here, not ROS localization. `--planner sweep` explicitly
 tests Fable's skills without an API model; default `fable` needs a locally set
-`ANTHROPIC_API_KEY`. ACT refuses execution until its real implementation is
-registered; it never falls back to VLA or to a script. Flybrain refuses dispatch
+`ANTHROPIC_API_KEY`. ACT runs one closed-loop episode of the shipped checkpoint
+on a fixed-base room; it never falls back to VLA or to a script. Flybrain refuses dispatch
 without compatible model metadata and a passing, checkpoint-bound validation.
 
-### Live MuJoCo demo and ACT scaffold
+### Live MuJoCo demo and ACT
 
-The integrated Flybrain/Fable code is in `main`. ACT has an importable scaffold
-at `rlbot.act.prepare_act`; its real controller and checkpoint are still pending.
-The scaffold never moves the robot or substitutes another controller.
+The integrated Flybrain/Fable code is in `main`. ACT (PR #10) lives in `rlbot.act`:
+`prepare_act` runs the shipped checkpoint on a fixed-base room, `run_act.py --check`
+only confirms the checkpoint exists, and neither substitutes another controller.
+Both need `requirements-rl.txt` (torch and torchvision).
 
 ```powershell
 .venv\Scripts\python.exe scripts/run_act.py --describe
@@ -99,6 +100,65 @@ recognition or continuous navigation/manipulation handoff is claimed.
 For Flybrain, `live_demo.py --station pick --recognized blue_cube_rectangle`
 also requires an explicit `--checkpoint`. Its unchanged preflight rejects the
 current 18/20 candidates. A `--dry-run` reports routing only, not readiness.
+
+### Continuous demo: one prompt, one simulation
+
+`scripts/demo.py` runs the whole thing in **one** MuJoCo model: a prompt typed
+in the terminal becomes tool calls from a top-level Claude Fable agent -
+`go_to(station)` plans and drives the balancing robot to a table, `manipulate()`
+runs that table's controller in the same simulation, `finished` ends. There is
+no second model and no keyframe jump: on arrival a pre-declared weld equality
+between the chassis and the world is switched on (`data.eq_active`) so the base
+holds still like a parking brake, the solver's impedance ratio is raised to 200
+for the pinch, and both are switched back before the next drive.
+
+```bash
+# The agent decides the calls. Needs ANTHROPIC_API_KEY.
+.venv/bin/python scripts/demo.py "tidy the cubes table, then go to the ACT station"
+
+# No key: keyword routing to the same tools. "act" -> ball, "fly"/"blue" -> pick, "cubes" -> cubes.
+.venv/bin/python scripts/demo.py --planner sweep "clean the cubes then pick the blue cube"
+
+# Watch it (mjpython on macOS). No prompt = a `> ` loop; the robot stays where the last prompt left it.
+.venv/bin/mjpython scripts/demo.py --view
+```
+
+| Station | Manipulation tool at that table | State today |
+| --- | --- | --- |
+| `cubes` | Fable skills agent (`scripts/agent.py`, nested) or `--planner sweep` | works on the shared sim |
+| `pick` | Flybrain policy, `--checkpoint out/rl/arm_padded_calibrated/policy.zip` | picks and places the blue cube on the live sim; runs **without** its 20/20 validation gate and says so; the navigator parks within 4 cm / 2° here (`LiveSim.ARRIVE_AT`) because the carry fails from 9 cm out |
+| `ball` | ACT, `rlbot.act.prepare_act_live`; `--act-checkpoint` defaults to `checkpoints/act_ball_run1_noaug.pt` | one closed-loop episode per visit, from the collector's ready pose, back to it afterwards so `home` folds clean; the shipped ball placement is one this checkpoint misses (0 of 10 live, and on the fixed-base room too) - on random layouts it scores 1 of 3 here and 2 of 14 in PR #10 |
+
+Navigation still reads the simulator's pose, not SLAM. `manipulate` never
+falls back to another controller; an unavailable one is reported to the agent,
+which decides what to do next.
+
+Each table's controller was tuned on different contact pads - the skills on the
+pads `scripts/build_mjcf.py` lays on the blades, Flybrain on the fitted pads of
+`rlbot.gripper_pads` - and neither works on the other's. The live room carries
+one pad per blade and rewrites it on arrival (`LiveSim.use_pads`: position,
+size, friction, softness, the blade's inertials, its broadphase box), so the
+cubes table sees the skills' pads and the pick table sees Flybrain's. Two pad
+geoms on one blade, one of them inert, was tried first and cost the skills every
+grasp (0/16 against 16/16).
+
+The Flybrain checkpoint is made locally (`out/` is ignored). This is the
+history-and-calibration recipe from [docs/original_arm.md](docs/original_arm.md);
+about 15 minutes on a laptop CPU after `pip install -r requirements-rl.txt`
+and `scripts/prepare_connectome.py` for the FlyWire graph:
+
+```bash
+.venv/bin/python scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_padded
+.venv/bin/python scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_padded/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_padded_calibrated
+```
+
+Headless, the whole tour - tidy the cubes, drive on and pick the blue cube,
+then drive to the ACT table and try the ball - runs in one model in a few
+minutes of wall time:
+
+```bash
+.venv/bin/python scripts/demo.py --planner sweep --checkpoint out/rl/arm_padded_calibrated/policy.zip "clean the cubes, then pick up the blue cube, then go to the ACT table"
+```
 
 ## Setup
 

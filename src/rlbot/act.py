@@ -26,14 +26,17 @@ from collections.abc import Callable
 from os import PathLike
 from pathlib import Path
 
+import mujoco
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
+from .arm import GRIPPER
+from .grasp import in_hand, set_const
 from .orchestration import ToolResult
-from .teleop import load_demo
+from .teleop import Jog, load_demo
 
 CAMERAS = ("head_cam", "wrist_right_cam", "wrist_left_cam")
 STATE_DIM = ACTION_DIM = 16
@@ -269,66 +272,280 @@ def write_json(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, indent=1))
 
 
-# ---- the demo's integration point --------------------------------------
+# ---- running the policy in the simulator --------------------------------
 ACT_DESCRIPTION = (
     "ACT (Action Chunking with Transformers) for the red ball/box, station='ball'; not VLA."
 )
+DEFAULT_CHECKPOINT = Path(__file__).resolve().parents[2] / "checkpoints" / "act_ball_run1_noaug.pt"
+RENDER_PX = 224            # what the training frames were rendered at
+ENSEMBLE_M = 0.01          # ACT's temporal-ensemble decay
+CONTROL_HZ = 20            # the recorder's rate, so the policy's
+MAX_SECONDS = 25.0         # the collector's episode budget
+FLOOR = 0.4                # m; a ball below this has left the table
+# Rotor inertia the demonstrations were recorded with on the four blade
+# joints: it stops the mimic follower ringing when the jaws close on the ball.
+# With it on, the skills place 0 of 4 cubes (4 of 4 without), so the model
+# ships without it and ACT sets it for its own episodes only.
+BLADE_ARMATURE = 0.005
+BLADES = ("right_left_gripper", "right_right_gripper", "left_left_gripper", "left_right_gripper")
 
 
 class ACTUnavailableError(RuntimeError):
-    pass
+    """ACT cannot run here: no usable checkpoint.  Raised before anything moves."""
 
 
-def _checkpoint_status(checkpoint: str | PathLike[str] | None) -> str:
-    """How the supplied checkpoint stands, worded the same wherever we report it."""
-    if checkpoint is None:
-        return 'No ACT checkpoint was supplied.'
-    if not Path(checkpoint).is_file():
-        return f'ACT checkpoint unavailable: {checkpoint}.'
-    return f'Checkpoint {checkpoint} cannot be used without the real ACT backend.'
+def checkpoint_path(checkpoint: str | PathLike[str] | None) -> Path:
+    """The checkpoint to run, or why there is none."""
+    path = Path(DEFAULT_CHECKPOINT if checkpoint is None else checkpoint)
+    if not path.is_file():
+        raise ACTUnavailableError(
+            f"{ACT_DESCRIPTION} ACT checkpoint unavailable: {path}. Supply a compatible "
+            "checkpoint (scripts/train_act.py, or checkpoints/ in this repo); no VLA, "
+            "scripted, Fable, or Flybrain fallback is used.")
+    return path
+
+
+def device():
+    return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+
+class Policy:
+    """The checkpoint, plus everything between the sim and its tensors."""
+
+    def __init__(self, ckpt: Path, model, device, mode: str = "ensemble", hide=()):
+        self.mode = mode          # ensemble | newest | open-loop
+        ck = load_checkpoint(ckpt, device)
+        self.config, self.norm = ck["config"], {k: v.to(device) for k, v in ck["norm"].items()}
+        self.chunk = self.config["chunk"]
+        self.net = ACT(chunk=self.chunk).to(device)
+        self.net.load_state_dict(ck["model"])
+        self.net.eval()
+        self.device = device
+        self.step_trained = ck["step"]
+        self.model = model
+        # Geoms to leave out of the cameras: the training frames were rendered
+        # with the contact pads in group 3, invisible, and this room now draws
+        # them in group 2.  Same colour as the blade, but not the same pixels.
+        self.hide = list(hide)
+        model.vis.global_.offwidth = max(model.vis.global_.offwidth, RENDER_PX)
+        model.vis.global_.offheight = max(model.vis.global_.offheight, RENDER_PX)
+        self.renderer = mujoco.Renderer(model, RENDER_PX, RENDER_PX)
+        self.history: dict[int, list[tuple[int, torch.Tensor]]] = {}
+        self.plan, self.plan_at = None, 0
+
+    def observe(self, data) -> torch.Tensor:
+        """(1, cam, 3, img, img) uint8, downsized the way training did it."""
+        groups = self.model.geom_group[self.hide].copy()
+        self.model.geom_group[self.hide] = 3
+        try:
+            frames = []
+            for cam in CAMERAS:
+                self.renderer.update_scene(data, camera=cam)
+                frames.append(torch.from_numpy(self.renderer.render().copy()))
+        finally:
+            self.model.geom_group[self.hide] = groups
+        x = torch.stack(frames).permute(0, 3, 1, 2).float()          # (cam, 3, H, W)
+        img = self.config["img"]
+        x = F.interpolate(x, size=(img, img), mode="area").round().to(torch.uint8)
+        return x[None]
+
+    @torch.no_grad()
+    def act(self, tick: int, imgs, state: np.ndarray) -> np.ndarray:
+        if self.mode == "open-loop" and self.plan is not None and tick < self.plan_at + self.chunk:
+            return self.plan[tick - self.plan_at].numpy()     # ride the chunk out
+        s = (torch.from_numpy(state).float().to(self.device)[None] - self.norm["state_mean"]) / self.norm["state_std"]
+        pred, _, _ = self.net(prep_images(imgs, self.device), s)
+        chunk = (pred[0] * self.norm["action_std"] + self.norm["action_mean"]).cpu()
+        if self.mode != "ensemble":
+            self.plan, self.plan_at = chunk, tick
+            return chunk[0].numpy()
+        for k in range(self.chunk):
+            self.history.setdefault(tick + k, []).append((tick, chunk[k]))
+        # everything that has an opinion about this tick, newest weighted least
+        preds = self.history.pop(tick)
+        w = torch.tensor([math.exp(-ENSEMBLE_M * (tick - t0)) for t0, _ in preds])
+        acts = torch.stack([a for _, a in preds])
+        return ((w[:, None] * acts).sum(0) / w.sum()).numpy()
+
+    def reset(self) -> None:
+        self.history.clear()
+        self.plan, self.plan_at = None, 0
+
+    def close(self) -> None:
+        self.renderer.close()
+
+
+def set_blade_armature(model, value) -> np.ndarray:
+    """Set the blade joints' armature and recompute what depends on it.
+
+    `dof_invweight0` - the weight the mimic equality runs on - is a qpos0
+    constant, so the joint field alone changes nothing about the close;
+    `mj_setConst` has to run (`rlbot.grasp.set_const`, which keeps the
+    cameras' near plane where it was).  Returns the values it replaced.
+    """
+    dofs = [model.jnt_dofadr[model.joint(name).id] for name in BLADES]
+    old = model.dof_armature[dofs].copy()
+    model.dof_armature[dofs] = value
+    set_const(model)
+    return old
+
+
+def read_state(robot) -> np.ndarray:
+    d, m = robot.data, robot.model
+    out = []
+    for side in ("right", "left"):
+        out.append(d.qpos[robot.arms[side].ik.qadr])
+        out.append([d.qpos[m.jnt_qposadr[m.joint(GRIPPER[side]).id]]])
+    return np.concatenate(out).astype(np.float32)
+
+
+def apply_action(robot, a: np.ndarray) -> None:
+    d, m = robot.data, robot.model
+    for i, side in enumerate(("right", "left")):
+        arm = robot.arms[side]
+        cmd = a[8 * i:8 * i + 7]
+        lo, hi = m.actuator_ctrlrange[arm.acts].T
+        d.ctrl[arm.acts] = np.clip(cmd, lo, hi)
+        d.ctrl[arm.grip_act] = float(np.clip(a[8 * i + 7], 0.0, 1.0))
+
+
+def settled_in_crate(robot, obj: str) -> bool:
+    """The collector's own test: on the crate floor, clear of its walls, out of the hand."""
+    m, d = robot.model, robot.data
+    if not robot.inside_crate(d.body(obj).xpos):
+        return False
+    if any(in_hand(m, d, obj, s, robot.hands[s]) for s in ("right", "left")):
+        return False
+    crate = m.body(robot.crate).id
+    geoms = [g for g in range(m.ngeom) if m.geom_bodyid[g] == crate]
+    obj_geom = next(g for g in range(m.ngeom) if m.geom_bodyid[g] == m.body(obj).id)
+    fromto = np.zeros(6)
+    dist = [mujoco.mj_geomDistance(m, d, obj_geom, g, 0.2, fromto) for g in geoms]
+    return dist[0] < 0.002 and all(w > 0.0 for w in dist[1:])
+
+
+def run_act(robot, policy: Policy, obj: str, hz: int = CONTROL_HZ,
+            seconds: float = MAX_SECONDS, on_step=None) -> tuple[bool, dict]:
+    """One closed-loop episode on whatever `robot` is standing at, from wherever
+    its arms are: the collector's ready move first, then the policy at `hz`
+    until the ball is in the crate, on the floor, or time is up.
+
+    `on_step(step)` runs after every physics step; returning False stops the
+    episode (a closed viewer).  Physics only ever advances through `robot.rig`,
+    so a live sim's pacing and parking brake see every step.
+    """
+    m, d = robot.model, robot.data
+    was = set_blade_armature(m, BLADE_ARMATURE)
+    try:
+        return _run_act(robot, policy, obj, hz, seconds, on_step)
+    finally:
+        set_blade_armature(m, was)
+
+
+def _run_act(robot, policy, obj, hz, seconds, on_step):
+    m, d = robot.model, robot.data
+    # Start where the demonstrations start.  Every recording begins after the
+    # collector's ready move, with the working arm hovering over the table;
+    # handed the rest pose instead, the policy swings the arm through the
+    # ball on its way to somewhere it recognises.
+    side = "left" if robot.across(obj) > 0 else "right"
+    jog = Jog(robot, side, robot.items[obj].width)
+    if not jog.ready():
+        raise RuntimeError(f"ACT's ready pose over the {obj} is unreachable from here; nothing moved")
+    while jog.busy:
+        for _ in range(25):
+            jog.step()
+            robot.rig.step()
+    robot.rig.seconds(0.3)
+    policy.reset()
+
+    every = max(1, round(1 / (hz * m.opt.timestep)))
+    rows = {"time": [], "qpos": [], "obj_pos": [], "obj_quat": [], "action": [], "state": []}
+    bodies = [m.body(n).id for n in robot.items]
+    started, tick, step = d.time, 0, 0
+    while d.time - started < seconds:
+        if step % every == 0:
+            state = read_state(robot)
+            a = policy.act(tick, policy.observe(d), state)
+            apply_action(robot, a)
+            rows["time"].append(float(d.time)); rows["qpos"].append(d.qpos.copy())
+            rows["obj_pos"].append(np.array([d.xpos[b] for b in bodies]))
+            rows["obj_quat"].append(np.array([d.xquat[b] for b in bodies]))
+            rows["action"].append(a); rows["state"].append(state)
+            tick += 1
+            if d.body(obj).xpos[2] < FLOOR:
+                break
+        robot.rig.step()
+        step += 1
+        if on_step is not None and on_step(step) is False:
+            break
+    ok = settled_in_crate(robot, obj)
+    note = "in the crate" if ok else robot.where(obj)
+    # Back to the hover the episode started from, on the policy's own arm
+    # branch, jaws open.  `Robot.home` from wherever ACT stops solves its
+    # retract on the other branch and the joint-space move swings the forearm
+    # through the crate (0.6 m, onto the floor); from the hover it folds clean.
+    jog.closed = False
+    retreated = jog.ready()
+    while jog.busy:
+        for _ in range(25):
+            jog.step()
+            robot.rig.step()
+    robot.rig.seconds(0.3)
+    return ok, dict(note=note, side=side, ticks=tick, seconds=float(d.time - started),
+                    retreated=bool(retreated),
+                    rows={k: np.array(v) for k, v in rows.items()})
+
+
+def _episode(robot, policy: Policy, checkpoint: Path, on_step=None) -> ToolResult:
+    obj = next(n for n, i in robot.items.items() if i.graspable)
+    policy.hide = [g for hand in robot.hands.values() for g in hand.pads]
+    try:
+        ok, result = run_act(robot, policy, obj, on_step=on_step)
+    finally:
+        policy.close()
+    result.pop("rows")
+    return ToolResult(ok, dict(tool="run_act", checkpoint=str(checkpoint),
+                               step=policy.step_trained, mode=policy.mode, **result))
 
 
 def prepare_act(checkpoint: str | PathLike[str] | None = None,
                 view: bool = False) -> Callable[[], ToolResult]:
-    checkpoint_status = _checkpoint_status(checkpoint)
-    raise ACTUnavailableError(
-        f'{ACT_DESCRIPTION} Scaffold only: ACT backend is not implemented. '
-        f'{checkpoint_status} Supply the real ACT implementation and a compatible checkpoint, '
-        'then implement rlbot.act.prepare_act to return a callable producing ToolResult. '
-        'Preflight stops before navigation or manipulation; '
-        'no VLA, scripted, Fable, or Flybrain fallback is used.'
-    )
+    """ACT on its own fixed-base room at the ball table, for the orchestrators."""
+    checkpoint = checkpoint_path(checkpoint)      # before any model is built
+
+    def execute() -> ToolResult:
+        from .skills import Robot
+        robot = Robot("ball")
+        policy = Policy(checkpoint, robot.model, device())
+        if not view:
+            return _episode(robot, policy, checkpoint)
+        import mujoco.viewer
+        with mujoco.viewer.launch_passive(robot.model, robot.data) as viewer:
+            sync = max(1, round(1 / (60 * robot.model.opt.timestep)))
+            return _episode(robot, policy, checkpoint,
+                            on_step=lambda step: (step % sync or viewer.sync(),
+                                                  viewer.is_running())[1])
+    return execute
 
 
 def prepare_act_live(sim, checkpoint: str | PathLike[str] | None = None) -> Callable[[], ToolResult]:
-    """ACT at station 'ball', on the one sim the whole demo drives. Scaffold only.
+    """ACT at station 'ball', on the one sim the whole demo drives.
 
-    This is the integration point for the real backend, so the contract is
-    stated rather than implied. Once supplied, it must return an `execute()`
-    that:
-
-      * reads its observations out of `sim.data` - head and wrist camera
-        renders, joint qpos, and the pose of body 'ball' - and nothing else;
-      * writes the arm and gripper actuators through
-        `rlbot.arm.Arm(sim.model, sim.data, side)`, whose `hold(qpos)`,
-        `grip(amount)` and `grip_pos` set `sim.data.ctrl`;
-      * advances physics ONLY through `sim.rig.step(n)`. Calling
-        `mujoco.mj_step` directly skips the rig's per-step hooks, which are
-        what pace the viewer and hold the parking brake on the base;
-      * returns a `ToolResult(ok, details)`.
-
-    The robot is already parked at the ball table when this is called, so a
-    failure here has to happen before anything moves.
+    Observations come out of `sim.data` - the three cameras and the joints -
+    the arms are commanded through the same actuators the skills use, and
+    physics advances only through the rig, so the viewer's pacing and the
+    parking brake see every step.  The robot is already parked when this is
+    called, so everything that can fail does so before `execute` moves it.
     """
     if not sim.parked or sim.station != 'ball':
         raise ValueError(
             "ACT runs at station 'ball' on a parked robot; the live sim is "
             f'parked={bool(sim.parked)} at station={sim.station!r}. Nothing was moved.'
         )
-    raise ACTUnavailableError(
-        f'{ACT_DESCRIPTION} Scaffold only: ACT backend is not implemented. '
-        f'{_checkpoint_status(checkpoint)} Supply the real ACT implementation and a '
-        'compatible checkpoint. Live sim: implement rlbot.act.prepare_act_live to return '
-        'execute() driving sim.rig.step; until then the robot stays parked where it is, and '
-        'no VLA, scripted, Fable, or Flybrain fallback is used.'
-    )
+    checkpoint = checkpoint_path(checkpoint)
+    policy = Policy(checkpoint, sim.model, device())
+
+    def execute() -> ToolResult:
+        return _episode(sim.robot(), policy, checkpoint)
+    return execute

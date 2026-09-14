@@ -29,7 +29,7 @@ and the scene as it now stands.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import mujoco
 import numpy as np
@@ -38,7 +38,7 @@ from .arm import Arm, Gripper, down_quat
 from .grasp import (APPROACH, LIFT, Rig, StationDriver, hold_everything, in_hand,
                     move, plan_waypoints, squeeze, welded_at)
 from .robot import ROOM
-from .room import TABLES, grasp_pose
+from .room import TABLE_H, TABLES, grasp_pose
 
 # Closed vocabulary.  An agent that sees a new cause string every failure cannot
 # learn anything from it; one that sees the same six can.
@@ -87,39 +87,50 @@ class Robot:
     up, which walks it off the docking pose its arms were planned against.
     `balancing=True` swaps in the station keeper instead, which leans to keep
     the mass over the axle - it survives a reach, but it drifts.
+
+    Pass `model` and `data` to work in a simulation that already exists rather
+    than in a fresh one: that is `rlbot.live.LiveSim` handing over the room it
+    drove here in, with its parking brake holding the base.  Building a second
+    model there would throw away the drive - and the clock, and wherever the
+    objects have ended up.
     """
 
     table_name: str
     balancing: bool = False
     on_step: object = None
-    model: object = field(init=False)
-    data: object = field(init=False)
+    model: object = None
+    data: object = None
 
     def __post_init__(self):
         self.table = next(t for t in TABLES
                           if t.name.split("_")[1] == self.table_name)
         x, y, self.dock_yaw = self.table.dock
-        if self.balancing:
-            self.model = mujoco.MjModel.from_xml_path(str(ROOM))
-            self.model.opt.impratio = 200
-            self.data = mujoco.MjData(self.model)
-            mujoco.mj_resetDataKeyframe(
-                self.model, self.data,
-                self.model.key(f"dock_{self.table_name}").id)
-        else:
-            self.model = welded_at(x, y, self.dock_yaw)
-            self.data = mujoco.MjData(self.model)
+        borrowed = self.model is not None
+        if not borrowed:
+            if self.balancing:
+                self.model = mujoco.MjModel.from_xml_path(str(ROOM))
+                self.model.opt.impratio = 200
+                self.data = mujoco.MjData(self.model)
+                mujoco.mj_resetDataKeyframe(
+                    self.model, self.data,
+                    self.model.key(f"dock_{self.table_name}").id)
+            else:
+                self.model = welded_at(x, y, self.dock_yaw)
+                self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
 
         hold_everything(self.model, self.data)
-        driver = StationDriver(self.model, self.data) if self.balancing else None
+        driver = (StationDriver(self.model, self.data)
+                  if self.balancing and not borrowed else None)
         self.rig = Rig(self.model, self.data, driver=driver, on_step=self.on_step)
         self.arms = {s: Arm(self.model, self.data, s) for s in ("right", "left")}
         self.hands = {s: Gripper(self.model, s) for s in ("right", "left")}
         self.holding: dict[str, str | None] = {"right": None, "left": None}
         self.grasp_quat: dict[str, object] = {"right": None, "left": None}
         self.items = {i.name: i for i in self.table.items}
-        self.crate = next(n for n in self.items if n.startswith("crate"))
+        # Not every table has one: `table_pick` is a bare cube and a target
+        # patch, so everything below treats the crate as optional.
+        self.crate = next((n for n in self.items if n.startswith("crate")), None)
         self.rig.seconds(0.4)
 
     # ---- what the agent is allowed to know ------------------------------
@@ -130,7 +141,7 @@ class Robot:
             if held == name:
                 return f"held in the {side} hand"
         pos = self.data.body(name).xpos
-        if name != self.crate and self.inside_crate(pos):
+        if self.crate is not None and name != self.crate and self.inside_crate(pos):
             return "in the crate"
         if pos[2] < 0.4:
             return "on the floor"
@@ -193,6 +204,26 @@ class Robot:
         return float(rot[:, 1] @ (self.data.body(name).xpos
                                   - self.data.body("root").xpos))
 
+    def at_rest(self, side: str, tol: float = 0.05) -> bool:
+        """Is that arm folded at zero, where `home` leaves it?"""
+        return float(np.abs(self.data.qpos[self.arms[side].ik.qadr]).max()) < tol
+
+    def rest_other(self, side: str) -> None:
+        """Fold the arm that is *not* about to move, if it is empty and out.
+
+        A failed grasp backs its arm out to the approach height and leaves it
+        there; a place retreats 15 cm and stops.  Either way the idle hand is
+        still hanging over the table when the other arm comes in, and two arms
+        working the same 0.6 m of table top collide.  The sweep planner calls
+        `home` between objects and gets every cube; an LLM planner does not
+        think to, so the skill does it.  Nothing happens if the other hand is
+        holding something (it must not fold with a full hand) or is already
+        at zero (folding costs 4 s of simulation).
+        """
+        other = "left" if side == "right" else "right"
+        if self.holding[other] is None and not self.at_rest(other):
+            self.home(other)
+
     # ---- the skills ------------------------------------------------------
     def look(self) -> Outcome:
         return self.out(True, "looking at the table")
@@ -241,6 +272,7 @@ class Robot:
             reached = True
             _, side, used_yaw, opening, (above, on, up) = plan
 
+            self.rest_other(side)
             hand = self.arms[side]
             hand.grip(opening)
             self.rig.seconds(0.3)
@@ -271,6 +303,9 @@ class Robot:
 
     def place(self, into: str | None = None, arm: str | None = None) -> Outcome:
         into = into or self.crate
+        if into is None:
+            return self.out(False, f"{self.table.name} has no crate; say where "
+                            f"to put it, or {HANDOVER}", "object_not_found")
         if into not in self.items and into != HANDOVER:
             return self.out(False, f"nowhere called {into!r}; there is "
                             f"{', '.join(self.items)} and {HANDOVER}",
@@ -288,6 +323,7 @@ class Robot:
             return self.out(False, "there is no clear space to set anything down",
                             "place_failed")
         hand, gripper = self.arms[side], self.hands[side]
+        self.rest_other(side)
 
         # Note: do not re-squeeze here.  The obvious idea - take a fresh bite
         # before carrying, since the object settles in the jaw after the lift -
@@ -432,7 +468,9 @@ class Robot:
             hand, gripper = self.arms[side], self.hands[side]
             here = self.data.qpos[hand.ik.qadr].copy()
             site = self.data.site_xpos[hand.site]
-            ceiling = self.data.body(self.crate).xpos[2] + CLEAR_ABOVE
+            # Clear the crate rim, or the table top where there is no crate.
+            ceiling = CLEAR_ABOVE + (TABLE_H if self.crate is None
+                                     else self.data.body(self.crate).xpos[2])
 
             # Up, then back over the table edge, then fold.  Lifting alone is
             # not enough: the fold still swings the hand down and inward across
@@ -502,7 +540,8 @@ class Robot:
         """
         rot = self.data.body("root").xmat.reshape(3, 3)
         root = self.data.body("root").xpos
-        table_z = self.data.body(self.crate).xpos[2]
+        table_z = (TABLE_H if self.crate is None
+                   else self.data.body(self.crate).xpos[2])
         others = [self.data.body(n).xpos for n, held in
                   ((n, self.where(n)) for n in self.items)
                   if "hand" not in held]
