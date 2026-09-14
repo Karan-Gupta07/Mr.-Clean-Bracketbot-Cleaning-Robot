@@ -126,7 +126,7 @@ for the pinch, and both are switched back before the next drive.
 | Station | Manipulation tool at that table | State today |
 | --- | --- | --- |
 | `cubes` | Fable skills agent (`scripts/agent.py`, nested) or `--planner sweep` | works on the shared sim |
-| `pick` | Flybrain policy, `--checkpoint out/rl/arm_padded_calibrated/policy.zip` | picks and places the blue cube on the live sim; runs **without** its 20/20 validation gate and says so; the navigator parks within 4 cm / 2° here (`LiveSim.ARRIVE_AT`) because the carry fails from 9 cm out |
+| `pick` | Flybrain policy; `--checkpoint` defaults to `checkpoints/flybrain_arm_padded_calibrated.zip` (graph `checkpoints/graph_512.npz`) | picks and places the blue cube on the live sim; runs **without** its 20/20 validation gate and says so; the navigator parks within 4 cm / 2° here (`LiveSim.ARRIVE_AT`) because the carry fails from 9 cm out |
 | `ball` | ACT, `rlbot.act.prepare_act_live`; `--act-checkpoint` defaults to `checkpoints/act_ball_run1_noaug.pt` | one closed-loop episode per visit, from the collector's ready pose, back to it afterwards so `home` folds clean; the shipped ball placement is one this checkpoint misses (0 of 10 live, and on the fixed-base room too) - on random layouts it scores 1 of 3 here and 2 of 14 in PR #10 |
 
 Navigation still reads the simulator's pose, not SLAM. `manipulate` never
@@ -157,7 +157,7 @@ then drive to the ACT table and try the ball - runs in one model in a few
 minutes of wall time:
 
 ```bash
-.venv/bin/python scripts/demo.py --planner sweep --checkpoint out/rl/arm_padded_calibrated/policy.zip "clean the cubes, then pick up the blue cube, then go to the ACT table"
+.venv/bin/python scripts/demo.py --planner sweep "clean the cubes, then pick up the blue cube, then go to the ACT table"
 ```
 
 ## Setup

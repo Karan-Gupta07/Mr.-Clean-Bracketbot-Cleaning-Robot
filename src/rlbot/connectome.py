@@ -16,8 +16,13 @@ class ConnectomeFeatures(BaseFeaturesExtractor):
     def __init__(self, observation_space, graph_path="out/flywire/graph_512.npz", width=4, rounds=4):
         graph_path = Path(graph_path)
         if not graph_path.exists():
-            # Allow a locally produced checkpoint to move with its graph to a new checkout.
-            graph_path = Path(__file__).resolve().parents[2] / "out/flywire" / graph_path.name
+            # Allow a locally produced checkpoint to move with its graph to a new checkout:
+            # first the ignored out/flywire, then the tracked copy next to the shipped policy.
+            root = Path(__file__).resolve().parents[2]
+            for candidate in (root / "out/flywire" / graph_path.name, root / "checkpoints" / graph_path.name):
+                if candidate.exists():
+                    graph_path = candidate
+                    break
         with np.load(graph_path, allow_pickle=False) as graph:
             inputs = graph["inputs"].copy()
             outputs = graph["outputs"].copy()
