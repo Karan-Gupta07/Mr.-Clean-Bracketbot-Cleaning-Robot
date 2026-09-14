@@ -1,0 +1,67 @@
+title Mr. Clean - BracketBot Cleaning Robot
+direction down
+"User" [shape: oval, icon: user, color: blue]
+
+"scripts/" [color: green] {
+  "demo.py" [icon: claude, color: green]
+  "agent.py" [icon: claude, color: green]
+}
+
+"src/rlbot/ (path finding)" [color: purple] {
+  "sensing.py" [icon: radar, color: purple]
+  "navmap.py" [icon: map, color: purple]
+  "planner.py" [icon: waypoints, color: purple]
+  "navigate.py" [icon: navigation, color: purple]
+}
+
+"ros2_ws/" [color: teal] {
+  "rlbot_bridge" [icon: ros, color: teal]
+}
+
+"src/rlbot/ (manipulation)" [color: orange] {
+  "arm.py" [icon: axis-3d, color: orange]
+  "act.py" [icon: pytorch, color: orange]
+  "connectome.py" [icon: bug, color: orange]
+}
+
+"models/" [color: gray] {
+  "MuJoCo Sim" [icon: robot, color: gray]
+}
+
+"scripts/ (training)" [color: yellow] {
+  "collect_demos.py" [icon: video, color: yellow]
+  "train_act.py" [icon: pytorch, color: yellow]
+  "prepare_connectome.py" [icon: database, color: yellow]
+  "train_arm.py" [icon: bot, color: yellow]
+}
+
+// Agent (top-level state machine)
+"User" > "demo.py": "Prompt → Claude Fable 5.1, 3 tool schemas"
+"demo.py" > "navigate.py": go_to(station)
+"demo.py" > "agent.py": manipulate() @ cubes
+"demo.py" > "connectome.py": manipulate() @ pick
+"demo.py" > "act.py": manipulate() @ ball
+"demo.py" > "User": finished(summary)
+
+// Path finding
+"MuJoCo Sim" > "sensing.py": "Robot state, 3 tables"
+"sensing.py" > "rlbot_bridge": "Sim LiDAR ray casts → /scan"
+"rlbot_bridge" > "navmap.py": "SLAM Toolbox → map.pgm"
+"navmap.py" > "planner.py": "Occupancy grid, inflated by footprint"
+"sensing.py" > "planner.py": "Start point from wheel encoders"
+"planner.py" > "navigate.py": "A* path to table pose"
+"navigate.py" > "MuJoCo Sim": "Follow path, replan A*, park"
+
+// Manipulation
+"agent.py" > "arm.py": "look / pick / place / home / give_up"
+"arm.py" > "MuJoCo Sim": "IK → joint targets"
+"MuJoCo Sim" > "act.py": "3 cams + joint pos"
+"act.py" > "MuJoCo Sim": "Action chunk"
+"connectome.py" > "arm.py": "Obs → fly graph → MLP → XYZ + jaw"
+
+// Training (offline)
+"collect_demos.py" > "train_act.py": "200 demos @ 20 Hz"
+"train_act.py" > "act.py": "ResNet18 + transformer → act_ball_run2_aug.pt"
+"prepare_connectome.py" > "connectome.py": "FlyWire v783 → graph_512.npz"
+"MuJoCo Sim" > "train_arm.py": "Reward: cube placed"
+"train_arm.py" > "connectome.py": "Scripted teacher → BC → PPO → policy.zip"
