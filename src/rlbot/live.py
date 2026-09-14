@@ -33,7 +33,7 @@ BRAKE = "park"
 COMMAND_HZ = 50            # the bridge ticks its controller at 50 Hz
 ARRIVE_XY, ARRIVE_YAW = 0.10, 5.0
 FALLEN = math.radians(45)
-DRIVE_IMPRATIO = 10        # AGENTS.md: the room solver stays at 10 to drive,
+DRIVE_IMPRATIO = 10        # the room solver stays at 10 to drive,
 GRIP_IMPRATIO = 200        # and manipulation wants 200 for a firm pinch
 _SPATIAL_EPS = 1e-9
 
