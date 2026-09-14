@@ -86,6 +86,20 @@ shoulder at 30 fps and pipes to `ffmpeg`; it runs headless.
 
 ## System overview
 
+![Architecture: prompt, agent, path finding, manipulation, simulation, training](docs/architecture.png)
+
+The diagram shows the five parts of the system and the files that own them.
+Boxes are files. Arrows are the calls and the data between them. The source
+is `docs/architecture.eraser` (eraser.io).
+
+| Part | Files | Job |
+| --- | --- | --- |
+| Agent | `scripts/demo.py`, `scripts/agent.py` | Turn the prompt into tool calls |
+| Path finding | `src/rlbot/sensing.py`, `navmap.py`, `planner.py`, `navigate.py`, `ros2_ws/` | Sense, map, plan, drive, park |
+| Manipulation | `src/rlbot/arm.py`, `act.py`, `connectome.py` | Move the arms at each table |
+| Simulation | `models/`, MuJoCo | Physics for the robot, the room, and the sensors |
+| Training | `scripts/collect_demos.py`, `train_act.py`, `prepare_connectome.py`, `train_arm.py` | Make the ACT and fly-brain checkpoints |
+
 `scripts/demo.py` runs everything in **one** MuJoCo model. A prompt becomes
 tool calls from a top-level agent. The agent has three tools.
 
@@ -666,7 +680,7 @@ RL-BOT
 │
 ├── checkpoints/                    ACT weights and configs, the fly-brain arm policy, graph_512.npz.
 ├── demo/                           Recordings: tour.mov, ACT.mov, pick_place.gif, fly_brain_point_goal_pilot.gif.
-├── docs/                           arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
+├── docs/                           architecture.png and .eraser, arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
 │
 ├── scripts/
 │   │  ── demo ──

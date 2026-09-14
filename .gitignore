@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 out/
 *.png
+!docs/architecture.png
 *.mp4
 ros2_ws/build/
 ros2_ws/install/
