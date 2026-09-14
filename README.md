@@ -7,8 +7,9 @@ The robot is the **BracketBot**: a self-balancing base, a tall mast, and two
 whole job: an agent plans, the robot drives to a table, and a task-specific
 controller does the manipulation.
 
-To see it without installing anything, open [`demo/`](demo/). It holds a screen
-recording of ACT and three self-contained HTML replays.
+To see it without installing anything, watch [`demo/ACT.mov`](demo/ACT.mov).
+The other files in [`demo/`](demo/) are the page templates that the recorders
+fill with a run's data.
 
 ## Contents
 
@@ -236,12 +237,17 @@ record frames; they are re-rendered from the saved poses afterwards. The
 lidar and odometry never see an image.
 
 **Rates.** Physics runs at 500 Hz. The balancer reads the gyro and wheel
-speeds every step. The ROS bridge (`ros2_ws/src/rlbot_bridge/rlbot_bridge/simulation.py`)
-ticks at 50 Hz and publishes `/odom`, `/imu/data`, `/joint_states`, TF, and
-`/clock` at that rate, and `/scan_raw`, `/scan`, and `/scan_valid` at 10 Hz.
+speeds every step. The ROS bridge is
+`ros2_ws/src/rlbot_bridge/rlbot_bridge/simulation.py`. It ticks at 50 Hz.
+
+| Topic | Rate |
+| --- | --- |
+| `/odom`, `/imu/data`, `/joint_states`, TF, `/clock` | 50 Hz |
+| `/scan_raw`, `/scan`, `/scan_valid` | 10 Hz |
+
 `scripts/record_slam_inputs.py` records the same signals to one `.npz`
-without ROS: wheel angles, gyro, accelerometer, and odometry at 500 Hz,
-scans at 10 Hz, plus `truth_pose` for scoring only.
+without ROS. It stores wheel angles, gyro, accelerometer, and odometry at
+500 Hz, and scans at 10 Hz. `truth_pose` is stored for scoring only.
 
 ```bash
 .venv/bin/python scripts/record_slam_inputs.py --output out/slam_inputs.npz
@@ -257,9 +263,11 @@ is `ros2_ws/src/rlbot_bridge/`. It publishes odometry, IMU, TF, and clock at
 the simulator's true pose.
 
 The bridge projects each scan into a fixed `lidar_planar` frame using the
-gyro-estimated tilt. It rejects a scan in three cases: the tilt exceeds 2
-degrees, a return falls outside the 0.12 to 0.52 m height band, or fewer
-than half the beams are usable.
+gyro-estimated tilt. It rejects a scan in three cases:
+
+- the tilt exceeds 2 degrees,
+- a return falls outside the 0.12 to 0.52 m height band,
+- fewer than half the beams are usable.
 
 Build the image and run the acceptance check. Use Docker Desktop or any Linux
 Docker host. The original setup used a `colima-rlbot` context. If you use
@@ -270,8 +278,8 @@ docker build -t rlbot:jazzy .
 docker run --rm -v "$PWD/out:/artifacts" rlbot:jazzy python scripts/check_ros_mapping.py --output /artifacts/mapping_check_1
 ```
 
-The check launches real ROS nodes, drives a loop, saves `map.yaml`,
-`map.pgm`, `map.posegraph`, and `map.data`, restarts in localization mode,
+The check launches real ROS nodes and drives a loop. It saves `map.yaml`,
+`map.pgm`, `map.posegraph`, and `map.data`. It restarts in localization mode
 and compares the SLAM pose to a separately published reference. The last run
 measured 1.4 mm / 0.20 degrees during mapping and 0.1 mm / 0.00 degrees after
 the localization restart. `result.json` lands in the output directory.
@@ -597,14 +605,13 @@ a different gripper and is not evidence for the current policy. See
 
 ## Verification
 
-Run each test file directly. There is no `tests/__init__.py`, so
-`unittest discover` does not work, and `pytest` is not installed.
+The tests use `unittest`. `pytest` is not installed.
 
 ```bash
-for f in tests/test_*.py; do .venv/bin/python "$f"; done
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
-118 tests pass. One fails: `tests/test_manipulation.py` compares a MuJoCo
+123 tests run. One fails: `tests/test_manipulation.py` compares a MuJoCo
 enum to a NumPy int, and MuJoCo 3.13 no longer treats them as equal. The
 geoms it checks are meshes; the test is wrong, not the model.
 
@@ -637,7 +644,7 @@ models/room.xml             The room alone. models/room_scene.xml adds the robot
 models/balancer.xml         A toy two-wheeler for quick controller checks.
 
 checkpoints/                ACT weights and configs, the fly-brain arm policy, graph_512.npz.
-demo/                       ACT.mov and three self-contained HTML replays.
+demo/                       ACT.mov, and the HTML templates the three recorders fill into out/.
 docs/                       arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
 
 scripts/demo.py             One prompt, one simulation. The main entry point.
