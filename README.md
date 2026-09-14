@@ -86,12 +86,6 @@ shoulder at 30 fps and pipes to `ffmpeg`; it runs headless.
 
 ## System overview
 
-![Architecture: prompt, agent, path finding, manipulation, simulation, training](docs/architecture.png)
-
-The diagram shows the five parts of the system and the files that own them.
-Boxes are files. Arrows are the calls and the data between them. The source
-is `docs/architecture.eraser` (eraser.io).
-
 | Part | Files | Job |
 | --- | --- | --- |
 | Agent | `scripts/demo.py`, `scripts/agent.py` | Turn the prompt into tool calls |

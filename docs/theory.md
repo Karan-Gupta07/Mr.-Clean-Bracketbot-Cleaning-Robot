@@ -1,7 +1,9 @@
 # Theory
 
 In-depth notes on each part of Mr. Clean. The [README](../README.md) has the
-overview, the quick start, the architecture diagram, and the assumptions.
+overview, the quick start, and the assumptions.
+
+![Architecture: prompt, agent, path finding, manipulation, simulation, training](architecture.png)
 
 ## Contents
 
