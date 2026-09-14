@@ -146,8 +146,8 @@ carries one pad per blade and rewrites it on arrival (`LiveSim.use_pads`).
 ## Simulation
 
 The robot is the BracketBot URDF from Onshape. `scripts/build_mjcf.py`
-converts it to MuJoCo and adds what the URDF lacks: wheel joints, floor
-contact, mass, joint limits, a mimic gripper, and contact pads on the
+converts it to MuJoCo and adds what the URDF lacks. That is wheel joints,
+floor contact, mass, joint limits, a mimic gripper, and contact pads on the
 fingers. A hand-tuned PD controller balances the robot at 500 Hz.
 `scripts/build_room.py` writes a 6.0 x 4.5 m room with three tables.
 `src/rlbot/room.py` says what is on each table and where.
@@ -201,9 +201,9 @@ In depth: [Agent](docs/theory.md#agent) in `docs/theory.md`.
 
 ## ACT
 
-`src/rlbot/act.py` is our implementation of ACT, sized for a laptop: one
-ResNet-18 shared across three cameras, a 4+4 layer transformer, 16-number
-state and action, and 32-step action chunks at 20 Hz. Demonstrations come
+`src/rlbot/act.py` is our implementation of ACT, sized for a laptop. One
+ResNet-18 is shared across three cameras. A 4+4 layer transformer maps a
+16-number state to 32-step action chunks at 20 Hz. Demonstrations come
 from keyboard teleop (`scripts/teleop.py`) or the scripted collector
 (`scripts/collect_demos.py`). `scripts/train_act.py` trains on the ball
 table. The shipped checkpoint reaches and closes on the ball about four
