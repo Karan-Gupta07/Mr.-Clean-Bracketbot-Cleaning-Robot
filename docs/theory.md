@@ -1,0 +1,503 @@
+# Theory
+
+In-depth notes on each part of Mr. Clean. The [README](../README.md) has the
+overview, the quick start, the architecture diagram, and the assumptions.
+
+## Contents
+
+1. [Simulation](#simulation)
+2. [Path finding](#path-finding)
+3. [Agent](#agent)
+4. [ACT](#act)
+5. [Fly brain](#fly-brain)
+
+## Simulation
+
+### The robot model
+
+The URDF is a shape export from Onshape, not a physics model.
+`scripts/build_mjcf.py` converts it to MuJoCo and fixes what is broken. The
+original URDF in `models/bracketbot/` is never edited.
+
+| Fix | Detail |
+| --- | --- |
+| Wheels | They were welded. They now have hinge joints. |
+| Wheel size | The URDF has no wheel radius. The script measures it from the tyre mesh: 0.0846 m. |
+| Floor contact | There were no collision shapes. Each wheel now has one. |
+| Mass | The file said 0.29 kg. Mass is now computed from mesh volumes and scaled to 12.0 kg. This total is a placeholder. |
+| Joint strength | Every joint had a 10 N limit. Limits are now sized from the gravity load. |
+| Gripper motor | The second finger had its own motor. It now follows the first through a mimic constraint. |
+| Gripper contact | MuJoCo collides a mesh as its convex hull. Hulled, the hooked fingers fill their own gap. Each blade now carries a flat pad traced from its real inner face. |
+| Head camera | It pointed at the horizon. It now pitches 62 degrees down at a docked table. |
+| Finger ringing | `armature="0.005"` on the blade joints stops the mimic finger from oscillating. |
+
+| Quantity | Value |
+| --- | --- |
+| Joints | 26 = 6 floating base + 2 wheels + 18 in the arms and grippers |
+| Motors | 2 wheel motors (±8 N·m) + 16 arm servos |
+| Sensors | gyro, accelerometer, orientation on the `imu` site; wheel angles and speeds; a ray-cast lidar at the `lidar` site; a head camera and one camera per wrist. See [How the sensors are simulated](#how-the-sensors-are-simulated). |
+| Gripper | holds objects 40 to 60 mm across. Smooth balls are not held. |
+| Balance gains | `kp_pitch=80, kd_pitch=15, kp_speed=0.010` in `src/rlbot/control.py` |
+
+The balancer is a hand-tuned PD controller (`src/rlbot/control.py`). It runs
+at the 500 Hz physics rate. Pitch is read independently of heading
+(`src/rlbot/robot.py`). Two bugs were fixed here: the yaw feedback had the
+wrong sign, and pitch measurement depended on yaw.
+
+### The room
+
+`scripts/build_room.py` writes `models/room.xml` (no robot) and
+`models/room_scene.xml` (with the robot). The room is 6.0 x 4.5 m with four
+walls, a pillar, a divider, and three tables. `src/rlbot/room.py` is the
+single source for what is on each table and where.
+
+| Table | Position | Objects |
+| --- | --- | --- |
+| `table_ball` | (2.25, -1.10) | red ball, crate |
+| `table_cubes` | (-0.20, -1.95) | four cubes, 56 to 58 mm, and a crate |
+| `table_pick` | (-2.25, 0.90) | one 48 mm blue cube and a rectangular destination marker |
+
+Cube sizes and positions are measured, not chosen. Below 56 mm the pads reach
+the table before the cube. Within 0.12 m of the centreline nothing is
+pickable, so that is where the crate sits.
+
+The build checks clearance. The robot's footprint is 42 cm across and 1.61 m
+tall. 16.2 of the 27 m² of floor is standable, and each docking pose leaves
+14.6 cm of clearance.
+
+### Arm control
+
+`src/rlbot/arm.py` solves inverse kinematics for each 7-joint arm.
+`src/rlbot/grasp.py` holds the motions a pick is made of: approach from
+above, close until stall, lift. `scripts/validate_ik.py` reaches every object
+in the room from cold.
+
+## Path finding
+
+### How the sensors are simulated
+
+The robot has no real sensors yet. Every input below is computed from the
+MuJoCo state, at a real sensor's rate, with a real sensor's failure modes.
+The simulator's true pose is read in exactly one place, `true_pose()` in
+`src/rlbot/sensing.py`, and only to score an estimate.
+
+**Wheel encoders.** `scripts/build_mjcf.py` gives each wheel a hinge joint.
+The encoder reading is that joint's angle, `data.qpos[wheel_left]` and
+`data.qpos[wheel_right]`, in radians and unwrapped. Two `jointvel` sensors,
+`vel_left` and `vel_right`, give wheel speed for the balancer. The URDF has
+no wheel radius. The builder measures it from the tyre mesh (0.0846 m), and
+odometry reads it back from the compiled wheel geom
+(`WheelImuOdometry.from_model`), never from a constant.
+
+**IMU.** The builder puts an `imu` site on the chassis 0.20 m up. Three
+MuJoCo sensors attach to it: `gyro` (angular rate), `accel` (linear
+acceleration with gravity), and `orient` (a frame quaternion). Odometry
+consumes only the gyro. `orient` exists for diagnostics and is never fed to
+an estimator.
+
+**Odometry.** `WheelImuOdometry` in `src/rlbot/odometry.py` is dead
+reckoning, not a filter. Each step it does three things. It integrates the
+gyro to track roll and pitch. It adds the pitch rate to the wheel rotation
+to recover ground travel. It blends yaw from the wheel differential and the
+gyro (`gyro_weight=0.9`). The estimate drifts the way wheel odometry drifts,
+plus one extra way. A balancing robot spins its wheels to catch itself, so
+every recovery from a nudge writes phantom distance into the estimate. That
+drift is what SLAM exists to correct.
+
+**Lidar.** There is no lidar hardware model. Each beam is a ray cast from the
+`lidar` site, 0.32 m up the mast, in the site's own xy plane. The ray is cast
+with `mujoco.mj_ray` or `mj_multiRay`, not with MuJoCo `rangefinder`
+sensors, for two reasons. A rangefinder skips only its own body, so a beam
+from the mast axis would hit the robot's shell at 6 mm. And MuJoCo evaluates
+sensors every physics step; 72 beams against 50 meshes is most of the step
+time. Casting by hand lets the scan run at 10 Hz and filter by geom group.
+Two versions exist:
+
+| Class | Beams | Used by | Self-hits | Out of range |
+| --- | --- | --- | --- | --- |
+| `sensing.Lidar` | 72 | `scripts/room.py`, local checks | filtered by geom group (room is groups 0-1, robot is 2-3) | `+inf` |
+| `sensors.Lidar` | 360 | ROS bridge, `record_slam_inputs.py` | mounting assembly masked; moving links still occlude and return `NaN` | `+inf`; below 0.05 m is `NaN` |
+
+The beams follow the chassis. A robot leaning 3 degrees sweeps a plane
+tilted 3 degrees, and real floor hits stay in the scan. `project_scan` in
+`src/rlbot/sensors.py` re-projects each scan into a level `lidar_planar`
+frame using the gyro-estimated tilt and the mount geometry. It drops the
+whole scan when the tilt exceeds 2 degrees. It drops single returns outside
+the 0.12 to 0.52 m height band. It never fills a missing ray with free
+space. Optional Gaussian range noise is available (`noise=`); the recorded
+runs use none.
+
+**Cameras.** The head camera is a MuJoCo camera on the chassis at 1.575 m,
+pitched 62 degrees down, 58 degree field of view. Each wrist camera sits at
+the grip frame and looks along the approach direction, 70 degrees. Frames
+are rendered offscreen with `mujoco.Renderer` at 224 px
+(`scripts/render_demos.py`, `src/rlbot/act.py`). Demonstrations do not
+record frames; they are re-rendered from the saved poses afterwards. The
+lidar and odometry never see an image.
+
+**Rates.** Physics runs at 500 Hz. The balancer reads the gyro and wheel
+speeds every step. The ROS bridge is
+`ros2_ws/src/rlbot_bridge/rlbot_bridge/simulation.py`. It ticks at 50 Hz.
+
+| Topic | Rate |
+| --- | --- |
+| `/odom`, `/imu/data`, `/joint_states`, TF, `/clock` | 50 Hz |
+| `/scan_raw`, `/scan`, `/scan_valid` | 10 Hz |
+
+`scripts/record_slam_inputs.py` records the same signals to one `.npz`
+without ROS. It stores wheel angles, gyro, accelerometer, and odometry at
+500 Hz, and scans at 10 Hz. `truth_pose` is stored for scoring only.
+
+```bash
+.venv/bin/python scripts/record_slam_inputs.py --output out/slam_inputs.npz
+.venv/bin/python scripts/record_slam_inputs.py --push 300 --output out/slam_inputs_push.npz
+```
+
+### SLAM
+
+SLAM runs in ROS 2 Jazzy with SLAM Toolbox, inside Docker. The bridge package
+is `ros2_ws/src/rlbot_bridge/`. It publishes odometry, IMU, TF, and clock at
+50 Hz and scans at 10 Hz. SLAM Toolbox owns scan matching, loop closure,
+`/map`, and the `map -> odom` transform. It never sees the room's geometry or
+the simulator's true pose.
+
+The bridge projects each scan into a fixed `lidar_planar` frame using the
+gyro-estimated tilt. It rejects a scan in three cases:
+
+- the tilt exceeds 2 degrees,
+- a return falls outside the 0.12 to 0.52 m height band,
+- fewer than half the beams are usable.
+
+Build the image and run the acceptance check. Use Docker Desktop or any Linux
+Docker host. The original setup used a `colima-rlbot` context. If you use
+that, add `--context colima-rlbot` to each `docker` command.
+
+```bash
+docker build -t rlbot:jazzy .
+docker run --rm -v "$PWD/out:/artifacts" rlbot:jazzy python scripts/check_ros_mapping.py --output /artifacts/mapping_check_1
+```
+
+The check launches real ROS nodes and drives a loop. It saves `map.yaml`,
+`map.pgm`, `map.posegraph`, and `map.data`. It restarts in localization mode
+and compares the SLAM pose to a separately published reference. The last run
+measured 1.4 mm / 0.20 degrees during mapping and 0.1 mm / 0.00 degrees after
+the localization restart. `result.json` lands in the output directory.
+
+To drive by hand, start mapping and publish a slow command from a second
+terminal:
+
+```bash
+docker run --rm -it --name rlbot-mapping -v "$PWD/out:/artifacts" rlbot:jazzy
+docker exec -it rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}}'
+docker exec rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge save_map /artifacts/room_1
+```
+
+Restart in localization mode and drive to a table on the SLAM pose:
+
+```bash
+docker run --rm -it --name rlbot-localize -v "$PWD/out:/artifacts" rlbot:jazzy ros2 launch rlbot_bridge mapping.launch.py mode:=localization map_file:=/artifacts/room_1/map
+docker exec -it rlbot-localize /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge navigate --ros-args -p use_sim_time:=true -p map_yaml:=/artifacts/room_1/map.yaml -p to:=cubes
+```
+
+`to` takes a table name (`ball`, `cubes`, `pick`) or `"x y yaw"`.
+
+### Occupancy grid and A*
+
+`src/rlbot/navmap.py` builds the grid. It reads a saved PGM/YAML map or
+rasterizes the known room from `models/room.xml`. It unions in the table
+tops, because the low lidar scan cannot see them. It then inflates every
+obstacle by the robot's footprint.
+
+`src/rlbot/planner.py` searches that grid with 8-connected A*. Goals are the
+predefined docking poses in `src/rlbot/room.py`. The raw path is shortened by
+line-of-sight, fitted with a clamped cubic spline, and turned into a speed and
+yaw-rate schedule. Limits: 0.15 m/s, 0.3 rad/s, 0.1 m/s².
+
+### The navigator
+
+`src/rlbot/navigate.py` drives a route in four phases: exit, turn, curve,
+dock. Each phase is played open loop from the schedule. Between phases the
+robot stops and waits for a steady pose: 0.5 s of poses within 5 mm and half
+a degree. It then replans from wherever it actually is. Drifting more than
+15 cm off the schedule also triggers a stop and replan. Within 20 cm of the
+goal the phases give way to a guarded turn in place. The route ends after 60
+replans or 30 s without a pose.
+
+In the continuous demo the pose comes from the simulator, not SLAM
+(`src/rlbot/live.py`). The ROS `navigate` node runs the same navigator on the
+localized pose.
+
+Results on the nine routes between the start pose and the three tables
+(`scripts/navigate.py`):
+
+| Metric | Result |
+| --- | --- |
+| Arrival | 9 of 9 within 10 cm and 5 degrees |
+| Falls | 0 |
+| Furniture contacts | 0 |
+| Time past the 2-degree tilt gate | 0.00 s on every route |
+| Replans per route | 7 to 24 |
+
+The pick table uses a tighter 4 cm / 2 degree tolerance (`LiveSim.ARRIVE_AT`),
+because the fly-brain carry fails from 9 cm out.
+
+### Fly-brain navigation pilot
+
+A separate experiment drives the robot to point goals through the FlyWire
+graph instead of A*. See [Fly brain](#fly-brain).
+
+## Agent
+
+### Top level
+
+The top-level agent is Claude Fable 5.1 (`MODEL = "claude-fable-5-1"` in
+`scripts/agent.py`). It needs `ANTHROPIC_API_KEY`. It receives three tool
+schemas (`TOP_TOOLS` in `scripts/demo.py`): `go_to`, `manipulate`, and
+`finished`. `--planner sweep` replaces the model with keyword routing over
+the same tools: "act" routes to `ball`, "fly" or "blue" to `pick`, "cubes" to
+`cubes`. `--budget` caps tool calls per prompt. `--effort` sets the model's
+reasoning effort.
+
+### The cubes skills agent
+
+At the cubes table, `manipulate` starts a nested Fable agent
+(`scripts/agent.py`). It gets six skills, defined as JSON tool schemas and
+implemented in `src/rlbot/skills.py`.
+
+| Skill | What it does |
+| --- | --- |
+| `look` | Returns the scene as text: where each object is, what each hand holds. No coordinates, no camera, no vision model. |
+| `pick(object, arm?)` | Approaches from above, closes, lifts. `arm` is a hint; the code chooses the hand. Retries wrist angles and both hands internally. |
+| `place(into?)` | Puts the held object into the crate by default. |
+| `home` | Folds the arms to rest. |
+| `give_up(object, why)` | Declares an object impossible. This is a first-class action. |
+| `finished(summary)` | Ends the episode. |
+
+Eight distinct tool names exist in total: three top-level and six nested,
+with `finished` shared.
+
+Four rules come from measured failures:
+
+- Object names are an enum. An unknown name is refused at the tool boundary.
+- The code picks the arm, not the model. Published bimanual planners that let
+  the model assign arms score near zero.
+- Retries live inside `pick`. Models re-sequence well; they do not invent new
+  motion strategies.
+- The harness owns the loop rules: a per-object failure cap, a repeated-call
+  detector, and a step budget.
+
+`--planner sweep` on this level is a fixed policy: pick each object, place
+it, home. It tests the skills without a model.
+
+```bash
+.venv/bin/python scripts/agent.py --table cubes --planner sweep
+.venv/bin/python scripts/agent.py --table cubes --planner fable          # needs ANTHROPIC_API_KEY
+.venv/bin/python scripts/agent.py --table cubes --planner sweep --video out/cubes.mp4
+```
+
+`agent.py` welds the base at the docking pose and never drives. The idle arm
+folds out of the way during a pick with the other hand.
+
+### Recognition and orchestration
+
+`src/rlbot/orchestration.py` is a deterministic selector. It accepts
+timestamped recognitions (`colored_cubes`, `red_ball_box`,
+`blue_cube_rectangle`), rejects stale or ambiguous inputs, and dispatches
+one registered tool. The recognitions are supplied by the operator. There is
+no camera detector and no vision-language model in this repository.
+
+```bash
+.venv/bin/python scripts/orchestrate.py --station cubes --recognized colored_cubes
+.venv/bin/python scripts/orchestrate.py --station cubes --recognized colored_cubes --execute --planner sweep
+```
+
+`scripts/live_demo.py` is the older two-window demo: it drives in one
+simulation, then opens a separate fixed-base simulation for the arms.
+`scripts/demo.py` supersedes it.
+
+## ACT
+
+`src/rlbot/act.py` is our implementation of ACT (Zhao et al. 2023), sized
+for a laptop. It is trained on the red-ball table and runs at the `ball`
+station.
+
+### Architecture
+
+| Part | Value |
+| --- | --- |
+| Vision backbone | one ResNet-18, ImageNet-pretrained, shared across cameras, last two layers removed |
+| Cameras | 3: `head_cam`, `wrist_right_cam`, `wrist_left_cam`, at 128 px |
+| State and action | 16 numbers: both arms' 7 joints plus one gripper blade each |
+| Transformer | 4 encoder + 4 decoder layers, hidden 256, 8 heads, feed-forward 1024 |
+| CVAE latent | 32 |
+| Chunk | 32 commands = 1.6 s at 20 Hz |
+| Parameters | about 22 M |
+
+Training loss is L1 on the chunk plus a KL term at weight 10. The optimizer
+is AdamW at 1e-4, 1e-5 for the backbone, batch 8. On the MPS backend a step
+takes about 0.2 s on an M5.
+
+### Demonstrations
+
+`scripts/teleop.py` puts one arm under the keyboard. The operator commands
+where the jaws go, not joints. IK does the rest.
+
+```
+W / S   jaws forward / back      SPACE   close / open        1-4   which cube
+A / D   jaws left / right        X       swap arms           H     reset the scene
+R / F   jaws up / down           ENTER   start / stop        P     print poses
+Q / E   wrist turn               C       cancel recording
+```
+
+Each episode is scored: is the object in the crate and out of the hand. It is
+written to `out/demos/<table>/` as one `.npz` at 20 Hz. Camera frames are
+not recorded; `scripts/render_demos.py` renders them afterwards from the
+poses.
+
+`scripts/collect_demos.py` drives the same controller from code. Every
+episode moves both the object and the crate. Only successes count. The
+scripted collector crates the ball about 7 times in 10.
+
+```bash
+.venv/bin/mjpython scripts/teleop.py --cube m
+.venv/bin/python scripts/collect_demos.py --table ball --episodes 200
+.venv/bin/python scripts/render_demos.py out/demos/ball --preview
+```
+
+### Training and results
+
+Two runs on the 80-episode ball set, 72 training and 8 held out:
+
+| Checkpoint | Augmentation | Steps | Best val L1 | Into the crate |
+| --- | --- | --- | --- | --- |
+| `checkpoints/act_ball_run1_noaug.pt` | none | 20 K | 0.0167 | 2 of 14 |
+| `checkpoints/act_ball_run2_aug.pt` | random 6 px shift | 17 K | 0.0153 | 1 of 6 |
+
+Rollouts use layouts the policy never saw. Both checkpoints reach the ball
+and close on it about four times in ten. Most then lose the ball on the
+carry. Flat pads have nothing to bite on a sphere, and the scripted collector
+drops a third of its carries too.
+
+```bash
+.venv/bin/pip install -r requirements-train.txt
+.venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
+.venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
+.venv/bin/python scripts/run_act.py --describe
+```
+
+Two lessons:
+
+- Rollouts must start where the demonstrations start, after the collector's
+  ready move. From the rest pose the policy swung the arm through the ball.
+- The policy closes about half a second early. More data and augmentation
+  reduce it.
+
+In the continuous demo, `manipulate` at the ball table runs one closed-loop
+episode from the ready pose and returns to it afterwards. The shipped ball
+position is one this checkpoint misses.
+
+## Fly brain
+
+The fly-brain controllers route signals through a graph built from measured
+fruit-fly neuron connections. This is a connectivity experiment, not a brain
+simulation. Activities are artificial rate-like values, not spikes.
+
+### The graph
+
+`scripts/prepare_connectome.py` downloads four public FlyWire FAFB v783
+tables (neurons, classification, coordinates, connections; about 58 MB) and
+pins their SHA-256 checksums. The source has 139,255 neurons and 2,700,513
+directed edges.
+
+The pilot keeps 512 neurons. Selection is by total synapse strength with
+interface quotas: one eighth afferent (inputs), one eighth descending
+(outputs), the rest central and visual-projection neurons. Edge weights are
+synapse counts with a transmitter sign: GABA and glutamate negative, others
+positive. Each row is normalized by its absolute incoming sum. The result is
+`checkpoints/graph_512.npz` (512 neurons, 8,688 edges, 64 inputs, 64
+outputs) with its manifest in `checkpoints/graph_512.json`.
+
+```bash
+.venv/bin/python scripts/prepare_connectome.py              # 512-neuron pilot graph
+.venv/bin/python scripts/prepare_connectome.py --neurons 0  # the full graph, untrained
+.venv/bin/python scripts/benchmark_connectome.py            # full-graph forward pass: ~1.2 s, too slow for 50 ms control
+```
+
+### The controller
+
+`ConnectomeFeatures` in `src/rlbot/connectome.py` is a Stable-Baselines3
+feature extractor.
+
+1. A linear encoder maps the observation to the 64 input neurons, 4 channels
+   each.
+2. Four rounds of sparse message passing run over the 512 x 512 matrix. Each
+   round: `tanh(0.35 * h + gain * mix(A @ h) + injection + bias)`.
+3. The 64 output neurons' activity, 256 values, feeds the SB3 MLP head
+   (`pi=[128, 128]`), which produces the action.
+
+The edges are fixed. The encoder, per-neuron gains and biases, channel
+mixing, and the MLP head are trained. No hidden state persists between robot
+steps.
+
+### Navigation pilot
+
+`src/rlbot/navigation.py` is a Gymnasium env: 12 observation values, 2
+actions (speed and yaw-rate requests at 20 Hz), and the PD balancer
+underneath. Training (`scripts/train_connectome.py`): 40 scripted teacher
+episodes, 800 imitation updates, then 8,192 PPO transitions with
+demonstration rehearsal.
+
+| Policy | Held-out goals (seeds 2000–2019) | Falls |
+| --- | --- | --- |
+| Fly graph, imitation only | 20 of 20 | 0 |
+| Fly graph, PPO + rehearsal | 17 of 20 | 0 |
+| MLP, imitation only | 18 of 20 | 0 |
+| MLP, PPO + rehearsal | 20 of 20 | 0 |
+
+The graph works as a controller. This run does not show a benefit from fly
+wiring or from PPO over imitation. Raw numbers are in `docs/results/`. The
+full recipe and the recording are in [brain_demo.md](brain_demo.md).
+
+### Arm policy (the pick table)
+
+`src/rlbot/arm_env.py` is the pick-and-place env. The robot base is fixed.
+The action is 4 continuous values at 20 Hz: table-relative XYZ motion and
+jaw opening. There is no phase controller at inference.
+
+Training (`scripts/train_arm.py`) is teacher-student:
+
+1. A scripted teacher (`Teacher` in `scripts/train_arm.py`) runs seven
+   phases: over the cube, down, close, lift, over the goal, down, release.
+   It exists only to make training data.
+2. `--episodes 20` attempts; the successes (17 on the shipped run) become the
+   dataset.
+3. Behaviour cloning: 4,000 updates of MSE on the teacher's actions.
+4. Optional PPO with demonstration rehearsal (`RehearsalPPO`). `--steps 0`
+   skips it.
+
+Single-frame observations failed (0 of 10). The teacher's private wait
+counter gives near-identical inputs opposite labels. `--history 16` feeds
+16 causal observations (368 values). Two post-training calibrations follow:
+a 1.25x gain on the jaw output and a 0.05 deadband on Cartesian motion.
+
+```bash
+.venv/bin/python scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_padded
+.venv/bin/python scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_padded/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_padded_calibrated
+.venv/bin/python scripts/run_arm.py --history 16 --motion-deadband 0.05 --checkpoint out/rl/arm_padded_calibrated/policy.zip --episodes 20 --seed 5000 --output out/rl/arm_padded_calibrated/validation
+```
+
+The shipped checkpoint is `checkpoints/flybrain_arm_padded_calibrated.zip`.
+It is imitation only, zero PPO steps, with both calibrations. On its own
+fixed-base test seeds it scored 4 of 10. A sibling candidate trained the same
+way scored 18 of 20 on fresh held-out seeds; the two held-out sets differ and
+are not a paired comparison. In the continuous demo it picked and placed the
+blue cube. It runs there **without** the 20-of-20 validation gate that
+`orchestrate.py` enforces, and the demo says so.
+
+Checkpoints carry the gripper, station, control version, horizon, and
+physics hashes. A mismatch is refused, not silently run.
+`tests/test_checkpoints.py` verifies the shipped weights and graph match.
+
+The older parallel-jaw experiment (20 of 20, with PPO) is historical. It used
+a different gripper and is not evidence for the current policy. See
+[arm_rl.md](arm_rl.md) and [original_arm.md](original_arm.md).
