@@ -448,6 +448,8 @@ def main(argv=None) -> int:
     parser.add_argument("--budget", type=int, default=TOP_BUDGET,
                         help="top-level tool calls per prompt")
     parser.add_argument("--report", type=Path, help="write non-secret run status here")
+    parser.add_argument("--video", type=Path,
+                        help="record the run to this .mp4/.mov, over the robot's shoulder (needs ffmpeg)")
     args = parser.parse_args(argv)
 
     if args.planner == "fable" and not os.environ.get("ANTHROPIC_API_KEY"):
@@ -455,7 +457,15 @@ def main(argv=None) -> int:
                        "--planner sweep to drive the same robot without a model.\n")
 
     print(banner(args), flush=True)
-    sim = LiveSim()
+    recorder = None
+    if args.video:
+        if args.view:
+            parser.error("--video records headless; drop --view")
+        from rlbot.filming import Recorder
+        recorder = Recorder(args.video)
+    sim = LiveSim(on_step=recorder)
+    if recorder is not None:
+        recorder.attach(sim.model)
     commander = Commander(sim, planner=args.planner, effort=args.effort,
                           checkpoint=args.checkpoint, act_checkpoint=args.act_checkpoint,
                           seed=args.seed, budget=args.budget)
@@ -499,6 +509,8 @@ def main(argv=None) -> int:
                     results=commander.results)
         if viewer is not None:
             viewer.close()
+        if recorder is not None:
+            recorder.close()
     return code
 
 

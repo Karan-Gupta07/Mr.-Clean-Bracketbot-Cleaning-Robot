@@ -145,12 +145,9 @@ def main():
     if a.record:
         payload=json.dumps(dict(report=report,frames=frames,**graph_payload(policy.policy.features_extractor.graph_path)),separators=(',',':'),allow_nan=False)
         (a.output/'episode.json').write_text(payload,encoding='utf-8')
-        template=(ROOT/'demo/arm_rl.html').read_text(encoding='utf-8')
-        # Escape </ so no string in the payload can close the inlined <script> block.
-        (a.output/'index.html').write_text(template.replace('__ARM_DATA__',payload.replace('</','<\\/')),encoding='utf-8')
         gifs[0].save(a.output/'demo.gif',save_all=True,append_images=gifs[1:],duration=100,loop=0)
         gifs[-1].save(a.output/'preview.png')
-        if a.open: webbrowser.open((a.output/'index.html').resolve().as_uri())
+        if a.open: webbrowser.open((a.output/'demo.gif').resolve().as_uri())
     return 0 if report['successes']==a.episodes else 1
 
 

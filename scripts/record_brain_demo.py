@@ -141,14 +141,12 @@ def main():
                "edges": edges, "frames": frames}
     serialized = json.dumps(payload, separators=(",", ":"), allow_nan=False)
     (args.output / "episode.json").write_text(serialized)
-    template = (REPO / "demo/index.html").read_text(encoding="utf-8")
-    (args.output / "index.html").write_text(template.replace("__DEMO_DATA__", serialized.replace("</", "<\\/")), encoding="utf-8")
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     if gif_frames:
         gif_frames[0].save(args.output / "demo.gif", save_all=True, append_images=gif_frames[1:], duration=100, loop=0)
         gif_frames[-1].save(args.output / "preview.png")
     print(f"Recorded {len(frames)} frames, success={info['success']}, distance={info['distance']:.3f} m", flush=True)
-    print(f"Open {(args.output / 'index.html').resolve()}", flush=True)
+    print(f"Wrote {(args.output / 'demo.gif').resolve()}", flush=True)
 
 
 if __name__ == "__main__":
