@@ -36,7 +36,7 @@ Run every command from the repository root, in the existing environment. Every
 
 This writes `out/pick_place/demo.gif`, an over-the-shoulder replay, plus
 `episode.json` (trajectory data) and `report.json`. A recorded run ships as
-[../demo/pick_place.gif](../demo/pick_place.gif).
+[../demo/fly_brain_pick_place.gif](../demo/fly_brain_pick_place.gif).
 
 2. Reopen the existing replay:
 
