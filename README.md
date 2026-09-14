@@ -488,7 +488,7 @@ carry. Flat pads have nothing to bite on a sphere, and the scripted collector
 drops a third of its carries too.
 
 ```bash
-.venv/bin/pip install -r requirements-train.txt
+.venv/bin/pip install -r requirements-rl.txt
 .venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
 .venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
 .venv/bin/python scripts/run_act.py --describe
@@ -619,9 +619,8 @@ The tests use `unittest`. `pytest` is not installed.
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-123 tests run. One fails: `tests/test_manipulation.py` compares a MuJoCo
-enum to a NumPy int, and MuJoCo 3.13 no longer treats them as equal. The
-geoms it checks are meshes; the test is wrong, not the model.
+120 tests run and pass. One is a declared expected failure: the bare
+gripper, without pads, cannot grasp.
 
 Standalone checks, all headless:
 
@@ -633,6 +632,8 @@ Standalone checks, all headless:
 .venv/bin/python scripts/validate_ik.py             # IK round-trip, then every object reached
 .venv/bin/python scripts/build_room.py              # rebuild the room, print the clearance map
 .venv/bin/python scripts/check_grasp.py             # 3 of 6 lifted with the default pads; see Known issues
+.venv/bin/python scripts/check_slam_inputs.py       # lidar, odometry, projection, recording: all OK
+.venv/bin/python scripts/check_arm_clearance.py     # arm-to-chassis clearance; exits 1 today, see Known issues
 ```
 
 Live viewers (`mjpython`):
@@ -719,13 +720,13 @@ docker/, Dockerfile         The rlbot:jazzy image.
 
 ## Known issues and limits
 
-Broken scripts:
+Scripts that look worse than they are:
 
-- `scripts/check_arm_clearance.py` imports `plan_grasp` from `check_grasp`.
-  That function no longer exists.
-- `scripts/check_slam_inputs.py` calls `Rig(..., balance=True)` and
-  `rig.state()`. `Rig` in `src/rlbot/grasp.py` takes `driver=` and has no
-  `state()`.
+- `scripts/check_arm_clearance.py` exits 1. The swing up to `cube_l` passes
+  10 mm from the mast cover, on its 10 mm warn threshold. Every other
+  waypoint clears by 15 mm or more. It also reports that about 30% of random
+  poses inside the joint limits penetrate the chassis: the planner keeps the
+  arm out, the workspace itself does not.
 - `scripts/check_grasp.py` exits 1 at 3 of 6. It uses one default pad set.
   The ball is unpickable by design. `cube_l` and `pick_cube` fail here but
   succeed in the live demo, which swaps pads per table.
