@@ -1,696 +1,682 @@
 # RL-BOT
 
-A robot that cleans up a room, built and tested in simulation first.
+A two-wheeled robot that cleans a room. It is built and tested in simulation.
 
-The robot is the **BracketBot**. It is a two-wheeled robot that balances on its own. It has a tall mast and two arms with grippers. We run it inside **MuJoCo**, a physics simulator, so we can test ideas fast and safely before touching real hardware.
+The robot is the **BracketBot**: a self-balancing base, a tall mast, and two
+7-joint arms with grippers. It runs inside **MuJoCo**. One prompt drives the
+whole job: an agent plans, the robot drives to a table, and a task-specific
+controller does the manipulation.
 
-## The goal
+To see it without installing anything, open [`demo/`](demo/). It holds a screen
+recording of ACT and three self-contained HTML replays.
 
-The project has three steps. Each step builds on the one before it.
+## Contents
 
-1. **Put the BracketBot in the sim.** Load the robot model, make it stand up, and make it balance. This is the base for everything else.
-2. **Drive around a room with SLAM.** SLAM stands for "Simultaneous Localization and Mapping". The robot builds a map of the room while it figures out where it is on that map. Then it can drive from one spot to another without bumping into things.
-3. **Pick up and put down objects with task-specific controllers.** The current demo routes colored cubes to Fable, the red ball to ACT (Action Chunking with Transformers, trained on teleoperated demonstrations), and the blue-cube/rectangle task to Flybrain. A deterministic selector replaces the proposed VLM orchestrator.
+1. [Status](#status)
+2. [Quick start](#quick-start)
+3. [System overview](#system-overview)
+4. [Simulation](#simulation)
+5. [Path finding](#path-finding)
+6. [Agent](#agent)
+7. [ACT](#act)
+8. [Fly brain](#fly-brain)
+9. [Verification](#verification)
+10. [Folder layout](#folder-layout)
+11. [Known issues and limits](#known-issues-and-limits)
 
-Put together: the robot maps the room, drives to an object, picks it up, drives to where it belongs, and puts it down.
+## Status
 
-## Where we are now
-
-| Step | Status |
+| Part | State |
 | --- | --- |
-| 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
-| 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Custom curved navigation passes all nine sim routes on the true pose, and a ROS node drives the same navigator on the SLAM pose in Docker (two routes hand-tested). Nav2 is not implemented. |
-| 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT runs from `checkpoints/act_ball_run1_noaug.pt` (2 of 14 random layouts in the fixed-base sim); live Fable still needs a locally configured API key. |
+| Simulation | Done. The robot loads, stands, balances, and survives a 300 N shove. |
+| Path finding | Done in simulation. A* plus curved trajectories. All nine routes arrive within 10 cm and 5 degrees. ROS 2 SLAM mapping and localization pass in Docker. |
+| Agent | Done. Claude Fable 5.1 calls three top-level tools. A keyword planner runs the same tools with no API key. |
+| Cubes table (Fable skills) | Works. 4 of 4 cubes into the crate. |
+| Pick table (fly brain) | Works on the live demo. Imitation-only policy, no PPO. 4 of 10 on its fixed-base test seeds. |
+| Ball table (ACT) | Runs, misses. 2 of 14 random layouts on the fixed-base sim. 0 of 10 on the shipped layout. |
 
+Every result above is a simulation result. No hardware has been tested.
 
-To see it without installing anything, [`demo/`](demo/) holds a screen recording
-of ACT and three self-contained HTML replays - open any of them in a browser.
+## Quick start
 
-### What works today
-
-- **The BracketBot model.** It was converted from a URDF file into MuJoCo format by `scripts/build_mjcf.py`. The wheels spin, the robot can stand on the floor, and the mass numbers are fixed. See "How the robot model was fixed" below.
-- **Balancing.** A hand-tuned PD controller keeps the robot upright for as long as you like. It survives a 300 N shove.
-- **A room to work in.** A 6 x 4.5 m room with four walls, a pillar and a divider to map, and three tables: a red ball and crate, four colored cubes and crate, and a blue cube with a rectangular destination. It is written twice - `models/room.xml` is the environment on its own, with no robot in it at all, and `models/room_scene.xml` is the same room with the robot added.
-- **A room the robot actually fits in.** By default, `scripts/build_room.py` regenerates the room files, then checks clearance and arm reach. The clearance check measures the robot's own footprint - 42 cm across, 1.61 m tall, read off its collision boxes. 16.2 of the 27 m2 of floor is standable, all of it reachable from the middle, and each table's docking pose leaves 14.6 cm of daylight. It prints the map and exits with a nonzero status if the checks fail; the room files have already been written.
-- **Driving to a table.** A* searches a grid inflated for the robot's footprint, then the robot follows checked cubic curves with bounded motion profiles. All nine nominal routes from the start to each table and between table docks arrived within 10 cm and 5 degrees, without falling or touching furniture. The local check uses the known-room grid and the sim's true pose. In Docker, `ros2 run rlbot_bridge navigate` runs the same navigator on a saved SLAM map and the localised pose; two routes have been hand-tested that way.
-
-  The four phases - exit, turn, curve, dock - are played open loop from a schedule worked out in advance, not steered step by step. Between phases the robot stops, waits for a steady pose, and replans from wherever it actually ended up; a stale pose, or drifting more than 15 cm off the schedule, stops it the same way. The design asked for 10 cm there; the extra 5 cm is simulation tuning, because a balancing robot writes phantom distance into its pose every time it catches itself. Waiting for a steady pose means holding zero for a braking dwell and then seeing 0.5 s of poses within 5 mm and half a degree of each other before it replans. If that window never arrives the wait re-arms after 8 s and tries again; only 60 replans on one route, or 30 s with no pose at all, ends it. Within about 20 cm of the goal - twice the arrival tolerance - the four phases give way to a guarded turn in place, each intermediate angle checked as a padded rectangle, so the last stretch is not a detour back out to an exact docking anchor and in again. The schedules cap speed at 0.15 m/s, yaw rate at 0.3 rad/s and linear acceleration at 0.1 m/s², with angular acceleration on curves best effort and the DriveController's ramp as a backstop. No controller limits were raised to make any of this work. These are nominal simulation results only: two routes finished with little of their time budget to spare, and noisy poses and hardware have not been tested.
-
-  The check also watches the bridge's 2-degree scan-tilt gate, and it never tripped: the chassis spent 0.00 s past 2 degrees on all nine routes, so driving did not starve SLAM of scans in sim. That is only one of the three things the bridge asks of a scan, though. It also throws one away when the gyro's roll/pitch rate passes 0.2 rad/s, or when fewer than half the rays come back, and the local check measures neither - so a clean sweep here does not fully predict the ROS behaviour.
-- **Arm control.** Inverse kinematics (IK) moves each 7-joint arm to a target pose. The arms and mast now have collision shapes, so they cannot pass through each other.
-- **A grasp test.** `scripts/check_grasp.py` tries to pick up every object in the room. It approaches from above, closes the fingers, lifts, and checks the object came along. The supplied blades need contact pads to hold anything; `--bare` runs them without and lifts nothing.
-- **Driving it around.** `scripts/room.py` opens a window with the robot in the room and lets you drive it with the keyboard while the balancer runs. The lidar scan is drawn live.
-- **The sensors SLAM needs.** A 72-beam planar lidar and wheel odometry, in `src/rlbot/sensing.py`. There is also a head camera and a camera on each wrist.
-- **A small toy balancer.** `models/balancer.xml` is a simple two-wheeled robot. It loads in a second and is a quick way to catch controller bugs without loading the full robot.
-
-## Deterministic demo routing
-
-The demo uses explicit recognition rules, not a VLM orchestrator:
-
-| Recognized task | Station | Controller |
-| --- | --- | --- |
-| Colored cubes and a box | `cubes` | Fable tool-calling agent |
-| Red ball and a box | `ball` | **ACT**, pending its code/checkpoint |
-| Blue cube and a rectangle | `pick` | Flybrain learned arm policy |
-
-The `pick` station replaces crockery, not the red ball. Source URDF and mesh
-assets remain unchanged. See [original-gripper scope and training](docs/original_arm.md).
-
-`src/rlbot/orchestration.py` accepts timestamped recognitions, rejects stale,
-ambiguous or mismatched inputs, and invokes only the selected registered tool.
-`classify_scene` distinguishes supplied shape/color/container observations.
-These are recognition inputs, **not a camera detector**. The CLI labels its
-input as user-provided; it does not pretend to recognize camera images.
-
-```powershell
-.venv\Scripts\python.exe -m pip install -r requirements-agent.txt
-.venv\Scripts\python.exe scripts/orchestrate.py --station cubes --recognized colored_cubes
-.venv\Scripts\python.exe scripts/orchestrate.py --station cubes --recognized colored_cubes --execute --planner sweep
-.venv\Scripts\python.exe scripts/orchestrate.py --spot -2.25 0.90 --recognized blue_cube_rectangle --execute
-```
-
-Without `--execute`, this only reports the chosen tool. Execution first checks
-controller availability, runs navigation, and proceeds only after successful
-arrival. Manipulation uses a **separate fixed-base simulation** at the docking
-pose; this is not yet a continuous balancing-to-manipulation handoff. Navigation
-uses simulator truth here, not ROS localization. `--planner sweep` explicitly
-tests Fable's skills without an API model; default `fable` needs a locally set
-`ANTHROPIC_API_KEY`. ACT runs one closed-loop episode of the shipped checkpoint
-on a fixed-base room; it never falls back to VLA or to a script. Flybrain refuses dispatch
-without compatible model metadata and a passing, checkpoint-bound validation.
-
-### Live MuJoCo demo and ACT
-
-The integrated Flybrain/Fable code is in `main`. ACT (PR #10) lives in `rlbot.act`:
-`prepare_act` runs the shipped checkpoint on a fixed-base room, `run_act.py --check`
-only confirms the checkpoint exists, and neither substitutes another controller.
-Both need `requirements-rl.txt` (torch and torchvision).
-
-```powershell
-.venv\Scripts\python.exe scripts/run_act.py --describe
-.venv\Scripts\python.exe scripts/live_demo.py --station cubes --recognized colored_cubes --prompt-api-key --report out/live_fable.json
-.venv\Scripts\python.exe scripts/live_demo.py --station cubes --recognized colored_cubes --planner sweep
-```
-
-The hidden prompt requires an interactive local console and keeps the key in
-that process only. Fable API/model access is checked before navigation. The
-sweep command is explicitly **offline skill validation**, not an API-agent run.
-Navigation opens a live MuJoCo window, followed by a **separate fixed-base**
-manipulation window. Close the cubes window after completion to finish the
-result report; closing it during manipulation stops the skill loop. No camera
-recognition or continuous navigation/manipulation handoff is claimed.
-
-For Flybrain, `live_demo.py --station pick --recognized blue_cube_rectangle`
-also requires an explicit `--checkpoint`. Its unchanged preflight rejects the
-current 18/20 candidates. A `--dry-run` reports routing only, not readiness.
-
-### Continuous demo: one prompt, one simulation
-
-`scripts/demo.py` runs the whole thing in **one** MuJoCo model: a prompt typed
-in the terminal becomes tool calls from a top-level Claude Fable agent -
-`go_to(station)` plans and drives the balancing robot to a table, `manipulate()`
-runs that table's controller in the same simulation, `finished` ends. There is
-no second model and no keyframe jump: on arrival a pre-declared weld equality
-between the chassis and the world is switched on (`data.eq_active`) so the base
-holds still like a parking brake, the solver's impedance ratio is raised to 200
-for the pinch, and both are switched back before the next drive.
+You need macOS (Apple Silicon works) and Python 3.10 or newer.
 
 ```bash
-# The agent decides the calls. Needs ANTHROPIC_API_KEY.
-.venv/bin/python scripts/demo.py "tidy the cubes table, then go to the ACT station"
-
-# No key: keyword routing to the same tools. "act" -> ball, "fly"/"blue" -> pick, "cubes" -> cubes.
-.venv/bin/python scripts/demo.py --planner sweep "clean the cubes then pick the blue cube"
-
-# Watch it (mjpython on macOS). No prompt = a `> ` loop; the robot stays where the last prompt left it.
-.venv/bin/mjpython scripts/demo.py --view
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt          # MuJoCo and NumPy
+pip install -r requirements-agent.txt    # Anthropic SDK, for the Fable agent
+pip install -r requirements-rl.txt       # torch, gymnasium, SB3, for ACT and the fly brain
 ```
 
-| Station | Manipulation tool at that table | State today |
-| --- | --- | --- |
-| `cubes` | Fable skills agent (`scripts/agent.py`, nested) or `--planner sweep` | works on the shared sim |
-| `pick` | Flybrain policy; `--checkpoint` defaults to `checkpoints/flybrain_arm_padded_calibrated.zip` (graph `checkpoints/graph_512.npz`) | picks and places the blue cube on the live sim; runs **without** its 20/20 validation gate and says so; the navigator parks within 4 cm / 2° here (`LiveSim.ARRIVE_AT`) because the carry fails from 9 cm out |
-| `ball` | ACT, `rlbot.act.prepare_act_live`; `--act-checkpoint` defaults to `checkpoints/act_ball_run1_noaug.pt` | one closed-loop episode per visit, from the collector's ready pose, back to it afterwards so `home` folds clean; the shipped ball placement is one this checkpoint misses (0 of 10 live, and on the fixed-base room too) - on random layouts it scores 1 of 3 here and 2 of 14 in PR #10 |
+On Windows, replace `.venv/bin/python` with `.venv\Scripts\python.exe`.
 
-Navigation still reads the simulator's pose, not SLAM. `manipulate` never
-falls back to another controller; an unavailable one is reported to the agent,
-which decides what to do next.
-
-Each table's controller was tuned on different contact pads - the skills on the
-pads `scripts/build_mjcf.py` lays on the blades, Flybrain on the fitted pads of
-`rlbot.gripper_pads` - and neither works on the other's. The live room carries
-one pad per blade and rewrites it on arrival (`LiveSim.use_pads`: position,
-size, friction, softness, the blade's inertials, its broadphase box), so the
-cubes table sees the skills' pads and the pick table sees Flybrain's. Two pad
-geoms on one blade, one of them inert, was tried first and cost the skills every
-grasp (0/16 against 16/16).
-
-The Flybrain checkpoint is made locally (`out/` is ignored). This is the
-history-and-calibration recipe from [docs/original_arm.md](docs/original_arm.md);
-about 15 minutes on a laptop CPU after `pip install -r requirements-rl.txt`
-and `scripts/prepare_connectome.py` for the FlyWire graph:
-
-```bash
-.venv/bin/python scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_padded
-.venv/bin/python scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_padded/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_padded_calibrated
-```
-
-Headless, the whole tour - tidy the cubes, drive on and pick the blue cube,
-then drive to the ACT table and try the ball - runs in one model in a few
-minutes of wall time:
+Run the full tour headless. The robot tidies the cubes, drives on, picks the
+blue cube, drives to the ball table, and tries the ball. It takes a few
+minutes.
 
 ```bash
 .venv/bin/python scripts/demo.py --planner sweep "clean the cubes, then pick up the blue cube, then go to the ACT table"
 ```
 
-## Setup
-
-### Fly-connectivity controller and demo
-
-A separate RL prototype now drives the BracketBot toward point goals using a
-512-neuron graph built from measured FlyWire connections. It includes imitation
-and PPO training, an MLP comparison, and a synchronized robot/neuron replay.
-The trained graph reached 17 of 20 separate evaluation goals with no falls;
-the MLP reached 20 of 20. This is a simulator-state pilot, with PD balance, not
-SLAM or a biological brain simulation. The full graph is prepared but untrained.
-
-See [setup, demo commands, and measured results](docs/brain_demo.md). On the
-development machine, open `out/demo/index.html` for the generated interactive
-demo. Generated data/checkpoints stay in ignored `out/` and must be regenerated
-on a fresh checkout. The linked guide includes the tested Windows commands.
-
-### Pick-and-place simulation variant
-
-The arm now has a contact-based cube pick-and-place demo with a **fixed base**.
-It passes 20 tested starts across four cube sizes on the supplied gripper with
-contact pads, and 25 on the older parallel-jaw replacement. This baseline uses
-scripted IK and servos.
-See [commands, results, and technical details](docs/pick_place.md).
-
-```powershell
-.venv\Scripts\python.exe scripts/pick_place.py --record --open
-```
-
-Models now use the **supplied hooked gripper with a contact pad on each blade**.
-The CAD blades are untouched and are still what you see; the pads are what the
-simulator collides, because MuJoCo collides each blade as its convex hull - 3.2x
-the mesh's real volume - which fills the hook in solid and lifts nothing. With
-pads the scripted baseline passes 20/20 across four cube sizes; with bare blades
-it passes 0/20. `--gripper urdf` runs the bare blades and `--gripper parallel`
-the older sliding-jaw replacement.
-
-A separate [continuous arm RL experiment](docs/arm_rl.md) trains a new FlyWire
-graph policy with demonstrations and PPO. Its four outputs select XYZ motion and
-gripper opening; inference has no scripted phase controller. It uses the fixed
-base and parallel jaws with simulated pad friction increased to 3.0.
-
-```powershell
-.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --steps 0
-.venv\Scripts\python.exe scripts/train_arm.py --gripper parallel --output out/rl/arm_release --resume out/rl/arm_friction3/imitation.zip --demonstrations out/rl/arm_friction3/demonstrations.npz --correct-release --updates 750
-.venv\Scripts\python.exe scripts/run_arm.py --gripper parallel --record --open
-```
-
-The last command writes a standalone replay to `out/arm_rl_demo/index.html`: the
-robot views beside an orbitable cloud of the 512 mapped neurons, a circuit view
-that lays their cell types out by synaptic distance from the policy's inputs, and
-an Explore panel for searching any FlyWire root ID, reading its transmitter
-prediction and connections, and following its activity through the episode.
-
-The saved arm policy passed 20/20 tested starts. On a paired set of ten starts,
-the pre-PPO checkpoint passed 2/10 and PPO plus demonstration rehearsal passed
-10/10. These are small position variations of one cube with a fixed destination
-offset; see [raw results](docs/results/arm_rl.json). These are historical
-parallel-jaw results, not evidence for the current original-gripper policy.
-Reproduce that environment at commit `2db0bea`; current runners deliberately
-reject its unstamped checkpoints. Use `docs/original_arm.md` for current training.
-
-### Base simulation setup
-
-You need macOS (Apple Silicon is fine) and Python 3.10 or newer.
+Watch it. Use `mjpython`, not `python`, for any window on macOS.
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+.venv/bin/mjpython scripts/demo.py --view --speed 2 --planner sweep "go to the ACT table"
 ```
 
-## How to run
+Let Claude decide the calls. This needs an API key.
 
 ```bash
-# Headless balance test. Does the robot stay up? Does it drift?
-.venv/bin/python scripts/evaluate.py
+export ANTHROPIC_API_KEY=sk-ant-...
+.venv/bin/python scripts/demo.py "tidy the cubes table, then go to the ACT station"
+```
 
-# Same test, but shove the robot with 300 N halfway through.
-.venv/bin/python scripts/evaluate.py --push 300
+With no prompt, `demo.py` opens a `> ` loop. The robot stays where the last
+prompt left it. The exit code is 0 only when every tool call succeeds.
 
-# Live viewer. Watch the robot balance in real time.
-.venv/bin/mjpython scripts/balance.py
+## System overview
 
-# Drive the robot around the room. W/S/A/D to drive, 1/2/3 to park at a table.
-.venv/bin/mjpython scripts/room.py
+`scripts/demo.py` runs everything in **one** MuJoCo model. A prompt becomes
+tool calls from a top-level agent. The agent has three tools.
 
-# Try to pick up every object in the room.
-.venv/bin/python scripts/check_grasp.py
+```
+prompt
+  │
+  ▼
+top-level agent (Claude Fable 5.1, or keyword routing with --planner sweep)
+  │
+  ├── go_to(station)     A* route, curved trajectory, balancing drive, park
+  ├── manipulate()       the controller bolted to the table the robot is parked at
+  └── finished(summary)  stop
+```
 
-# Same, but with the robot balancing on its wheels instead of bolted to the floor.
-.venv/bin/python scripts/check_grasp.py --balance
+`manipulate` dispatches on the station:
 
-# Rebuild the robot model from the URDF, or rebuild the room. The room build also
-# prints the clearance map and checks the arms can reach every object.
-# All outputs are committed, so this is optional.
-.venv/bin/python scripts/build_mjcf.py
-.venv/bin/python scripts/build_room.py
+| Station | Objects | Controller | Code |
+| --- | --- | --- | --- |
+| `cubes` | four colored cubes and a crate | Fable skills agent, nested inside the top-level agent | `scripts/agent.py`, `src/rlbot/skills.py` |
+| `pick` | one blue cube and a rectangle | Fly-brain policy | `src/rlbot/live_arm.py`, `src/rlbot/connectome.py` |
+| `ball` | a red ball and a box | ACT | `src/rlbot/act.py` |
 
-# Check the arm IK: recover random reachable poses cold, then reach every object in the room.
-.venv/bin/python scripts/validate_ik.py
+There is no fallback controller. When a table's controller is unavailable, the
+tool result says so and the agent decides what to do next.
 
-# Check how close the arm gets to the robot's own mast and base along the grasp paths.
-.venv/bin/python scripts/check_arm_clearance.py
+On arrival the robot does not jump to a keyframe. A pre-declared weld between
+the chassis and the world is switched on (`data.eq_active`). The base holds
+still like a parking brake. The solver impedance ratio is raised to 200 for
+the pinch. Both are switched back before the next drive. The code is
+`src/rlbot/live.py`.
 
-# Plan the nine routes between the start pose and the three tables, draw them, check them.
-.venv/bin/python scripts/plan_path.py
+Each table's controller was tuned on different contact pads. The live room
+carries one pad per blade and rewrites it on arrival (`LiveSim.use_pads`).
 
-# Drive those routes in the sim on the balancer and check the robot arrives.
-.venv/bin/python scripts/navigate.py
-.venv/bin/mjpython scripts/navigate.py --route cubes-ware --view
+## Simulation
 
-# Unit checks for the grid, planner and navigator.
-.venv/bin/python scripts/check_navigation.py
+### The robot model
 
-# Drive one arm by hand and record pick-and-place demonstrations for the VLA.
+The URDF is a shape export from Onshape, not a physics model.
+`scripts/build_mjcf.py` converts it to MuJoCo and fixes what is broken. The
+original URDF in `models/bracketbot/` is never edited.
+
+| Fix | Detail |
+| --- | --- |
+| Wheels | They were welded. They now have hinge joints. |
+| Wheel size | The URDF has no wheel radius. The script measures it from the tyre mesh: 0.0846 m. |
+| Floor contact | There were no collision shapes. Each wheel now has one. |
+| Mass | The file said 0.29 kg. Mass is now computed from mesh volumes and scaled to 12.0 kg. This total is a placeholder. |
+| Joint strength | Every joint had a 10 N limit. Limits are now sized from the gravity load. |
+| Gripper motor | The second finger had its own motor. It now follows the first through a mimic constraint. |
+| Gripper contact | MuJoCo collides a mesh as its convex hull. Hulled, the hooked fingers fill their own gap. Each blade now carries a flat pad traced from its real inner face. |
+| Head camera | It pointed at the horizon. It now pitches 62 degrees down at a docked table. |
+| Finger ringing | `armature="0.005"` on the blade joints stops the mimic finger from oscillating. |
+
+| Quantity | Value |
+| --- | --- |
+| Joints | 26 = 6 floating base + 2 wheels + 18 in the arms and grippers |
+| Motors | 2 wheel motors (±8 N·m) + 16 arm servos |
+| Sensors | gyro, accelerometer, orientation on the `imu` site; wheel speeds; a 72-beam lidar at the `lidar` site; a head camera and one camera per wrist |
+| Gripper | holds objects 40 to 60 mm across. Smooth balls are not held. |
+| Balance gains | `kp_pitch=80, kd_pitch=15, kp_speed=0.010` in `src/rlbot/control.py` |
+
+The balancer is a hand-tuned PD controller (`src/rlbot/control.py`). It runs
+at the 500 Hz physics rate. Pitch is read independently of heading
+(`src/rlbot/robot.py`). Two bugs were fixed here: the yaw feedback had the
+wrong sign, and pitch measurement depended on yaw.
+
+### The room
+
+`scripts/build_room.py` writes `models/room.xml` (no robot) and
+`models/room_scene.xml` (with the robot). The room is 6.0 x 4.5 m with four
+walls, a pillar, a divider, and three tables. `src/rlbot/room.py` is the
+single source for what is on each table and where.
+
+| Table | Position | Objects |
+| --- | --- | --- |
+| `table_ball` | (2.25, -1.10) | red ball, crate |
+| `table_cubes` | (-0.20, -1.95) | four cubes, 56 to 58 mm, and a crate |
+| `table_pick` | (-2.25, 0.90) | one 48 mm blue cube and a rectangular destination marker |
+
+Cube sizes and positions are measured, not chosen. Below 56 mm the pads reach
+the table before the cube. Within 0.12 m of the centreline nothing is
+pickable, so that is where the crate sits.
+
+The build checks clearance. The robot's footprint is 42 cm across and 1.61 m
+tall. 16.2 of the 27 m² of floor is standable, and each docking pose leaves
+14.6 cm of clearance.
+
+### Arm control
+
+`src/rlbot/arm.py` solves inverse kinematics for each 7-joint arm.
+`src/rlbot/grasp.py` holds the motions a pick is made of: approach from
+above, close until stall, lift. `scripts/validate_ik.py` reaches every object
+in the room from cold.
+
+## Path finding
+
+### Sensors
+
+`src/rlbot/sensing.py` provides the two inputs SLAM needs.
+
+- **Lidar.** A planar scan cast from the `lidar` site. 72 beams by default in
+  the sim; the SLAM recorder uses 360. Moving robot links occlude; those rays
+  are `NaN`. Out-of-range rays are `+inf`.
+- **Odometry.** `src/rlbot/odometry.py` integrates wheel rotation and gyro
+  yaw. It blends wheel and gyro yaw increments. It is not a covariance filter.
+
+### SLAM
+
+SLAM runs in ROS 2 Jazzy with SLAM Toolbox, inside Docker. The bridge package
+is `ros2_ws/src/rlbot_bridge/`. It publishes odometry, IMU, TF, and clock at
+50 Hz and scans at 10 Hz. SLAM Toolbox owns scan matching, loop closure,
+`/map`, and the `map -> odom` transform. It never sees the room's geometry or
+the simulator's true pose.
+
+The bridge projects each scan into a fixed `lidar_planar` frame using the
+gyro-estimated tilt. It rejects a scan in three cases: the tilt exceeds 2
+degrees, a return falls outside the 0.12 to 0.52 m height band, or fewer
+than half the beams are usable.
+
+Build the image and run the acceptance check. Use Docker Desktop or any Linux
+Docker host. The original setup used a `colima-rlbot` context. If you use
+that, add `--context colima-rlbot` to each `docker` command.
+
+```bash
+docker build -t rlbot:jazzy .
+docker run --rm -v "$PWD/out:/artifacts" rlbot:jazzy python scripts/check_ros_mapping.py --output /artifacts/mapping_check_1
+```
+
+The check launches real ROS nodes, drives a loop, saves `map.yaml`,
+`map.pgm`, `map.posegraph`, and `map.data`, restarts in localization mode,
+and compares the SLAM pose to a separately published reference. The last run
+measured 1.4 mm / 0.20 degrees during mapping and 0.1 mm / 0.00 degrees after
+the localization restart. `result.json` lands in the output directory.
+
+To drive by hand, start mapping and publish a slow command from a second
+terminal:
+
+```bash
+docker run --rm -it --name rlbot-mapping -v "$PWD/out:/artifacts" rlbot:jazzy
+docker exec -it rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}}'
+docker exec rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge save_map /artifacts/room_1
+```
+
+Restart in localization mode and drive to a table on the SLAM pose:
+
+```bash
+docker run --rm -it --name rlbot-localize -v "$PWD/out:/artifacts" rlbot:jazzy ros2 launch rlbot_bridge mapping.launch.py mode:=localization map_file:=/artifacts/room_1/map
+docker exec -it rlbot-localize /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge navigate --ros-args -p use_sim_time:=true -p map_yaml:=/artifacts/room_1/map.yaml -p to:=cubes
+```
+
+`to` takes a table name (`ball`, `cubes`, `pick`) or `"x y yaw"`.
+
+### Occupancy grid and A*
+
+`src/rlbot/navmap.py` builds the grid. It reads a saved PGM/YAML map or
+rasterizes the known room from `models/room.xml`. It unions in the table
+tops, because the low lidar scan cannot see them. It then inflates every
+obstacle by the robot's footprint.
+
+`src/rlbot/planner.py` searches that grid with 8-connected A*. Goals are the
+predefined docking poses in `src/rlbot/room.py`. The raw path is shortened by
+line-of-sight, fitted with a clamped cubic spline, and turned into a speed and
+yaw-rate schedule. Limits: 0.15 m/s, 0.3 rad/s, 0.1 m/s².
+
+### The navigator
+
+`src/rlbot/navigate.py` drives a route in four phases: exit, turn, curve,
+dock. Each phase is played open loop from the schedule. Between phases the
+robot stops and waits for a steady pose: 0.5 s of poses within 5 mm and half
+a degree. It then replans from wherever it actually is. Drifting more than
+15 cm off the schedule also triggers a stop and replan. Within 20 cm of the
+goal the phases give way to a guarded turn in place. The route ends after 60
+replans or 30 s without a pose.
+
+In the continuous demo the pose comes from the simulator, not SLAM
+(`src/rlbot/live.py`). The ROS `navigate` node runs the same navigator on the
+localized pose.
+
+Results on the nine routes between the start pose and the three tables
+(`scripts/navigate.py`):
+
+| Metric | Result |
+| --- | --- |
+| Arrival | 9 of 9 within 10 cm and 5 degrees |
+| Falls | 0 |
+| Furniture contacts | 0 |
+| Time past the 2-degree tilt gate | 0.00 s on every route |
+| Replans per route | 7 to 24 |
+
+The pick table uses a tighter 4 cm / 2 degree tolerance (`LiveSim.ARRIVE_AT`),
+because the fly-brain carry fails from 9 cm out.
+
+### Fly-brain navigation pilot
+
+A separate experiment drives the robot to point goals through the FlyWire
+graph instead of A*. See [Fly brain](#fly-brain).
+
+## Agent
+
+### Top level
+
+The top-level agent is Claude Fable 5.1 (`MODEL = "claude-fable-5-1"` in
+`scripts/agent.py`). It needs `ANTHROPIC_API_KEY`. It receives three tool
+schemas (`TOP_TOOLS` in `scripts/demo.py`): `go_to`, `manipulate`, and
+`finished`. `--planner sweep` replaces the model with keyword routing over
+the same tools: "act" routes to `ball`, "fly" or "blue" to `pick`, "cubes" to
+`cubes`. `--budget` caps tool calls per prompt. `--effort` sets the model's
+reasoning effort.
+
+### The cubes skills agent
+
+At the cubes table, `manipulate` starts a nested Fable agent
+(`scripts/agent.py`). It gets six skills, defined as JSON tool schemas and
+implemented in `src/rlbot/skills.py`.
+
+| Skill | What it does |
+| --- | --- |
+| `look` | Returns the scene as text: where each object is, what each hand holds. No coordinates, no camera, no vision model. |
+| `pick(object, arm?)` | Approaches from above, closes, lifts. `arm` is a hint; the code chooses the hand. Retries wrist angles and both hands internally. |
+| `place(into?)` | Puts the held object into the crate by default. |
+| `home` | Folds the arms to rest. |
+| `give_up(object, why)` | Declares an object impossible. This is a first-class action. |
+| `finished(summary)` | Ends the episode. |
+
+Eight distinct tool names exist in total: three top-level and six nested,
+with `finished` shared.
+
+Four rules come from measured failures:
+
+- Object names are an enum. An unknown name is refused at the tool boundary.
+- The code picks the arm, not the model. Published bimanual planners that let
+  the model assign arms score near zero.
+- Retries live inside `pick`. Models re-sequence well; they do not invent new
+  motion strategies.
+- The harness owns the loop rules: a per-object failure cap, a repeated-call
+  detector, and a step budget.
+
+`--planner sweep` on this level is a fixed policy: pick each object, place
+it, home. It tests the skills without a model.
+
+```bash
+.venv/bin/python scripts/agent.py --table cubes --planner sweep
+.venv/bin/python scripts/agent.py --table cubes --planner fable          # needs ANTHROPIC_API_KEY
+.venv/bin/python scripts/agent.py --table cubes --planner sweep --video out/cubes.mp4
+```
+
+`agent.py` welds the base at the docking pose and never drives. The idle arm
+folds out of the way during a pick with the other hand.
+
+### Recognition and orchestration
+
+`src/rlbot/orchestration.py` is a deterministic selector. It accepts
+timestamped recognitions (`colored_cubes`, `red_ball_box`,
+`blue_cube_rectangle`), rejects stale or ambiguous inputs, and dispatches
+one registered tool. The recognitions are supplied by the operator. There is
+no camera detector and no vision-language model in this repository.
+
+```bash
+.venv/bin/python scripts/orchestrate.py --station cubes --recognized colored_cubes
+.venv/bin/python scripts/orchestrate.py --station cubes --recognized colored_cubes --execute --planner sweep
+```
+
+`scripts/live_demo.py` is the older two-window demo: it drives in one
+simulation, then opens a separate fixed-base simulation for the arms.
+`scripts/demo.py` supersedes it.
+
+## ACT
+
+`src/rlbot/act.py` is our implementation of ACT (Zhao et al. 2023), sized
+for a laptop. It is trained on the red-ball table and runs at the `ball`
+station.
+
+### Architecture
+
+| Part | Value |
+| --- | --- |
+| Vision backbone | one ResNet-18, ImageNet-pretrained, shared across cameras, last two layers removed |
+| Cameras | 3: `head_cam`, `wrist_right_cam`, `wrist_left_cam`, at 128 px |
+| State and action | 16 numbers: both arms' 7 joints plus one gripper blade each |
+| Transformer | 4 encoder + 4 decoder layers, hidden 256, 8 heads, feed-forward 1024 |
+| CVAE latent | 32 |
+| Chunk | 32 commands = 1.6 s at 20 Hz |
+| Parameters | about 22 M |
+
+Training loss is L1 on the chunk plus a KL term at weight 10. The optimizer
+is AdamW at 1e-4, 1e-5 for the backbone, batch 8. On the MPS backend a step
+takes about 0.2 s on an M5.
+
+### Demonstrations
+
+`scripts/teleop.py` puts one arm under the keyboard. The operator commands
+where the jaws go, not joints. IK does the rest.
+
+```
+W / S   jaws forward / back      SPACE   close / open        1-4   which cube
+A / D   jaws left / right        X       swap arms           H     reset the scene
+R / F   jaws up / down           ENTER   start / stop        P     print poses
+Q / E   wrist turn               C       cancel recording
+```
+
+Each episode is scored: is the object in the crate and out of the hand. It is
+written to `out/demos/<table>/` as one `.npz` at 20 Hz. Camera frames are
+not recorded; `scripts/render_demos.py` renders them afterwards from the
+poses.
+
+`scripts/collect_demos.py` drives the same controller from code. Every
+episode moves both the object and the crate. Only successes count. The
+scripted collector crates the ball about 7 times in 10.
+
+```bash
 .venv/bin/mjpython scripts/teleop.py --cube m
-
-# Collect demonstrations without an operator: 200 episodes each, layouts randomized.
 .venv/bin/python scripts/collect_demos.py --table ball --episodes 200
-.venv/bin/python scripts/collect_demos.py --table ware --object bowl --episodes 200
+.venv/bin/python scripts/render_demos.py out/demos/ball --preview
+```
 
-# Put the camera frames back onto recorded demonstrations, and preview them.
-.venv/bin/python scripts/render_demos.py out/demos/cubes --preview
+### Training and results
 
-# Train ACT on the ball demonstrations (needs requirements-train.txt), then run it in the sim.
+Two runs on the 80-episode ball set, 72 training and 8 held out:
+
+| Checkpoint | Augmentation | Steps | Best val L1 | Into the crate |
+| --- | --- | --- | --- | --- |
+| `checkpoints/act_ball_run1_noaug.pt` | none | 20 K | 0.0167 | 2 of 14 |
+| `checkpoints/act_ball_run2_aug.pt` | random 6 px shift | 17 K | 0.0153 | 1 of 6 |
+
+Rollouts use layouts the policy never saw. Both checkpoints reach the ball
+and close on it about four times in ten. Most then lose the ball on the
+carry. Flat pads have nothing to bite on a sphere, and the scripted collector
+drops a third of its carries too.
+
+```bash
 .venv/bin/pip install -r requirements-train.txt
 .venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
 .venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
-
-# Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
-docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
-    python3 src/rlbot/hybrid_ik.py /path/to/libhybrid_ik_lib.so models/bracketbot/chopped_urdf_v2.urdf right_eef
+.venv/bin/python scripts/run_act.py --describe
 ```
 
-Use `mjpython`, not `python`, for anything that opens a window. On macOS the window must be made on the main thread, and `mjpython` takes care of that. Plain `python` will fail with `RuntimeError: Caught an unknown exception!`.
+Two lessons:
 
-## Local SLAM inputs (no ROS required)
+- Rollouts must start where the demonstrations start, after the collector's
+  ready move. From the rest pose the policy swung the arm through the ball.
+- The policy closes about half a second early. More data and augmentation
+  reduce it.
 
-The local recorder and checks run independently of ROS. They produce sensor/odometry data, not maps. No additional packages or graphics context are needed for these commands. The ROS mapping entry point is described below.
+In the continuous demo, `manipulate` at the ball table runs one closed-loop
+episode from the ready pose and returns to it afterwards. The shipped ball
+position is one this checkpoint misses.
+
+## Fly brain
+
+The fly-brain controllers route signals through a graph built from measured
+fruit-fly neuron connections. This is a connectivity experiment, not a brain
+simulation. Activities are artificial rate-like values, not spikes.
+
+### The graph
+
+`scripts/prepare_connectome.py` downloads four public FlyWire FAFB v783
+tables (neurons, classification, coordinates, connections; about 58 MB) and
+pins their SHA-256 checksums. The source has 139,255 neurons and 2,700,513
+directed edges.
+
+The pilot keeps 512 neurons. Selection is by total synapse strength with
+interface quotas: one eighth afferent (inputs), one eighth descending
+(outputs), the rest central and visual-projection neurons. Edge weights are
+synapse counts with a transmitter sign: GABA and glutamate negative, others
+positive. Each row is normalized by its absolute incoming sum. The result is
+`checkpoints/graph_512.npz` (512 neurons, 8,688 edges, 64 inputs, 64
+outputs) with its manifest in `checkpoints/graph_512.json`.
 
 ```bash
-.venv/bin/python scripts/check_slam_inputs.py
-.venv/bin/python scripts/record_slam_inputs.py --output out/slam_inputs.npz
-.venv/bin/python scripts/record_slam_inputs.py --push 300 --output out/slam_inputs_push.npz
+.venv/bin/python scripts/prepare_connectome.py              # 512-neuron pilot graph
+.venv/bin/python scripts/prepare_connectome.py --neurons 0  # the full graph, untrained
+.venv/bin/python scripts/benchmark_connectome.py            # full-graph forward pass: ~1.2 s, too slow for 50 ms control
 ```
 
-The recorder balances the robot in the room, collecting wheel/IMU samples and odometry at the 500 Hz physics rate, and instantaneous 360-ray LiDAR scans at 10 Hz. Use `--seconds`, `--scan-hz`, `--beams`, and `--range-max` to adjust capture. It runs without a viewer, holds samples in memory until saving, and refuses to overwrite existing output.
+### The controller
 
-The NumPy archive can be opened with `np.load(path, allow_pickle=False)`. It contains:
+`ConnectomeFeatures` in `src/rlbot/connectome.py` is a Stable-Baselines3
+feature extractor.
 
-- `time`, `wheel_angles` (left/right, unwrapped radians), `imu_gyro` (rad/s), and `imu_accel` (m/s²).
-- `odom_pose` (x/y/yaw), `odom_twist` (forward speed/yaw rate), and `odom_roll_pitch`. The pose tracks the wheel-axle midpoint projected onto the ground, relative to its initial odom frame. Body axes are +x forward, +y left, +z up; distances are metres and angles radians.
-- `scan_time`, `scan_angles`, and `scan_ranges`, plus range limits, rate, frame names, wheel calibration, and static LiDAR/IMU mounting transforms relative to the model's `root` body. Scan times are synchronized to physics samples; all beams in one scan share a timestamp.
-- `truth_pose`, the simulator's world-frame axle projection, strictly for evaluation. Replaying the estimator requires only timestamps, wheel angles, gyro readings, and calibration, not this reference.
+1. A linear encoder maps the observation to the 64 input neurons, 4 channels
+   each.
+2. Four rounds of sparse message passing run over the 512 x 512 matrix. Each
+   round: `tanh(0.35 * h + gain * mix(A @ h) + injection + bias)`.
+3. The 64 output neurons' activity, 256 values, feeds the SB3 MLP head
+   (`pi=[128, 128]`), which produces the action.
 
-**Limits that matter:**
+The edges are fixed. The encoder, per-neuron gains and biases, channel
+mixing, and the MLP head are trained. No hidden state persists between robot
+steps.
 
-- The existing LiDAR site is inside the mast. Ray casting masks only the robot's rigid mounting assembly, without changing the asset or physics. Moving robot links still occlude: their returns and too-close measurements are `NaN`, not free space. Out-of-range/no-return readings are `+inf`. `Lidar(..., mask_mount=False)` exposes mounting occlusion for diagnostics. The physical mount still needs validation.
-- Raw rays follow chassis roll/pitch and retain real floor hits. The ROS bridge separately projects real returns into a fixed `lidar_planar` frame using gyro-estimated tilt and mounting geometry. It rejects tilt above 2 degrees, returns outside a 0.12-0.52 m height band, and scans with fewer than half the beams usable. It does not fill missing rays. This conservative projection passes local geometry checks and is exercised by the Ubuntu/Docker SLAM integration test; wider poses and hardware still need validation.
-- Odometry adds gyro pitch rate to relative wheel rotation and blends wheel/gyro yaw increments. It assumes an upright start unless initial tilt is supplied, does not consume simulator orientation, and does not integrate accelerometer readings. Wheel calibration, gyro bias, signs, and yaw blend are configurable; drift, wheel slip, and gyro tilt drift remain. This is not a covariance-estimating filter.
-- Local checks cover analytic scans/odometry, projection, timestamps, recording replay, simulated balancing, forward/reverse commands, a command watchdog, and a driven loop. Turning required fixing the yaw feedback sign and making both balance state readers measure pitch independently of heading. The separate ROS integration check below passes inside the Linux Docker runtime on this Mac.
+### Navigation pilot
 
-## ROS 2 Jazzy mapping in Docker
+`src/rlbot/navigation.py` is a Gymnasium env: 12 observation values, 2
+actions (speed and yaw-rate requests at 20 Hz), and the PD balancer
+underneath. Training (`scripts/train_connectome.py`): 40 scripted teacher
+episodes, 800 imitation updates, then 8,192 PPO transitions with
+demonstration rehearsal.
 
-This follows the original stack: Ubuntu 24.04, ROS 2 Jazzy, and SLAM Toolbox. The colcon package lives in `ros2_ws/src/rlbot_bridge/`. SLAM Toolbox owns scan matching, loop closure, `/map`, and `map -> odom`; it does not receive the room's known geometry or simulator truth. The Dockerfile builds the package and installs the matching Python dependencies. The cameras and robot assets are unchanged.
+| Policy | Held-out goals (seeds 2000–2019) | Falls |
+| --- | --- | --- |
+| Fly graph, imitation only | 20 of 20 | 0 |
+| Fly graph, PPO + rehearsal | 17 of 20 | 0 |
+| MLP, imitation only | 18 of 20 | 0 |
+| MLP, PPO + rehearsal | 20 of 20 | 0 |
 
-On this Mac, Docker runs in the dedicated `colima-rlbot` context. Build the image from the repository root:
+The graph works as a controller. This run does not show a benefit from fly
+wiring or from PPO over imitation. Raw numbers are in `docs/results/`. The
+full recipe and the replay page are in [docs/brain_demo.md](docs/brain_demo.md).
+
+### Arm policy (the pick table)
+
+`src/rlbot/arm_env.py` is the pick-and-place env. The robot base is fixed.
+The action is 4 continuous values at 20 Hz: table-relative XYZ motion and
+jaw opening. There is no phase controller at inference.
+
+Training (`scripts/train_arm.py`) is teacher-student:
+
+1. A scripted teacher (`Teacher` in `scripts/train_arm.py`) runs seven
+   phases: over the cube, down, close, lift, over the goal, down, release.
+   It exists only to make training data.
+2. `--episodes 20` attempts; the successes (17 on the shipped run) become the
+   dataset.
+3. Behaviour cloning: 4,000 updates of MSE on the teacher's actions.
+4. Optional PPO with demonstration rehearsal (`RehearsalPPO`). `--steps 0`
+   skips it.
+
+Single-frame observations failed (0 of 10). The teacher's private wait
+counter gives near-identical inputs opposite labels. `--history 16` feeds
+16 causal observations (368 values). Two post-training calibrations follow:
+a 1.25x gain on the jaw output and a 0.05 deadband on Cartesian motion.
 
 ```bash
-colima start rlbot
-DOCKER_CONTEXT=colima-rlbot docker-buildx build --load -t rlbot:jazzy .
+.venv/bin/python scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_padded
+.venv/bin/python scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_padded/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_padded_calibrated
+.venv/bin/python scripts/run_arm.py --history 16 --motion-deadband 0.05 --checkpoint out/rl/arm_padded_calibrated/policy.zip --episodes 20 --seed 5000 --output out/rl/arm_padded_calibrated/validation
 ```
 
-On a Linux Docker host or Docker Desktop, use `docker build -t rlbot:jazzy .` and omit `--context colima-rlbot` from the commands below. Do not copy a macOS virtual environment into Linux; the image creates its own Python 3.12 environment.
+The shipped checkpoint is `checkpoints/flybrain_arm_padded_calibrated.zip`.
+It is imitation only, zero PPO steps, with both calibrations. On its own
+fixed-base test seeds it scored 4 of 10. A sibling candidate trained the same
+way scored 18 of 20 on fresh held-out seeds; the two held-out sets differ and
+are not a paired comparison. In the continuous demo it picked and placed the
+blue cube. It runs there **without** the 20-of-20 validation gate that
+`orchestrate.py` enforces, and the demo says so.
 
-Start mapping:
+Checkpoints carry the gripper, station, control version, horizon, and
+physics hashes. A mismatch is refused, not silently run.
+`tests/test_checkpoints.py` verifies the shipped weights and graph match.
+
+The older parallel-jaw experiment (20 of 20, with PPO) is historical. It used
+a different gripper and is not evidence for the current policy. See
+[docs/arm_rl.md](docs/arm_rl.md) and [docs/original_arm.md](docs/original_arm.md).
+
+## Verification
+
+Run each test file directly. There is no `tests/__init__.py`, so
+`unittest discover` does not work, and `pytest` is not installed.
 
 ```bash
-docker --context colima-rlbot run --rm -it --name rlbot-mapping -v "$PWD/out:/artifacts" rlbot:jazzy
+for f in tests/test_*.py; do .venv/bin/python "$f"; done
 ```
 
-From another terminal, publish a slow forward command. Stop the publisher with Ctrl+C; the 0.5-second command watchdog ramps the robot back to zero-speed balance. Use `'{angular: {z: 0.2}}'` instead to turn. These are manual mapping commands, not autonomous obstacle avoidance.
+118 tests pass. One fails: `tests/test_manipulation.py` compares a MuJoCo
+enum to a NumPy int, and MuJoCo 3.13 no longer treats them as equal. The
+geoms it checks are meshes; the test is wrong, not the model.
+
+Standalone checks, all headless:
 
 ```bash
-docker --context colima-rlbot exec -it rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}}'
+.venv/bin/python scripts/evaluate.py --push 300     # balance: 20 s, max lean 3 deg, drift 2 cm
+.venv/bin/python scripts/plan_path.py               # 9 routes planned within limits
+.venv/bin/python scripts/navigate.py                # 9 routes driven; arrival, falls, contacts
+.venv/bin/python scripts/check_navigation.py        # 20 unit checks on grid, planner, navigator
+.venv/bin/python scripts/validate_ik.py             # IK round-trip, then every object reached
+.venv/bin/python scripts/build_room.py              # rebuild the room, print the clearance map
+.venv/bin/python scripts/check_grasp.py             # 3 of 6 lifted with the default pads; see Known issues
 ```
 
-After stopping travel, save the occupancy map and serialized SLAM state. Choose a new output directory each time; existing data is not overwritten:
+Live viewers (`mjpython`):
 
 ```bash
-docker --context colima-rlbot exec rlbot-mapping /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge save_map /artifacts/room_1
+.venv/bin/mjpython scripts/balance.py                          # watch it balance
+.venv/bin/mjpython scripts/room.py                             # W/S/A/D to drive, 1/2/3 to park at a table
+.venv/bin/mjpython scripts/navigate.py --route cubes-pick --view
 ```
-
-This writes `out/room_1/map.yaml`, `map.pgm`, `map.posegraph`, and `map.data`. Stop the mapping container, then restart in localization mode using the saved map stem (no extension):
-
-```bash
-docker --context colima-rlbot run --rm -it --name rlbot-localize -v "$PWD/out:/artifacts" rlbot:jazzy ros2 launch rlbot_bridge mapping.launch.py mode:=localization map_file:=/artifacts/room_1/map
-```
-
-The initial map-pose guess defaults to x/y/yaw = 0. Launch arguments `x:=... y:=... yaw:=...` change that localization guess, not the simulator spawn; the bridge currently starts at the room's `start` keyframe. `mode:=mapping` with `map_file:=...` resumes mapping instead of localization.
-
-With the stack in localization mode, drive to a table on the SLAM pose. The `navigate` node reads the saved map, unions in the known table tops the lidar cannot see, looks up `map -> base_footprint`, and publishes `/cmd_vel` until it arrives within 10 cm and 5 degrees:
-
-```bash
-docker --context colima-rlbot exec -it rlbot-localize /opt/rlbot/docker/entrypoint.sh ros2 run rlbot_bridge navigate --ros-args -p use_sim_time:=true -p map_yaml:=/artifacts/room_1/map.yaml -p to:=cubes
-```
-
-`to` takes a table name (`ball`, `cubes`, `ware`) or `"x y yaw"`. It is the same navigator `scripts/navigate.py` runs locally on the sim's true pose.
-
-Run the real integration check in a fresh output directory:
-
-```bash
-docker --context colima-rlbot run --rm -v "$PWD/out:/artifacts" rlbot:jazzy python scripts/check_ros_mapping.py --output /artifacts/mapping_check_1
-```
-
-It launches actual ROS nodes in a separate ROS domain, checks a nonempty SLAM map, drives a loop, saves all four map files, restarts the stack in localization mode, and checks pose error against a separately published simulator reference. Logs, maps and a machine-readable `result.json` remain in `out/mapping_check_1/`. This test, not a successful image build or the local sensor checks, is the end-to-end mapping acceptance gate.
-
-The bridge integrates wheel/gyro odometry and controls physics at 500 Hz; ROS odometry, IMU, joint states, TF and clock are published at 50 Hz, and scans at 10 Hz. `/scan_raw` contains the original measurements; `/scan` contains tilt-gated projected measurements in `lidar_planar`; `/scan_valid` reports acceptance. Invalid projected bins are sent below `range_min`, not as free space. The TF chain is `map -> odom -> base_footprint -> base_link -> imu/lidar`, with a fixed `base_footprint -> lidar_planar` projection frame. Odometry covariance defaults are configurable conservative placeholders, not a calibrated filter. Ground-truth publication is off unless explicitly enabled for testing.
-
-The physical LiDAR mount and hardware calibration remain unvalidated. Low scans miss tabletop overhangs, so this does not make the robot ready for autonomous navigation. No Nav2 planner or object CV has been added. To release the VM resources when finished, run `colima stop rlbot`.
 
 ## Folder layout
 
 ```
-models/bracketbot/          The original URDF and its 50 mesh files. Never edited by hand.
+models/bracketbot/          The original URDF and 50 meshes. Never edited.
 models/bracketbot.xml       The robot in MuJoCo format. Made by build_mjcf.py.
-models/bracketbot_scene.xml Floor, lights, and start poses. Use this to load just the robot.
-models/room.xml             The room on its own: walls, pillar, divider, tables, objects. No robot.
-models/room_scene.xml       The same room with the robot in it. Both made by build_room.py.
-models/balancer.xml         The small toy balancer.
+models/room.xml             The room alone. models/room_scene.xml adds the robot.
+models/balancer.xml         A toy two-wheeler for quick controller checks.
 
-scripts/build_mjcf.py       Turns the URDF into MuJoCo format and fixes what is broken.
-scripts/build_room.py       Writes the room and checks the arm can reach every object.
-scripts/evaluate.py         Headless balance test with an optional shove.
-scripts/balance.py          Live viewer.
-scripts/check_grasp.py      Tries to pick up each object in the room.
-scripts/validate_ik.py      Proves the arm IK: round-trip on random poses, then every object in the room.
-scripts/check_arm_clearance.py  Measures arm-to-chassis clearance along the grasp paths (the sim filters self-collision).
-scripts/plan_path.py        Plans, draws and checks the nine routes without running physics.
-scripts/navigate.py         Drives the nine routes in the sim and checks arrival, falls and furniture contacts.
-scripts/check_navigation.py Unit checks for the grid, planner and navigator.
+checkpoints/                ACT weights and configs, the fly-brain arm policy, graph_512.npz.
+demo/                       ACT.mov and three self-contained HTML replays.
+docs/                       arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
 
-scripts/room.py             Live viewer you can drive the robot around the room in.
-scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed policy.
-scripts/teleop.py           Keyboard teleop of one arm, recording demonstrations for the VLA.
-scripts/render_demos.py     Renders the cameras for recorded demonstrations, after the fact.
-scripts/collect_demos.py    Scripted demonstrations: the teleop controller driven by code, layouts randomized.
-scripts/audit_demos.py      Cuts bad demonstrations and writes a folder's manifest.
-scripts/train_act.py        Trains ACT on demonstration folders, checkpointing and resuming.
-scripts/rollout_act.py      Runs a trained ACT policy closed-loop in the sim and scores it.
-scripts/replay_demo.py      Plays recorded episodes or rollouts back in the viewer.
-checkpoints/                Trained ACT policies, weights only, with their configs and logs.
-demo/                       Standalone captures and replays to show without running anything.
+scripts/demo.py             One prompt, one simulation. The main entry point.
+scripts/agent.py            The cubes skills agent, Fable or sweep.
+scripts/orchestrate.py      Deterministic recognition-to-tool dispatch.
+scripts/live_demo.py        Older two-window demo.
+scripts/build_mjcf.py       URDF to MuJoCo, with the fixes.
+scripts/build_room.py       Writes the room, checks clearance and reach.
+scripts/evaluate.py         Headless balance test, optional shove.
+scripts/balance.py          Balance viewer.  scripts/room.py: drive around.
+scripts/plan_path.py        Plans and draws the nine routes.
+scripts/navigate.py         Drives the nine routes in the sim.
+scripts/check_navigation.py Unit checks for grid, planner, navigator.
+scripts/validate_ik.py      IK checks.
+scripts/check_grasp.py      Grasp probe on every object.
+scripts/check_arm_clearance.py  Arm-to-chassis clearance. Broken; see Known issues.
+scripts/check_slam_inputs.py    Local lidar/odometry checks. Broken; see Known issues.
+scripts/record_slam_inputs.py   Records wheel, IMU, odometry and scans to an .npz.
+scripts/check_ros_mapping.py    The ROS 2 SLAM acceptance gate; runs inside Docker.
+scripts/teleop.py           Keyboard teleop, records demonstrations.
+scripts/collect_demos.py    Scripted demonstrations.
+scripts/render_demos.py     Renders cameras for recorded demonstrations.
+scripts/audit_demos.py      Cuts bad demonstrations, writes a manifest.
+scripts/train_act.py        Trains ACT.  scripts/rollout_act.py: runs it.
+scripts/run_act.py          Describes or checks the shipped ACT checkpoint.
+scripts/replay_demo.py      Plays recorded episodes back.
+scripts/prepare_connectome.py   Downloads FlyWire tables, builds the graph.
+scripts/train_connectome.py     Fly-brain navigation pilot.
+scripts/evaluate_navigation.py  Scores navigation checkpoints.
+scripts/record_brain_demo.py    Renders the navigation replay page.
+scripts/benchmark_connectome.py Full-graph forward-pass timing.
+scripts/train_arm.py        Fly-brain arm policy: teacher, BC, PPO, calibration.
+scripts/run_arm.py          Runs an arm checkpoint; viewer, record, validation.
+scripts/pick_place.py       Scripted fixed-base pick-and-place baseline.
+scripts/view_cameras.py     Shows the head and wrist cameras.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
-src/rlbot/control.py        The PD balance controller.
-src/rlbot/navmap.py         Known-room and saved PGM/YAML grids, obstacle overlays, inflation and footprint checks.
-src/rlbot/planner.py        A* routes, cubic curves, guarded turns and bounded speed/yaw-rate schedules.
-src/rlbot/navigate.py       Runs open-loop phases, holds zero to settle and replans from the actual pose.
-src/rlbot/arm.py            Arm inverse kinematics and the grasp sequence.
-src/rlbot/room.py           What is in the room and where. Shared by the builder and the grasp test.
-src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' libhybrid_ik_lib.so, set up the way their daemon uses it.
-src/rlbot/sensing.py        The lidar and the wheel odometry.
-src/rlbot/grasp.py          The motions a pick is made of, shared by the harness and the agent.
-src/rlbot/skills.py         The robot as an agent sees it: typed skills, symbolic scene.
-src/rlbot/filming.py        Records a run to an mp4.
-src/rlbot/teleop.py         The jog controller and the demonstration recorder behind teleop.py.
-src/rlbot/act.py            ACT: the model, the demonstration loader, checkpoints.
+src/rlbot/control.py        PD balance and drive controllers.
+src/rlbot/room.py           What is on each table and where.
+src/rlbot/sensing.py        Lidar and wheel odometry.
+src/rlbot/sensors.py        Lidar used by the ROS bridge and the recorder.
+src/rlbot/odometry.py       Wheel and gyro odometry integration.
+src/rlbot/navmap.py         Occupancy grids, inflation, footprint checks.
+src/rlbot/planner.py        A*, splines, speed schedules.
+src/rlbot/navigate.py       The phase-at-a-time navigator.
+src/rlbot/navigation.py     Gymnasium env for the fly-brain navigation pilot.
+src/rlbot/live.py           The one-model continuous simulation: drive, park, pads.
+src/rlbot/live_arm.py       Runs the fly-brain arm policy on the live sim.
+src/rlbot/arm.py            Arm IK.
+src/rlbot/grasp.py          Grasp motions, the station keeper, the Rig.
+src/rlbot/gripper_pads.py   Fitted pads for the fly-brain gripper.
+src/rlbot/skills.py         The six skills the cubes agent calls.
+src/rlbot/orchestration.py  Recognition validation and dispatch.
+src/rlbot/act.py            ACT model, data loader, checkpoints.
+src/rlbot/arm_env.py        Fly-brain arm env.
+src/rlbot/connectome.py     ConnectomeFeatures.
+src/rlbot/teleop.py         Jog controller and demonstration recorder.
+src/rlbot/filming.py        Records a run to mp4.
+src/rlbot/hybrid_ik.py      ctypes binding for the sponsors' IK library (Linux arm64).
+
+ros2_ws/src/rlbot_bridge/   ROS 2 Jazzy package: simulation bridge, save_map, navigate.
+docker/, Dockerfile         The rlbot:jazzy image.
 ```
 
-## How the robot model was fixed
+## Known issues and limits
 
-The URDF we got is a shape export from Onshape, not a physics model. Six things had to be fixed before MuJoCo could simulate it. All fixes live in `scripts/build_mjcf.py`, so the original URDF stays untouched and every fix can be reviewed in one place.
+Broken scripts:
 
-1. **The wheels could not spin.** They were welded on. The build script gives them real hinge joints.
-2. **Nothing could touch the floor.** There were no collision shapes at all. Each wheel now has one.
-3. **The mass numbers were wrong.** The whole robot weighed 0.29 kg in the file. Mass is now computed from the mesh volumes and scaled to a total.
-4. **One frame high up the tree was rotated.** Anything that moves a part has to account for it, or the part lands sideways.
-5. **Every joint had the same fake strength limit.** 10 N cannot hold the arm carriage up, so the arms slid down the rail. Limits are now sized from the real gravity load.
-6. **The second gripper finger was getting its own motor.** It should only follow the first finger. The extra motor was removed.
-7. **The fingers could not hold anything.** MuJoCo treats a mesh as its convex hull, and each finger is a hooked claw with a hollow inside. Hulled, the two of them fill the gap solid: a 55 mm cube placed dead centre between fingers 139 mm apart was already touching both of them, and closing shot it across the room. Each blade now gets a flat pad fitted to its real inner face instead, traced off the mesh slice by slice.
+- `scripts/check_arm_clearance.py` imports `plan_grasp` from `check_grasp`.
+  That function no longer exists.
+- `scripts/check_slam_inputs.py` calls `Rig(..., balance=True)` and
+  `rig.state()`. `Rig` in `src/rlbot/grasp.py` takes `driver=` and has no
+  `state()`.
+- `scripts/check_grasp.py` exits 1 at 3 of 6. It uses one default pad set.
+  The ball is unpickable by design. `cube_l` and `pick_cube` fail here but
+  succeed in the live demo, which swaps pads per table.
 
-8. **The head camera never saw the table.** It was mounted level at 1.575 m, and
-   from there a docked table's top is 46 to 75 degrees below the horizon, outside
-   a 58 degree view: every head frame was floor. It is now pitched 62 degrees
-   down, straight at the middle of a docked table.
+Limits:
 
-9. **The second finger rang like a bell.** It has no servo, only a mimic
-   constraint tying it to the first, and next to no mass. Closing on a ball it
-   slammed shut, whipped 0.9 rad open and settled a third of a second later,
-   which showed up as a flickering gripper in every replay. Damping fixed the
-   ringing and cost every carry - the drag changes where the blade settles and
-   the ball comes out. Rotor inertia does not: `armature="0.005"` on the four
-   blade joints, and the close is one motion with the same pick rate.
+- The robot's mass and motor limits are guesses. Weigh the real robot, then
+  rerun `build_mjcf.py --total-mass` and retune the gains.
+- The arms have no damping or friction.
+- Navigation in the demo reads the simulator's pose, not SLAM.
+- The physical lidar mount and hardware calibration are unvalidated.
+- Low scans miss tabletop overhangs. The grid unions in known table tops.
+- Nav2 was considered and dropped. Nothing here uses a Nav2 controller.
+- The fly-brain arm policy has no 20-of-20 validation report. The demo runs
+  it anyway and says so.
+- ACT misses the shipped ball layout. The failure is the carry, not the
+  reach.
+- Generated checkpoints and replays under `out/` are ignored by git. Only
+  `checkpoints/` and `demo/` ship.
+- `rlbot:jazzy` copies the repo at build time. Rebuild the image after
+  changing `models/`, `src/`, or `ros2_ws/`.
 
-## Numbers
+Next steps:
 
-| | |
-| --- | --- |
-| Joints | 26 = 6 for the floating base + 2 wheels + 18 in the arms and grippers |
-| Motors | 2 wheel motors (±8 N·m) + 16 arm servos |
-| Sensors | Gyro, accelerometer, and orientation on the `imu` site. Wheel speeds. A 72-beam lidar and a head camera, cast and rendered from the `lidar` site and `head_cam`. |
-| Gripper | Holds objects 40 to 60 mm across. See "What the gripper can actually hold". |
-| Mass | 12.0 kg, center of mass 0.63 m up. **This is a placeholder.** |
-| Balance gains | `kp_pitch=80, kd_pitch=15, kp_speed=0.010` |
-
-From a 3° lean, the robot settles in about 2 seconds and stays up. It recovers from a 300 N shove with 4.6° of lean, and from 450 N with 13.9°. A 600 N shove knocks it over.
-
-## What the gripper can actually hold
-
-The fingertips part by 195 mm, which is not the same thing as being able to hold
-something 195 mm wide. The fingers are hooks on pivots, not jaws on rails, and
-they swing as they open: past about half travel the two gripping faces turn
-outward and stop facing each other, so there is nothing to squeeze between. Open
-them wide and the object is not really between anything.
-
-Closing the hand on test blocks of different sizes gives the real answer:
-
-| Object width | Result |
-| --- | --- |
-| Under 40 mm | The pads reach the table before they reach the object. |
-| 40 to 60 mm | Held, reliably. |
-| Over 60 mm | The faces are splayed too far apart to grip. |
-| Any smooth ball | Not held. Flat rigid pads have nothing to bite on and it squirts out. |
-
-Everything on the three tables is sized to that 40-60 mm window, which is why the
-crockery is a small bowl and a mug rather than a dinner plate: a plate is 26 mm
-tall, and the pads hang 22 mm below the middle of the jaw, so closing on a plate
-means closing on the table.
-
-The ball is the exception, left in deliberately. It is the object the current
-hand cannot pick up, and it is worth keeping as the thing a better end effector -
-or a policy that learns to trap it against something - has to beat.
-
-## Driving it with an agent
-
-`scripts/agent.py` parks the robot at one table and lets a planner tidy it by
-calling robot skills. The base is welded at the docking pose, so the wheels never
-turn - this is manipulation only, and navigation is a separate problem.
-
-```bash
-# No API key needed. A fixed policy - pick each object, put it in the crate -
-# driving exactly the same skills. Start here.
-.venv/bin/python scripts/agent.py --table cubes --planner sweep
-
-# The same job, decided move by move by Claude Fable 5.1.
-export ANTHROPIC_API_KEY=sk-ant-...
-.venv/bin/python scripts/agent.py --table ware --planner fable
-
-# Record an mp4 of either.
-.venv/bin/python scripts/agent.py --table ware --planner sweep --video out/ware.mp4
-```
-
-### The skill API
-
-Six tools, and the shape of them follows what the published work on LLM-driven
-manipulation actually found, rather than what is intuitive:
-
-| Tool | Notes |
-| --- | --- |
-| `look` | The whole scene, symbolically: where each object is, what each hand holds. No coordinates. |
-| `pick(object, arm?)` | `arm` is a hint. The robot chooses the hand. |
-| `place(into?)` | Into the crate by default. |
-| `home` | Arms back at rest. |
-| `give_up(object, why)` | Declaring something impossible is a first-class action. |
-| `finished(summary)` | Done. |
-
-Four decisions worth calling out, each of which came from a measured failure:
-
-- **Object names are an enum.** An unknown name is refused at the tool boundary
-  with the list of real ones. Confidently asking for an object that is not there
-  is the largest hallucination class in embodied agents, and corrective feedback
-  does not reliably fix it.
-- **The code picks the arm, not the model.** Published bimanual planners that let
-  the LLM assign arms score near zero where the same model feeding a
-  deterministic assigner scores near the ceiling. Here the choice comes from
-  which hand is free and which can actually plan the reach.
-- **Retries live inside `pick`.** It works through wrist angles and both hands
-  itself. Models re-sequence and re-target well; they do not invent new
-  low-level motion strategies.
-- **The harness owns the loop rules**, not the prompt: a per-object failure cap,
-  a repeated-call detector, and a step budget.
-
-### What it gets today
-
-Sweeping all three tables with no model in the loop:
-
-| Table | Picked | Into the crate |
-| --- | --- | --- |
-| ball | 0 of 1 | 0 |
-| cubes | 4 of 4 | 1 |
-| tableware | 2 of 2 | 1 |
-
-Six of the seven objects can be picked up. Most of them are then lost on the way
-to the crate: the grasp survives a straight lift and about half the carries. The
-ball cannot be picked up at all - flat rigid pads have nothing to bite on a
-sphere. This is a gripper problem, not an agent problem, and the `sweep` planner
-exists precisely so the two can be told apart.
-
-## Collecting demonstrations
-
-The VLA needs examples of the task being done. `scripts/teleop.py` parks the
-robot at the cubes table, base welded, and puts one arm under the keyboard:
-
-```
-W / S      jaws forward / back (toward the table)    SPACE   close / open the hand
-A / D      jaws left / right                         1-4     which cube the task is about
-R / F      jaws up / down                            X       swap arms
-Q / E      wrist counter-clockwise / clockwise       H       home: reset the scene
-[ / ]      finer / coarser steps                     ENTER   start / stop recording
-C          cancel the recording                      P       print where things are
-```
-
-The operator commands where the *jaws* go, not joints. Each press moves the
-target 1 cm or 5 degrees, the hand always pointing down, and IK continues from
-the servos' current command. A press that would need the arm to swing into a
-different configuration is refused. The command chases the target at 0.15 m/s,
-or 0.05 m/s with something in the hand, so holding a key down gives a smooth
-move at that speed rather than a burst of steps - which matters, because a cube
-in this hand is held by two pads and friction and a stepped carry shakes it
-out. Closing the hand is the same stall-detected squeeze the grasp harness
-uses. While the hand is open and at rest, the controller measures how far the
-servos sag below their command (2 to 5 mm, and a cube leaves 6 mm either side
-of the pads) and trims the command to cancel it.
-
-Press ENTER, do the task, press ENTER again. The episode is scored - is the
-cube inside the crate and out of the hand - and written to `out/demos/cubes/`
-as one `.npz`: at 20 Hz, the full `qpos`, `qvel` and `ctrl`, both arms' joints
-and gripper commands, the jaw pose, the jaw target and wrist yaw, whether the
-hand is closed and what it holds, and every object's pose; plus the task text,
-the key presses, and the success flag. Camera frames are not recorded. They are
-a function of the pose, so `scripts/render_demos.py` renders them afterwards
-from the head and both wrist cameras at whatever size the model wants, into
-`<episode>_frames.npz`: one uint8 array per camera, rows x 224 x 224 x 3, plus
-each camera's vertical field of view. Rows are posed by joint name and object
-name rather than by copying the state vector back, so a room rebuilt after the
-recording still replays it.
-
-`--jitter 0.02` scatters the cubes by up to 2 cm on each reset, for variety.
-`--balance` runs the same thing on the wheels with the station keeper.
-
-### Collecting without an operator
-
-`scripts/collect_demos.py` drives the same controller from code: over the
-object, down in two settled stops, close, lift, one slow joint-space ramp to a
-clear spot in the crate, let go, back off. Every episode moves both the object
-and the crate - the object anywhere in the band either arm can reach (0.14 to
-0.28 m from the centreline, either side, 4 cm either way in depth), the crate
-up to 8 cm along and 5 cm deep from the middle, never overlapping. The crate
-has no joint, so it is moved by editing its body position in the compiled
-model, and that position is saved in the episode's metadata for the renderer.
-
-Episodes are scored the way the operator's are and only successes count.
-Failures are kept under `failed/` for the record. Every tenth success is also
-rendered to a GIF under `viz/`, over-the-shoulder beside the working wrist
-camera. Rates at the time of writing: the ball crates about 7 in 10 attempts,
-the bowl about 1 in 5 - the bowl grasp is marginal with this hand and the
-wrist angle barely moves it - at two to three seconds an attempt.
-
-Driven by a script rather than a hand, the same controller picks and crates
-every cube on the table with either arm, at key-repeat rate and at tap rate.
-The two outer cubes sit at the edge of the wrist's range: the last centimetre
-across to them gets refused at a wrist yaw of 90 degrees, and turning the wrist
-gets it back.
-
-## A first policy: ACT on the ball
-
-`src/rlbot/act.py` is Action Chunking with Transformers (Zhao et al. 2023),
-sized for a laptop: a shared ResNet-18 over the three cameras at 128 px, a
-256-wide transformer with 4 encoder and 4 decoder layers, a 32-dimensional
-CVAE latent, 22M parameters. State and action are the recorder's 16 numbers,
-both arms' seven joints plus the gripper blade, as measured and as commanded.
-It predicts 32 commands at a time, 1.6 s at 20 Hz. Training is L1 on the
-chunk plus the KL term at weight 10, AdamW at 1e-4 (1e-5 for the backbone),
-batch 8, float32 on the MPS backend at about 0.2 s a step on an M5.
-
-Two runs on the 80-episode ball set, 72 training and 8 held out:
-
-| Run | Augmentation | Steps | Best val L1 | Rollouts into the crate |
-| --- | --- | --- | --- | --- |
-| `checkpoints/act_ball_run1_noaug.pt` | none | 20K | 0.0167 | 2 of 14 |
-| `checkpoints/act_ball_run2_aug.pt` | random 6 px image shift | 17K | 0.0153 | 1 of 6 at step 15.7K |
-
-Rollouts are on layouts the policy never saw, ball and crate both moved, scored
-by the collector's own test. Both checkpoints reach the ball and close on it
-about four times in ten; most of those then lose the ball on the carry, which
-is the ball's weakness with this hand rather than the policy's - the scripted
-collector, with perfect information, drops a third of its carries too. The
-checkpoints are weights only in half precision; `scripts/rollout_act.py`
-loads either. `--mode open-loop` runs each chunk out before re-planning and
-has done better than the paper's temporal ensemble here.
-
-Things learned the hard way, in case they save someone an afternoon:
-
-- Rollouts must start where the demonstrations start, after the collector's
-  ready move. Handed the rest pose, the policy swung the arm through the ball.
-- The policy starts closing about half a second earlier than the
-  demonstrations, before the arm has settled at the ball's height, so the pads
-  catch the top of the ball. More demonstrations and augmentation reduce it.
-- Frames are memory-mapped from a per-episode cache at 128 px; at 224 px the
-  set does not fit beside the model on a 24 GB machine.
-
-## Plan for the next steps
-
-**Step 2, SLAM navigation**
-
-- Run all nine routes through the ROS node on the SLAM pose automatically, the way `scripts/check_ros_mapping.py` runs mapping; only two routes have been hand-tested in Docker so far.
-- Account for tabletop overhangs that the low LiDAR scan cannot see. The loader already accepts extra obstacle boxes; sensing those overhangs and placing them in the map frame still need work.
-- Validate the physical LiDAR mount and the 2-degree scan-tilt gate during autonomous routes, including pose loss and noisy localization, so driving does not starve SLAM of scans.
-- Use perceived table edges for fine docking within the arms' reach, rather than relying on the known room's docking poses.
-
-- Hook up a SLAM library to the lidar and odometry that are already there, so the robot can build a map of the room and know where it is.
-- Add a path planner so the robot can drive to a target spot while it keeps its balance.
-- Add a "dock at a table" move so the robot ends up in a good spot for the arms to reach.
-
-**Step 3, VLA pick and place**
-
-- Get more than 5 of 10 objects to lift with the scripted grasp. The four near misses (a 42 mm cube, a 54 mm cube, the bowl and the mug) all get picked up and then slip during the lift.
-- Use the wrist and head cameras that are already on the robot.
-- Collect demo data in the sim: the robot picks up an object and puts it somewhere.
-- Fine-tune a VLA model on that data so it can follow text commands like "pick up the cup".
-- Join it all together: map the room, drive to the object, pick it up, drive to the drop spot, and put it down.
-
-## Things to know
-
-- **The robot's weight and motor limits are guesses.** The URDF does not say what the robot weighs. We will need to weigh the real robot and check the motor specs before trusting any force or torque numbers from the sim. Then re-run `build_mjcf.py --total-mass` and re-tune the gains.
-- **The arms have no damping or friction.** The URDF does not give any, and none was made up.
-- **Turning was tipping the robot over.** The yaw part of the balance controller had its error the wrong way round, which is positive feedback. Standing still it looked fine, because the error was near zero; ask for a turn above about 0.4 rad/s and it put the robot on the floor. Fixed, but it is a reminder that the controller has only ever been tested standing still - it will need real work before it can drive to a table on its own.
-- **The grasp test bolts the robot to the floor by default.** That way a failed grasp is the grasp's fault, not the balancer's. Use `--balance` to run it the honest way, on the wheels.
-- **Nav2 was considered and dropped, not overlooked.** Nothing here uses a Nav2 controller, so running Nav2 only to plan would mean standing up a second Docker stack for one A* call.
-- **If open loop plus replanning ever stops arriving, the answer is a different design.** `scripts/navigate.py` prints a replan count and a worst-distance-off-schedule for every route; those two columns are the evidence. If they climb and the robot stops reaching 10 cm - on noisier poses, or on hardware - what it needs is a cross-track tracking controller, not a tweak to this one.
+- Run all nine routes through the ROS `navigate` node on the SLAM pose
+  automatically.
+- Sense tabletop overhangs and place them in the map frame.
+- Dock on perceived table edges instead of known poses.
+- Replace the operator-supplied recognitions with a real detector.
+- Get ACT to hold the ball through the carry. A better end effector is the
+  likely answer.
+- Fine-tune the fly-brain arm policy with PPO without hiding a scripted
+  fallback.
