@@ -216,16 +216,17 @@ def check_mapping_inputs():
     vertical = [math.cos(math.pi / 4), 0, math.sin(math.pi / 4), 0]
     assert np.isnan(project_scan(raw, [0, 0, 0.32], vertical, max_tilt=math.pi / 2).ranges[180])
 
-    from check_grasp import Rig
+    from rlbot.grasp import read_state
 
     bot = Balancer.bracketbot(keyframe="home")
-    rig = Rig(bot.model, bot.data, balance=True)
+    sensors = tuple(bot.model.sensor(n).adr[0] for n in ("gyro", "vel_left", "vel_right"))
     for heading in (0, math.pi / 2, math.pi, -math.pi / 2):
         spin = np.array([math.cos(heading / 2), 0, 0, math.sin(heading / 2)])
         lean = np.array([math.cos(0.05 / 2), 0, math.sin(0.05 / 2), 0])
         mujoco.mju_mulQuat(bot.data.qpos[3:7], spin, lean)
         mujoco.mj_forward(bot.model, bot.data)
-        np.testing.assert_allclose([bot.state().pitch, rig.state().pitch], [0.05, 0.05], atol=1e-10)
+        np.testing.assert_allclose([bot.state().pitch, read_state(bot.model, bot.data, sensors).pitch],
+                                   [0.05, 0.05], atol=1e-10)
     bot.reset("home")
     controller = BalanceController(Gains.for_bracketbot())
     for _ in range(1000):
