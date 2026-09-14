@@ -768,7 +768,6 @@ Limits:
 - Navigation in the demo reads the simulator's pose, not SLAM.
 - The physical lidar mount and hardware calibration are unvalidated.
 - Low scans miss tabletop overhangs. The grid unions in known table tops.
-- Nav2 was considered and dropped. Nothing here uses a Nav2 controller.
 - The fly-brain arm policy has no 20-of-20 validation report. The demo runs
   it anyway and says so.
 - ACT misses the shipped ball layout. The failure is the carry, not the
