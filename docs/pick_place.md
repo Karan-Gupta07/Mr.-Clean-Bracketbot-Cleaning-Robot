@@ -1,59 +1,68 @@
 # Pick-and-place controller
 
-The manipulation baseline drives the BracketBot arm to pick up a cube, move it
-17 cm along a table, release it, and retreat. The base is fixed at the table's
-docking pose. The object remains a free body: contact and friction must support
-it throughout the transfer.
+The manipulation baseline drives the BracketBot arm. The arm picks up a cube,
+moves it 17 cm along a table, releases it, and retreats. The base is fixed at
+the table's docking pose. The cube stays a free body. Contact and friction must
+hold it for the whole transfer.
 
-Models are built with the **supplied hooked gripper plus a contact pad on each
-blade** (`--gripper padded`, the default). The CAD blades are untouched and are
-still what you see; the pads are what the simulator collides. Two other builds
-exist: `--gripper urdf` is the supplied gripper with nothing added, which does
-not grasp, and `--gripper parallel` is the sliding-jaw replacement the earlier
-results used. The pad dimensions and friction are prototype values chosen so
-this task works in simulation. No padding has been fitted to the real robot, so
-none of this validates the hardware.
+The default build is the supplied hooked gripper with a contact pad on each
+blade (`--gripper padded`). The CAD blades are untouched and are still the
+visuals. The pads are what the simulator collides. Two other builds exist.
+`--gripper urdf` is the supplied gripper with nothing added, and it does not
+grasp. `--gripper parallel` is the sliding-jaw replacement that the earlier
+results used. The pad dimensions and friction are prototype values, chosen so
+this task works in simulation. No padding is fitted to the real robot. None of
+this validates the hardware.
 
-This is a scripted inverse-kinematics controller. **The fly-connectivity driving
-checkpoint does not control the arms, and this sequence is not RL-trained.** It
-establishes the contact mechanics and demonstrations needed before training a
-manipulation policy. The earlier navigation RL results remain a separate task.
+This is a scripted inverse-kinematics controller. The fly-connectivity driving
+checkpoint does not control the arms. This sequence is not RL-trained. It
+establishes the contact mechanics and demonstrations that a manipulation policy
+needs first. The navigation RL results are a separate task.
 
-The subsequent [continuous arm RL experiment](arm_rl.md) has its own trainer,
-checkpoint runner, and replay. Use that guide for learned arm motions; the
-commands below deliberately reproduce the original scripted baseline.
+The later [continuous arm RL experiment](arm_rl.md) has its own trainer,
+checkpoint runner, and replay. Use that guide for learned arm motions. The
+commands below reproduce the original scripted baseline.
 
 ## Run it
 
-From the repository root in PowerShell, using the existing environment:
+Run every command from the repository root, in the existing environment. Every
+`out/...` path is generated locally and is not tracked in git.
 
-```powershell
-.venv\Scripts\python.exe scripts/pick_place.py --record --open
+1. Record the replay:
+
+```bash
+.venv/bin/python scripts/pick_place.py --record --open
 ```
 
-This creates `out/pick_place/index.html`, a synchronized overview/close-up replay,
-plus a GIF, trajectory data, and a JSON report. To reopen the existing replay:
+This writes `out/pick_place/index.html`, a synchronized overview/close-up
+replay. It also writes a GIF, trajectory data, and a JSON report. The page
+template is [../demo/pick_place.html](../demo/pick_place.html); the recorder
+fills its `__PICK_PLACE_DATA__` placeholder.
 
-```powershell
-Start-Process .\out\pick_place\index.html
+2. Reopen the existing replay:
+
+```bash
+open out/pick_place/index.html
 ```
 
-To watch the controller execute in a live MuJoCo window:
+3. Watch the controller in a live MuJoCo window. The viewer needs `mjpython` on
+macOS:
 
-```powershell
-.venv\Scripts\python.exe scripts/pick_place.py --view
+```bash
+.venv/bin/mjpython scripts/pick_place.py --view
 ```
 
-On macOS use `.venv/bin/mjpython` for the live viewer. For a headless evaluation
-over ten starting positions:
+4. Evaluate headless over ten starting positions:
 
-```powershell
-.venv\Scripts\python.exe scripts/pick_place.py --episodes 10 --output out/pick_place_eval
+```bash
+.venv/bin/python scripts/pick_place.py --episodes 10 --output out/pick_place_eval
 ```
 
-Use `--item cube_s`, `cube_m`, `cube_l`, or `cube_xl` to select 42, 48, 54, or
-58 mm cubes respectively. The task resets the selected cube at a common reachable
-pickup location and clears the other cubes from that table. Starting position is
+Use `--item cube_s`, `cube_m`, `cube_l`, or `cube_xl` to select a cube. The
+recorded tests used 42, 48, 54, and 58 mm cubes. The room now holds 56, 57,
+58, and 57 mm cubes (`src/rlbot/room.py`), so a run today picks those sizes.
+The task resets the selected cube at a common reachable pickup
+location. It clears the other cubes from that table. The start position is
 randomized by up to 8 mm in each horizontal axis.
 
 ## Controller and physics
@@ -73,20 +82,20 @@ flowchart LR
 ```
 
 Each arm has one vertical rail and six revolute joints. The IK solver targets a
-6D grip-site pose, using the positional and rotational site Jacobian and damped
-least squares:
+6D grip-site pose. It uses the positional and rotational site Jacobian with
+damped least squares:
 
 `dq = J.T @ solve(J @ J.T + damping**2 * I, pose_error)`
 
-Solutions are clamped to joint limits. The first waypoint can use restarts;
-subsequent waypoints continue from the preceding solution, rejecting large
-joint jumps. Smooth ramps feed position servos, and MuJoCo advances at 500 Hz.
-Those targets do not directly overwrite the moving arm's joint positions.
+Solutions are clamped to joint limits. The first waypoint can use restarts.
+Later waypoints continue from the preceding solution and reject large joint
+jumps. Smooth ramps feed the position servos, and MuJoCo advances at 500 Hz. The
+targets never overwrite the moving arm's joint positions.
 
-The prototype gripper has two opposed slide joints. With displacement `q` on
-each jaw, aperture is `2*q`, up to 100 mm. The jaw-center frame is independent
-of aperture. Opening is `(cube_width + 35 mm clearance)/2` per jaw; closing asks
-for zero displacement and the drive stalls against contact. A joint equality
+The prototype gripper has two opposed slide joints. Displacement `q` on each jaw
+gives an aperture of `2*q`, up to 100 mm. The jaw-center frame does not depend
+on aperture. Opening is `(cube_width + 35 mm clearance)/2` per jaw. Closing asks
+for zero displacement, and the drive stalls against contact. A joint equality
 couples the follower to the driven jaw.
 
 | Gripper parameter | Simulation value |
@@ -101,56 +110,57 @@ couples the follower to the driven jaw.
 | Contact dimensions | 4 |
 | Coupling time constant | 4 ms |
 
-Visible pads, stems, and the rail have collision geometry. The original arm
-links, hand, and joint servos remain. The replacement is constructed in memory
-for this task; the original robot and room XML files are not modified. These
-gripper parameters are a prototype specification, not measured hardware values.
+The visible pads, the stems, and the rail have collision geometry. The original
+arm links, hand, and joint servos stay. The replacement is built in memory for
+this task, and the robot and room XML files are never modified. These gripper
+parameters are a prototype specification, not measured hardware values.
 
 ## Why the blades need pads
 
 MuJoCo collides a mesh geom as a single convex body. Each hooked blade's convex
-hull measures **147.5 cm3 against the mesh's own 46.1 cm3, a factor of 3.2**, so
-the concave hook the CAD depends on is filled in solid and the blades present as
-fat wedges. Three independent runs agree:
+hull measures **147.5 cm3 against the mesh's own 46.1 cm3, a factor of 3.2**. So
+the concave hook that the CAD depends on fills in solid. The blades then present
+as fat wedges. Three independent runs agree:
 
 | Check | Bare blades | With pads |
 | --- | --- | --- |
 | `check_grasp.py --item cube_m` | 0/1, rose -0.0 mm, empty | 1/1, rose +135.4 mm, holding |
 | `pick_place.py` 48 mm cube | 0/5, max lift 1.5 mm, no two-finger contact | 5/5 |
 
-So the pads replace the blade mesh as the colliding geometry. Each pad is a
-26 x 33 mm face standing 6 mm proud of the blade it sits on, with sliding
-friction 3.0 and a slightly soft contact, drawn in the blade's own colour. The
-blade meshes stay as the visuals and stop colliding, which is the one real cost:
-the blades no longer collide with anything else either, so they cannot be relied
-on to bump the table or another object.
+The pads therefore replace the blade mesh as the colliding geometry. Each pad is
+a 26 x 33 mm face, standing 6 mm proud of the blade it sits on. It uses sliding
+friction 5.0 and a slightly soft contact, and is drawn in the blade's own
+colour. The blade meshes stay as visuals and stop colliding. That is the one
+real cost: the blades no longer collide with anything else, so they cannot bump
+the table or another object.
 
-Two further changes were needed, both in the controller rather than the gripper:
+Two further changes were needed. Both are in the controller, not the gripper:
 
-- **Grip to the object's width, not shut.** These blades are a pincer. Commanded
-  fully closed they scissor past each other and flick the object out - measured
-  directly, the pads swapped sides and the cube escaped after a 1.9 mm lift.
-  `PaddedGripper.grip_command` stops them 4 mm inside the object's faces and lets
-  the force-limited servo press.
-- **Aim the pads, not the blade tips.** `PaddedGripper` measures aperture between
-  the pad faces, since the pads are now what touches.
+- **Grip to the object's width, not shut.** These blades are a pincer. Fully
+  closed, they scissor past each other and flick the object out. This was
+  measured directly: the pads swapped sides and the cube escaped after a 1.9 mm
+  lift. `PaddedGripper.grip_command` stops them 4 mm inside the object's faces
+  and lets the force-limited servo press.
+- **Aim the pads, not the blade tips.** `PaddedGripper` measures aperture
+  between the pad faces, because the pads are now what touches.
 
-Pad size was swept against all four cubes. A smaller face loses the 42 mm cube,
-which the blades grip above its centre and which rolls out during the carry; a
-larger face fouls the 54 mm and 58 mm cubes going in. An earlier convex
-decomposition attempt gave transient lifts without reliable transfer and was not
-kept.
+Pad size was swept against all four cubes. A smaller face loses the 42 mm cube:
+the blades grip it above its centre, and it rolls out during the carry. A larger
+face fouls the 54 mm and 58 mm cubes on the way in. An earlier convex
+decomposition attempt gave transient lifts without reliable transfer, and was
+not kept.
 
 ## Success criteria
 
 The supplied blades with pads pass **20/20**: five starts each at 42, 48, 54 and
 58 mm. The same sweep with no pads passes 0/20.
 
-The parallel-jaw variant (`--gripper parallel`) passed **25/25** episodes: ten 48 mm cube starts, and five each
-for 42, 54, and 58 mm cubes. Those are small ±8 mm position variations near one
-docking pose, not a general manipulation success rate. Final horizontal errors
-were 2.1–5.4 mm. The displayed 48 mm run lifts 14.9 cm and releases 4.7 mm from
-the target in an 18.5-second sequence. Results are in
+The parallel-jaw variant (`--gripper parallel`) passed **25/25** episodes: ten
+48 mm cube starts, and five each for the 42, 54, and 58 mm cubes. These are
+small ±8 mm position variations near one docking pose. They are not a general
+manipulation success rate. Final horizontal errors were 2.1–5.4 mm. The
+displayed 48 mm run lifts 14.9 cm and releases 4.7 mm from the target, in an
+18.5-second sequence. The results are in
 [results/pick_place.json](results/pick_place.json).
 
 A successful episode must satisfy all of these checks:
@@ -159,39 +169,41 @@ A successful episode must satisfy all of these checks:
 - Both fingers contact it for at least 0.5 seconds while it is raised over 5 cm.
 - Its final horizontal position is within 3 cm of the destination.
 - Its base returns within 8 mm of the tabletop, with speed below 2.5 cm/s.
-- Neither finger is touching it after release, and placement remains stable for
-  at least 0.5 seconds during verification.
+- Neither finger touches it after release, and placement stays stable for at
+  least 0.5 seconds during verification.
 
 The green destination outline is display geometry only. It does not hold the
-cube up. Other cubes on the same table are removed in this task variant to leave
-a clear destination; the original room file is not edited. Object positions may
-be assigned at episode reset, but no object weld or pose assignment is used
-while executing the pick-and-place sequence.
+cube up. This task variant removes the other cubes on the same table to leave a
+clear destination. The original room file is not edited. Object positions may be
+assigned at episode reset. No object weld or pose assignment is used while the
+pick-and-place sequence runs.
 
 ## How this connects to the fly-neuron controller
 
-The existing neural controller has a 12-value navigation input and two outputs:
-speed and turning. It cannot be reused as an arm policy without changing its
+The existing neural controller has a 12-value navigation input. It has two
+outputs: speed and turning. It cannot be reused as an arm policy. That needs new
 input/output adapters and training on a manipulation task.
 
-A manipulation version would retain the measured connectivity, replace the
-observation adapter with joint state, gripper state, object/goal relative poses,
-and contact information, and output bounded end-effector motion plus a gripper
-command. IK/servo control can remain below the learned policy. Demonstrations
-from a reliable contact controller provide initialization; PPO then optimizes
-grasp retention and placement while penalizing drops and collisions. It must be
-compared with the scripted baseline and an MLP over the same randomized tasks.
+A manipulation version would keep the measured connectivity. It would replace
+the observation adapter with joint state, gripper state, object and goal
+relative poses, and contact information. It would output bounded end-effector
+motion plus a gripper command. IK and servo control can stay below the learned
+policy. Demonstrations from a reliable contact controller give the
+initialization, and PPO then optimizes grasp retention and placement while
+penalizing drops and collisions. It must be compared with the scripted baseline
+and with an MLP over the same randomized tasks.
 
 This rollout does not establish camera-based grasp detection, obstacle-aware arm
 planning, balancing during manipulation, or a hardware-ready controller. Robot
-self-collision remains filtered in the supplied model. The base must eventually
-be released and controlled jointly with arm motion, followed by validation with
-measured motor, gripper, and contact parameters.
+self-collision stays filtered in the supplied model. The base must eventually be
+released and controlled jointly with the arm. Validation with measured motor,
+gripper, and contact parameters must follow.
 
-The regression suite verifies a free object with no weld, the explicit gripper
-substitution, a complete successful transfer/release, and failure with grip
-force disabled. Existing navigation/graph regressions also pass:
+The regression suite verifies four things: a free object with no weld, the
+explicit gripper substitution, a complete successful transfer and release, and
+failure with grip force disabled. The navigation and graph regressions pass
+too:
 
-```powershell
-.venv\Scripts\python.exe -m unittest discover -s tests -v
+```bash
+.venv/bin/python -m unittest discover -s tests -v
 ```
