@@ -12,7 +12,17 @@ the whole job in one continuous simulation, 7 min 48 s. [`demo/`](demo/) also
 holds a close-up of ACT, the scripted pick-and-place baseline, and the
 fly-brain point-goal pilot.
 
-**[Check out our Devpost!](https://devpost.com/software/mr-clean)**
+## Demo
+
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=WjJpOjjXQZs">
+    <img src="https://img.youtube.com/vi/WjJpOjjXQZs/maxresdefault.jpg" alt="Mr. Clean demo video" width="800"/>
+  </a>
+  <br/>
+  <strong>Click the image above to watch the demo on YouTube</strong>
+  <br/>
+  <strong><a href="https://devpost.com/software/mr-clean">Check out our Devpost!</a></strong>
+</div>
 
 ## Contents
 
