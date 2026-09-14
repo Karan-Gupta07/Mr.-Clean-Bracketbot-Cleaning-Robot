@@ -30,9 +30,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(REPO / "scripts"))
 
-from rlbot.arm import ARM_JOINTS, ArmIK          # noqa: E402
-from rlbot.room import TABLES                    # noqa: E402
-from check_grasp import plan_grasp, welded_at    # noqa: E402
+from rlbot.arm import ARM_JOINTS, ArmIK, Gripper     # noqa: E402
+from rlbot.grasp import plan_waypoints, welded_at    # noqa: E402
+from rlbot.room import TABLES, grasp_pose            # noqa: E402
 
 # joint 3 outward: bicep is joint 2's link, so it is deliberately left out
 J3_LINKS = {
@@ -120,11 +120,12 @@ def grasp_waypoints(model):
             seed = m.qpos0.copy()
             for arm in ("right", "left"):
                 seed[ArmIK(m, arm).qadr] = HOME
-            plan = plan_grasp(m, mujoco.MjData(m), item, table, seed)
+            plan = plan_waypoints(m, mujoco.MjData(m), grasp_pose(item, table),
+                                  item.width, item.yaws, yaw, seed, hand_type=Gripper)
             if plan is None:
                 print(f"   {item.name:<12} no plan")
                 continue
-            _, side, _, _, *chain = plan
+            _, side, _, _, chain = plan
             ik = ArmIK(m, side)
             # check_grasp.move() ramps the servos linearly in joint space, so
             # the path is a straight line between consecutive waypoints; the

@@ -63,9 +63,11 @@ class GripperModelTests(unittest.TestCase):
         for prefix in ("", "l_"):
             for finger in ("left", "right"):
                 body = model.body(f"{prefix}{finger}_finger__{finger}_finger").id
-                kinds = {model.geom_type[g] for g in range(model.ngeom)
+                kinds = {int(model.geom_type[g]) for g in range(model.ngeom)
                          if model.geom_bodyid[g] == body}
-                self.assertEqual(kinds, {mujoco.mjtGeom.mjGEOM_MESH})
+                # int() on both sides: mujoco 3.13's pybind enums no longer
+                # compare equal to the numpy ints geom_type holds
+                self.assertEqual(kinds, {int(mujoco.mjtGeom.mjGEOM_MESH)})
         # and the gripper servo keeps the force limit the export gave it
         for name in GRIPPER.values():
             np.testing.assert_allclose(model.actuator(name).forcerange,

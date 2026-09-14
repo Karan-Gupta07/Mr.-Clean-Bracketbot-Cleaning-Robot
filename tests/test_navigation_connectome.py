@@ -53,11 +53,11 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(info["success"])
         self.assertFalse(info["fell"])
 
-    @unittest.skipUnless((REPO / "out/flywire/graph_512.npz").exists(), "Download graph first")
+    @unittest.skipUnless((REPO / "checkpoints/graph_512.npz").exists(), "Download graph first")
     def test_graph_gradient_and_stateless_batching(self):
         torch.set_num_threads(1)
         env = NavigationEnv()
-        features = ConnectomeFeatures(env.observation_space, str(REPO / "out/flywire/graph_512.npz"))
+        features = ConnectomeFeatures(env.observation_space, str(REPO / "checkpoints/graph_512.npz"))
         observations = torch.randn(3, 12)
         batched = features(observations)
         individual = torch.cat([features(row[None]) for row in observations])
