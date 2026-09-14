@@ -23,7 +23,7 @@ fly-brain point-goal pilot.
 7. [Fly brain](#fly-brain)
 8. [Verification](#verification)
 9. [Folder layout](#folder-layout)
-10. [Known issues and limits](#known-issues-and-limits)
+10. [Assumptions](#assumptions)
 
 ## Quick start
 
@@ -640,9 +640,9 @@ Standalone checks, all headless:
 .venv/bin/python scripts/check_navigation.py        # 20 unit checks on grid, planner, navigator
 .venv/bin/python scripts/validate_ik.py             # IK round-trip, then every object reached
 .venv/bin/python scripts/build_room.py              # rebuild the room, print the clearance map
-.venv/bin/python scripts/check_grasp.py             # 3 of 6 lifted with the default pads; see Known issues
+.venv/bin/python scripts/check_grasp.py             # 3 of 6 lifted; one default pad set, the demo swaps pads per table
 .venv/bin/python scripts/check_slam_inputs.py       # lidar, odometry, projection, recording: all OK
-.venv/bin/python scripts/check_arm_clearance.py     # arm-to-chassis clearance; exits 1 today, see Known issues
+.venv/bin/python scripts/check_arm_clearance.py     # arm-to-chassis clearance; exits 1, cube_l swing is 10 mm from the mast
 ```
 
 Live viewers (`mjpython`):
@@ -683,12 +683,12 @@ RL-BOT
 │   ├── view_cameras.py             Shows the head and wrist cameras.
 │   ├── validate_ik.py              IK checks.
 │   ├── check_grasp.py              Grasp probe on every object.
-│   ├── check_arm_clearance.py      Arm-to-chassis clearance. Broken; see Known issues.
+│   ├── check_arm_clearance.py      Arm-to-chassis clearance. Exits 1 on a 10 mm near-miss.
 │   │  ── path finding ──
 │   ├── plan_path.py                Plans and draws the nine routes.
 │   ├── navigate.py                 Drives the nine routes in the sim.
 │   ├── check_navigation.py         Unit checks for grid, planner, navigator.
-│   ├── check_slam_inputs.py        Local lidar/odometry checks. Broken; see Known issues.
+│   ├── check_slam_inputs.py        Local lidar/odometry checks.
 │   ├── record_slam_inputs.py       Records wheel, IMU, odometry and scans to an .npz.
 │   ├── check_ros_mapping.py        The ROS 2 SLAM acceptance gate; runs inside Docker.
 │   │  ── ACT ──
@@ -747,44 +747,32 @@ RL-BOT
 └── requirements*.txt               Base; -agent (Anthropic SDK); -rl (torch, SB3); -train.
 ```
 
-## Known issues and limits
+## Assumptions
 
-Scripts that look worse than they are:
+Every result in this README is a simulation result. No hardware has been
+tested. The work rests on these assumptions:
 
-- `scripts/check_arm_clearance.py` exits 1. The swing up to `cube_l` passes
-  10 mm from the mast cover, on its 10 mm warn threshold. Every other
-  waypoint clears by 15 mm or more. It also reports that about 30% of random
-  poses inside the joint limits penetrate the chassis: the planner keeps the
-  arm out, the workspace itself does not.
-- `scripts/check_grasp.py` exits 1 at 3 of 6. It uses one default pad set.
-  The ball is unpickable by design. `cube_l` and `pick_cube` fail here but
-  succeed in the live demo, which swaps pads per table.
-
-Limits:
-
-- The robot's mass and motor limits are guesses. Weigh the real robot, then
-  rerun `build_mjcf.py --total-mass` and retune the gains.
+- The robot's total mass is 12.0 kg. The URDF has no usable mass, so
+  `build_mjcf.py` computes mass from mesh volumes and scales it to this
+  placeholder. Motor limits are sized from the gravity load, not measured.
+- The wheel radius is 0.0846 m, measured from the tyre mesh. The URDF does
+  not give one.
 - The arms have no damping or friction.
-- Navigation in the demo reads the simulator's pose, not SLAM.
-- The physical lidar mount and hardware calibration are unvalidated.
-- Low scans miss tabletop overhangs. The grid unions in known table tops.
-- The fly-brain arm policy has no 20-of-20 validation report. The demo runs
-  it anyway and says so.
-- ACT misses the shipped ball layout. The failure is the carry, not the
-  reach.
+- The lidar sits 0.32 m up the mast and the IMU 0.20 m up the chassis. The
+  physical mounts are not calibrated. Recorded runs use no sensor noise.
+- The demo navigates on the simulator's true pose. SLAM is validated in a
+  separate Docker run, not in the demo loop.
+- The low lidar scan cannot see tabletop overhangs, so the grid unions in
+  the known table tops from `models/room.xml`.
+- Docking poses are predefined per table in `src/rlbot/room.py`. The robot
+  does not perceive table edges.
+- Object recognitions are supplied by the operator. There is no camera
+  detector or vision-language model.
+- The fly-brain arm policy ships without a 20-of-20 validation report. The
+  demo runs it anyway and says so.
+- ACT was trained on layouts other than the shipped ball position. It
+  reaches the ball and loses it on the carry.
 - Generated checkpoints and replays under `out/` are ignored by git. Only
   `checkpoints/` and `demo/` ship.
 - `rlbot:jazzy` copies the repo at build time. Rebuild the image after
   changing `models/`, `src/`, or `ros2_ws/`.
-
-Next steps:
-
-- Run all nine routes through the ROS `navigate` node on the SLAM pose
-  automatically.
-- Sense tabletop overhangs and place them in the map frame.
-- Dock on perceived table edges instead of known poses.
-- Replace the operator-supplied recognitions with a real detector.
-- Get ACT to hold the ball through the carry. A better end effector is the
-  likely answer.
-- Fine-tune the fly-brain arm policy with PPO without hiding a scripted
-  fallback.
