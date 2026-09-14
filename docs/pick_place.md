@@ -34,15 +34,14 @@ Run every command from the repository root, in the existing environment. Every
 .venv/bin/python scripts/pick_place.py --record --open
 ```
 
-This writes `out/pick_place/index.html`, a synchronized overview/close-up
-replay. It also writes a GIF, trajectory data, and a JSON report. The page
-template is [../demo/pick_place.html](../demo/pick_place.html); the recorder
-fills its `__PICK_PLACE_DATA__` placeholder.
+This writes `out/pick_place/demo.gif`, an over-the-shoulder replay, plus
+`episode.json` (trajectory data) and `report.json`. A recorded run ships as
+[../demo/pick_place.gif](../demo/pick_place.gif).
 
 2. Reopen the existing replay:
 
 ```bash
-open out/pick_place/index.html
+open out/pick_place/demo.gif
 ```
 
 3. Watch the controller in a live MuJoCo window. The viewer needs `mjpython` on

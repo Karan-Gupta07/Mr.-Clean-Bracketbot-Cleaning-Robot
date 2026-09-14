@@ -138,63 +138,23 @@ The first run used no targeted release examples. It achieved 0/10 successes
 after PPO. That result stays in
 [results/arm_rl_initial_failed.json](results/arm_rl_initial_failed.json).
 
-The replay in `out/arm_rl_demo/index.html` runs the final PPO checkpoint on seed
-2000. It places the cube in 10.3 s, with a 16.0 cm maximum lift and 7.2 mm final
-error. It displays measured neuron coordinates and actual policy activations.
-The GIF is `out/arm_rl_demo/demo.gif`.
+The recorded run of the final PPO checkpoint on seed 2000 placed the cube in
+10.3 s, with a 16.0 cm maximum lift and 7.2 mm final error.
+`scripts/run_arm.py --record` writes `out/arm_rl_demo/demo.gif`,
+`episode.json` (frames, policy activations, and the graph), and `report.json`.
 
-## Interactive neuron explorer
+## Historical: the interactive neuron explorer
 
-The replay uses a FlyJack-inspired control-room layout. The robot views and an
-episode log sit on the left. The controller sits in the middle. An Explore panel
-sits on the right. It is a standalone HTML file. It works offline after
-recording and loads no rendering library from a CDN.
+Until 2026-09-14 the recorder also wrote a standalone HTML page: a
+FlyJack-inspired control room with an orbitable neuron cloud, a circuit view
+of cell types by synaptic hop, a glossary, and a guided tour. The page and its
+template were removed; the repository ships recordings only. The activations
+and graph it displayed are still in `episode.json`. The browser checks that
+exercised the page are kept in
+[results/arm_rl_browser.json](results/arm_rl_browser.json) and
+[results/browser_checks.json](results/browser_checks.json).
 
-**Neuron cloud.** Drag to orbit, scroll to zoom, or expand to fullscreen. Click a
-neuron, or search by exact FlyWire root ID, source class, transmitter, neuropil
-group or policy role. Root IDs export as strings to avoid JavaScript integer
-rounding. The panel reports the transmitter prediction and its score, source
-classifications, side, flow, and source group. It also reports the synaptic hop,
-the incoming and outgoing counts within this graph, and the strongest normalized
-model-weight connections. Selecting a neuron highlights incoming links in blue
-and outgoing links in gold.
-
-Colour by policy role, source region, transmitter or activation. Filter by super
-class. Switch between measured annotation positions and a conceptual
-policy-interface layout.
-
-**Circuit view.** The same activity groups into cell types, laid out by distance
-from the policy's inputs. Columns are the median synaptic hop of each type's
-neurons. Breadth-first search computes that hop from the 64 afferent input
-neurons over the measured directed edges. The view draws the 30 types with the
-highest total activation across the episode. It joins them with the 45 strongest
-type-to-type links, ranked by summed absolute model weight. The layout is fixed
-for the whole episode, so only the glow moves.
-
-Node fill tracks each type's mean activation at the current frame, scaled
-against the strongest type's episode peak. Clicking a type selects it, lists its
-neurons, and highlights it in the neuron cloud. Cell types use FlyWire's class
-annotation where one exists. Otherwise they use a super-class code plus neuropil
-group (`CB · AVLP`, `DN · GNG`). The Circuit tab discloses that rule, because
-325 of the 512 neurons carry no class annotation. Hop columns describe the
-measured wiring, not the four propagation rounds the model runs.
-
-**Explanation.** Twenty-two neuroscience and machine-learning terms are hoverable
-and keyboard-focusable for a definition. A five-step guided tour opens once per
-browser and replays from the header. The Science tab carries the measured
-results below. It states that this arm experiment has no matched
-conventional-network control run. It also states that the navigation
-experiment's control run showed no advantage from the fly wiring.
-
-The episode log beside the robot marks grasp, lift, arrival, release and
-confirmation times. All come from the recorded task state, not from a script.
-
-Scrub the replay to inspect any frame. Each frame shows the activity trace,
-robot motion, 20 policy observations, and four action outputs. The values share
-one recorded action step. Neuron metadata, per-neuron synaptic hops, cell-type
-assignments and all 8,688 graph edges download as JSON from How it works.
-
-Limits on the displayed numbers:
+Limits on the recorded numbers:
 
 - Activities are mean absolute values across four artificial channels, not Hz or
   spike counts.
@@ -202,19 +162,7 @@ Limits on the displayed numbers:
 - Connection weights are signed, incoming-normalized model weights, not raw
   synapse counts.
 - The 64 input and 64 output roles are engineered adapters.
-- Source biological classifications appear separately, and missing source
-  annotations stay marked as unannotated.
-
-The interface credits [FlyJack](https://fanpu.io/games/flyjack/) as its design
-reference.
-
-Headless Microsoft Edge drove the generated replay over the DevTools protocol.
-It asserted playback, scrubbing, exact root-ID search, and neighbour navigation.
-It asserted the circuit layout, its per-frame glow, and cell-type selection
-carrying into the neuron cloud. It also asserted group filtering, every colour
-mode, the glossary, all five tabs, the first-visit tour, and image loading. It
-found no horizontal overflow at 1600 px or 400 px, and no JavaScript errors. The
-saved record is `out/arm_rl_demo/explorer_checks.json`.
+- 325 of the 512 neurons carry no FlyWire class annotation.
 
 ## Simulation scope
 

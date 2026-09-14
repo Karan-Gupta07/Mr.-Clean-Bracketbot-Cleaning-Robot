@@ -7,9 +7,10 @@ The robot is the **BracketBot**: a self-balancing base, a tall mast, and two
 whole job: an agent plans, the robot drives to a table, and a task-specific
 controller does the manipulation.
 
-To see it without installing anything, watch [`demo/ACT.mov`](demo/ACT.mov).
-The other files in [`demo/`](demo/) are the page templates that the recorders
-fill with a run's data.
+To see it without installing anything, watch [`demo/tour.mov`](demo/tour.mov):
+the whole job in one continuous simulation, 7 min 48 s. [`demo/`](demo/) also
+holds a close-up of ACT, the scripted pick-and-place baseline, and the
+fly-brain point-goal pilot.
 
 ## Contents
 
@@ -75,6 +76,13 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 With no prompt, `demo.py` opens a `> ` loop. The robot stays where the last
 prompt left it. The exit code is 0 only when every tool call succeeds.
+
+Record a run instead of watching it. `--video` renders over the robot's
+shoulder at 30 fps and pipes to `ffmpeg`; it runs headless.
+
+```bash
+.venv/bin/python scripts/demo.py --planner sweep --video out/tour.mov "clean the cubes, then pick up the blue cube, then go to the ACT table"
+```
 
 ## System overview
 
@@ -557,7 +565,7 @@ demonstration rehearsal.
 
 The graph works as a controller. This run does not show a benefit from fly
 wiring or from PPO over imitation. Raw numbers are in `docs/results/`. The
-full recipe and the replay page are in [docs/brain_demo.md](docs/brain_demo.md).
+full recipe and the recording are in [docs/brain_demo.md](docs/brain_demo.md).
 
 ### Arm policy (the pick table)
 
@@ -644,7 +652,7 @@ models/room.xml             The room alone. models/room_scene.xml adds the robot
 models/balancer.xml         A toy two-wheeler for quick controller checks.
 
 checkpoints/                ACT weights and configs, the fly-brain arm policy, graph_512.npz.
-demo/                       ACT.mov, and the HTML templates the three recorders fill into out/.
+demo/                       Recordings: tour.mov, ACT.mov, pick_place.gif, fly_brain_point_goal_pilot.gif.
 docs/                       arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
 
 scripts/demo.py             One prompt, one simulation. The main entry point.
@@ -674,7 +682,7 @@ scripts/replay_demo.py      Plays recorded episodes back.
 scripts/prepare_connectome.py   Downloads FlyWire tables, builds the graph.
 scripts/train_connectome.py     Fly-brain navigation pilot.
 scripts/evaluate_navigation.py  Scores navigation checkpoints.
-scripts/record_brain_demo.py    Renders the navigation replay page.
+scripts/record_brain_demo.py    Records the point-goal pilot to a GIF.
 scripts/benchmark_connectome.py Full-graph forward-pass timing.
 scripts/train_arm.py        Fly-brain arm policy: teacher, BC, PPO, calibration.
 scripts/run_arm.py          Runs an arm checkpoint; viewer, record, validation.
