@@ -270,7 +270,7 @@ RL-BOT
 │   └── balancer.xml                A toy two-wheeler for quick controller checks.
 │
 ├── checkpoints/                    ACT weights and configs, the fly-brain arm policy, graph_512.npz.
-├── demo/                           Recordings: tour.mov, ACT.mov, pick_place.gif, fly_brain_point_goal_pilot.gif.
+├── demo/                           Recordings: tour.mov, ACT.mov, fly_brain_pick_place.gif, fly_brain_point_goal_pilot.gif.
 ├── docs/                           theory.md (in depth), architecture.png and .eraser, arm_rl.md, brain_demo.md, original_arm.md, pick_place.md, results/*.json.
 │
 ├── scripts/
