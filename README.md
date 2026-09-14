@@ -128,15 +128,6 @@ prompt  "clean the cubes, then pick up the blue cube, then go to the ACT table"
 There is no fallback controller. When a table's controller is unavailable, the
 tool result says so and the agent decides what to do next.
 
-On arrival the robot does not jump to a keyframe. A pre-declared weld between
-the chassis and the world is switched on (`data.eq_active`). The base holds
-still like a parking brake. The solver impedance ratio is raised to 200 for
-the pinch. Both are switched back before the next drive. The code is
-`src/rlbot/live.py`.
-
-Each table's controller was tuned on different contact pads. The live room
-carries one pad per blade and rewrites it on arrival (`LiveSim.use_pads`).
-
 ## Simulation
 
 The robot is the BracketBot URDF from Onshape. `scripts/build_mjcf.py`

@@ -243,6 +243,15 @@ Results on the nine routes between the start pose and the three tables
 The pick table uses a tighter 4 cm / 2 degree tolerance (`LiveSim.ARRIVE_AT`),
 because the fly-brain carry fails from 9 cm out.
 
+On arrival the robot does not jump to a keyframe. A pre-declared weld between
+the chassis and the world is switched on (`data.eq_active`). The base holds
+still like a parking brake. The solver impedance ratio is raised to 200 for
+the pinch. Both are switched back before the next drive. The code is
+`src/rlbot/live.py`.
+
+Each table's controller was tuned on different contact pads. The live room
+carries one pad per blade and rewrites it on arrival (`LiveSim.use_pads`).
+
 ### Fly-brain navigation pilot
 
 A separate experiment drives the robot to point goals through the FlyWire
