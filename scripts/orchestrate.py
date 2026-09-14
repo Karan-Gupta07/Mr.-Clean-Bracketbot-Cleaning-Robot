@@ -134,7 +134,7 @@ def main():
     parser.add_argument('--planner', choices=['fable','sweep'], default='fable')
     parser.add_argument('--checkpoint', type=Path, default=ROOT/'out/rl/arm_observable/policy.zip')
     parser.add_argument('--act-checkpoint', type=Path,
-                        help='ACT checkpoint path; the real ACT backend is not implemented yet')
+                        help='ACT checkpoint (default checkpoints/act_ball_run1_noaug.pt)')
     parser.add_argument('--seed', type=int, default=3000)
     parser.add_argument('--view', action='store_true')
     args = parser.parse_args()

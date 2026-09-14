@@ -22,6 +22,19 @@ def validate_arm_config(actual, expected):
 JAWS = {"padded": (OPEN, 1.0 / OPEN), "urdf": (OPEN, 1.0 / OPEN), "parallel": (.045, 20.0)}
 
 
+def jaw_limits(hand, width):
+    """(open, closed) jaw commands for the fitted pads on a cube `width` across.
+
+    Open is the approach opening, not wide open: past about 0.6 the blades'
+    midpoint runs away from the wrist (35 mm at full open) and the arm would
+    have to drive the hand through the tabletop to put the jaws on a cube.
+    Closed stops the pads just inside the cube's faces and lets the servo press.
+    One function, so the live room (rlbot.live_arm) gets the numbers the policy
+    was trained on.
+    """
+    return hand.opening_for(width, clearance=0.035), hand.grip_command(width)
+
+
 class ArmEnv(gym.Env):
     def __init__(self, gripper='padded', station='pick', history=1, motion_deadband=0.):
         if type(history) is not int or not 1 <= history <= 64:
@@ -67,14 +80,9 @@ class ArmEnv(gym.Env):
         self.cube_width = float(2*self.model.geom_size[self.objgeom,0])
         self.rest_height = .70 + self.cube_width/2
         self.hand = hand_for(self.model, 'right', gripper)
-        closed = (self.hand.grip_command(self.cube_width)
-                  if hasattr(self.hand, 'grip_command') else 0.0)
-        if hasattr(self.hand, 'grip_command'):
-            # Cap the command at the approach opening rather than wide open. The
-            # supplied blades are a pincer: past about 0.6 their midpoint runs away
-            # from the wrist (35 mm at full open) and the arm would have to drive
-            # the hand through the tabletop to put the jaws on a cube.
-            self.jaw_open = self.hand.opening_for(self.cube_width, clearance=0.035)
+        closed = 0.0
+        if gripper == 'padded':
+            self.jaw_open, closed = jaw_limits(self.hand, self.cube_width)
             self.jaw_scale = 1.0 / self.jaw_open
         self.closed_action = float(np.clip(2 * closed / self.jaw_open - 1, -1, 1))
         # A bounded command range prevents pincer blades crossing through the cube.
@@ -204,6 +212,20 @@ class ArmEnv(gym.Env):
         distance = np.linalg.norm(self.cube[:2]-self.goal[:2])
         return -3*reach + 2*lift + 4*(.17-distance)
 
+    def _advance(self):
+        """One control interval of physics, plus the lift/held bookkeeping.
+
+        Separate from `step` so a subclass on a shared simulation can hand the
+        stepping to whatever else has to run every step - a balancer, a viewer
+        pacer - without restating the reward bookkeeping.
+        """
+        for _ in range(25):
+            mujoco.mj_step(self.model, self.data)
+            lift = float(self.cube[2]-self.rest_height)
+            self.max_lift = max(self.max_lift, lift)
+            if lift > .05 and self.contacts() == 2:
+                self.held += self.model.opt.timestep
+
     def step(self, action):
         action = np.asarray(action, dtype=float)
         if action.shape != (4,) or not np.isfinite(action).all():
@@ -223,12 +245,7 @@ class ArmEnv(gym.Env):
             current = self.data.ctrl[self.arm.grip_act]
             jaw_target = np.clip(jaw_target, current-.015, current+.015)
         self.arm.grip(jaw_target)
-        for _ in range(25):
-            mujoco.mj_step(self.model, self.data)
-            lift = float(self.cube[2]-self.rest_height)
-            self.max_lift = max(self.max_lift, lift)
-            if lift > .05 and self.contacts() == 2:
-                self.held += self.model.opt.timestep
+        self._advance()
         self.steps += 1
         self.previous = action.copy()
         velocity = np.zeros(6)

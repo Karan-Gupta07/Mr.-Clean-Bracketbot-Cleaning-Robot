@@ -82,10 +82,14 @@ def bare_grippers(spec):
     return spec
 
 
-def add_pads(spec, thickness=THICKNESS, friction=FRICTION, span=HALF_SPAN):
-    """Give each supplied blade a contact pad and stop colliding the blade mesh."""
-    bare_grippers(spec)
-    probe = spec.compile()
+def fit_pads(spec, thickness=THICKNESS, span=HALF_SPAN):
+    """Where a pad goes on each blade: (finger body, pos, quat) in that body's frame.
+
+    Measured on a bare copy of the model, so the caller's spec is untouched.
+    """
+    bare = spec.copy()
+    bare_grippers(bare)
+    probe = bare.compile()
     data = mujoco.MjData(probe)
     placements = []
 
@@ -130,19 +134,31 @@ def add_pads(spec, thickness=THICKNESS, friction=FRICTION, span=HALF_SPAN):
             mujoco.mju_mat2Quat(quat, (body_rotation.T @ rotation).ravel())
             placements.append((name, pos, quat))
 
+    return placements
+
+
+def _pad_geom(body, name, pos, quat, thickness, friction, span):
+    left = name.startswith("l_")
+    body.add_geom(name=f"{name}_pad", type=mujoco.mjtGeom.mjGEOM_BOX,
+                  pos=pos, quat=quat,
+                  size=[span[0], thickness / 2, span[2]],
+                  mass=0.004, contype=4 if left else 2,
+                  conaffinity=3 if left else 5, condim=4,
+                  friction=list(friction), solref=list(SOLREF),
+                  rgba=visual_rgba(body), group=2)
+
+
+def add_pads(spec, thickness=THICKNESS, friction=FRICTION, span=HALF_SPAN):
+    """Give each supplied blade a contact pad and stop colliding the blade mesh."""
+    placements = fit_pads(spec, thickness, span)
+    bare_grippers(spec)
     for name, pos, quat in placements:
         body = spec.body(name)
         for geom in list(body.geoms):
             # the CAD mesh stays as the visual; only its collision copy retires
             if geom.contype or geom.conaffinity:
                 geom.contype = geom.conaffinity = 0
-        body.add_geom(name=f"{name}_pad", type=mujoco.mjtGeom.mjGEOM_BOX,
-                      pos=pos, quat=quat,
-                      size=[span[0], thickness / 2, span[2]],
-                      mass=0.004, contype=4 if name.startswith("l_") else 2,
-                      conaffinity=3 if name.startswith("l_") else 5, condim=4,
-                      friction=list(friction), solref=list(SOLREF),
-                      rgba=visual_rgba(body), group=2)
+        _pad_geom(body, name, pos, quat, thickness, friction, span)
     return spec
 
 

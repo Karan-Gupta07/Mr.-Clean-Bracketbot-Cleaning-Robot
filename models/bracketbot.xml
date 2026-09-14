@@ -64,7 +64,7 @@
       <geom name="chassis_head" size="0.0587263 0.0654754 0.0856884" pos="0.015572 1.2642e-05 1.52569" type="box" contype="8" group="3" rgba="0.9 0.4 0.2 0.25" mass="0"/>
       <site name="imu" size="0.01" pos="0 0 0.2"/>
       <site name="lidar" size="0.012" pos="0 0 0.32" rgba="0.2 0.8 0.3 0.6"/>
-      <camera name="head_cam" quat="-0.5 -0.5 0.5 0.5" pos="0.075 0 1.575" fovy="58"/>
+      <camera name="head_cam" quat="0.686103 0.171065 -0.171065 -0.686103" pos="0.075 0 1.575" fovy="58"/>
       <body name="base_plate__base_plate" pos="0.0113398 6.4516e-07 0.0776294" quat="0.707106 -0.707108 -1.79246e-05 -1.77981e-05">
         <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Base_Plate__Base_Plate"/>
         <body name="bottom_cover_front__bottom_cover_front__bottom_cover_front__bottom_cover_front" pos="0.004 0.0272667 0.000135341" quat="1 0 0 0">
@@ -136,9 +136,9 @@
                 <geom pos="0.285662 -1.10745 -0.425773" quat="0.608761 0.76632 0.205335 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Knuckle__Shoulder_Knuckle"/>
                 <body name="bicep__bicep" pos="-0.0345871 -0.0799863 -0.0310962" quat="0.425282 0.427297 0.563398 0.56492">
                   <joint name="rj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
-                  <geom pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62093e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep"/>
-                  <geom name="bicep__bicep_collision" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62093e-12" type="mesh" contype="2" conaffinity="5" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep"/>
-                  <body name="bicep_cover__bicep_cover" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62098e-12">
+                  <geom pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep"/>
+                  <geom name="bicep__bicep_collision" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.621e-12" type="mesh" contype="2" conaffinity="5" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep"/>
+                  <body name="bicep_cover__bicep_cover" pos="-1.08044 -0.3902 0.0283732" quat="0.70241 0.181779 -0.688169 1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover"/>
                   </body>
                   <body name="forearm__forearm" pos="-0.140146 -0.0763873 0.0558851" quat="0.62745 -0.367259 -0.485501 -0.485505">
@@ -195,9 +195,9 @@
                 <geom pos="-0.306335 -1.10191 0.425773" quat="0.793353 0.588018 -0.157559 0" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Shoulder_Knuckle__Shoulder_Knuckle_Mirrored"/>
                 <body name="l_bicep__bicep" pos="-0.0699464 -0.0519767 0.0310962" quat="0.558556 0.557003 0.4356 0.433608">
                   <joint name="lj2" range="-2.0944 2.0944" actuatorfrcrange="-14.0072 14.0072" actuatorfrclimited="true"/>
-                  <geom pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62093e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep_Mirrored"/>
-                  <geom name="l_bicep__bicep_collision" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62093e-12" type="mesh" contype="4" conaffinity="3" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep_Mirrored"/>
-                  <body name="l_bicep_cover__bicep_cover" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62098e-12">
+                  <geom pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.621e-12" type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep__Bicep_Mirrored"/>
+                  <geom name="l_bicep__bicep_collision" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.621e-12" type="mesh" contype="4" conaffinity="3" group="3" friction="0.6" rgba="0.9 0.4 0.2 0.35" mass="0" mesh="Bicep__Bicep_Mirrored"/>
+                  <body name="l_bicep_cover__bicep_cover" pos="-1.08044 0.3902 0.0283732" quat="0.70241 -0.181779 -0.688169 -1.62095e-12">
                     <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="1 1 1 1" density="393.025" mesh="Bicep_Cover__Bicep_Cover_Mirrored"/>
                   </body>
                   <body name="l_forearm__forearm" pos="-0.140146 0.0763873 0.0558851" quat="-0.36555 0.625739 0.487709 0.486789">

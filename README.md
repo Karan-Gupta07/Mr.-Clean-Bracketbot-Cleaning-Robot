@@ -10,7 +10,7 @@ The project has three steps. Each step builds on the one before it.
 
 1. **Put the BracketBot in the sim.** Load the robot model, make it stand up, and make it balance. This is the base for everything else.
 2. **Drive around a room with SLAM.** SLAM stands for "Simultaneous Localization and Mapping". The robot builds a map of the room while it figures out where it is on that map. Then it can drive from one spot to another without bumping into things.
-3. **Pick up and put down objects with task-specific controllers.** The current demo routes colored cubes to Fable, the red ball to ACT (Action Chunking with Transformers, awaiting integration), and the blue-cube/rectangle task to Flybrain. A deterministic selector replaces the proposed VLM orchestrator.
+3. **Pick up and put down objects with task-specific controllers.** The current demo routes colored cubes to Fable, the red ball to ACT (Action Chunking with Transformers, trained on teleoperated demonstrations), and the blue-cube/rectangle task to Flybrain. A deterministic selector replaces the proposed VLM orchestrator.
 
 Put together: the robot maps the room, drives to an object, picks it up, drives to where it belongs, and puts it down.
 
@@ -20,7 +20,7 @@ Put together: the robot maps the room, drives to an object, picks it up, drives 
 | --- | --- |
 | 1. BracketBot in sim | Done. The robot loads, stands, and balances. It recovers from a shove. |
 | 2. SLAM navigation | ROS 2 Jazzy / SLAM Toolbox mapping, map saving and localization restart pass in Ubuntu Docker. Custom curved navigation passes all nine sim routes on the true pose, and a ROS node drives the same navigator on the SLAM pose in Docker (two routes hand-tested). Nav2 is not implemented. |
-| 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT awaits its controller/checkpoint; live Fable still needs a locally configured API key. |
+| 3. Manipulation | Scripted cube transfers work with padded original grippers. A new history-based, imitation-trained Flybrain checkpoint with output calibration passes 18/20 fresh held-out starts (no PPO fine-tuning), but remains blocked by the 20/20 dispatch gate. ACT runs from `checkpoints/act_ball_run1_noaug.pt` (2 of 14 random layouts in the fixed-base sim); live Fable still needs a locally configured API key. |
 
 
 ### What works today
@@ -72,15 +72,16 @@ arrival. Manipulation uses a **separate fixed-base simulation** at the docking
 pose; this is not yet a continuous balancing-to-manipulation handoff. Navigation
 uses simulator truth here, not ROS localization. `--planner sweep` explicitly
 tests Fable's skills without an API model; default `fable` needs a locally set
-`ANTHROPIC_API_KEY`. ACT refuses execution until its real implementation is
-registered; it never falls back to VLA or to a script. Flybrain refuses dispatch
+`ANTHROPIC_API_KEY`. ACT runs one closed-loop episode of the shipped checkpoint
+on a fixed-base room; it never falls back to VLA or to a script. Flybrain refuses dispatch
 without compatible model metadata and a passing, checkpoint-bound validation.
 
-### Live MuJoCo demo and ACT scaffold
+### Live MuJoCo demo and ACT
 
-The integrated Flybrain/Fable code is in `main`. ACT has an importable scaffold
-at `rlbot.act.prepare_act`; its real controller and checkpoint are still pending.
-The scaffold never moves the robot or substitutes another controller.
+The integrated Flybrain/Fable code is in `main`. ACT (PR #10) lives in `rlbot.act`:
+`prepare_act` runs the shipped checkpoint on a fixed-base room, `run_act.py --check`
+only confirms the checkpoint exists, and neither substitutes another controller.
+Both need `requirements-rl.txt` (torch and torchvision).
 
 ```powershell
 .venv\Scripts\python.exe scripts/run_act.py --describe
@@ -99,6 +100,65 @@ recognition or continuous navigation/manipulation handoff is claimed.
 For Flybrain, `live_demo.py --station pick --recognized blue_cube_rectangle`
 also requires an explicit `--checkpoint`. Its unchanged preflight rejects the
 current 18/20 candidates. A `--dry-run` reports routing only, not readiness.
+
+### Continuous demo: one prompt, one simulation
+
+`scripts/demo.py` runs the whole thing in **one** MuJoCo model: a prompt typed
+in the terminal becomes tool calls from a top-level Claude Fable agent -
+`go_to(station)` plans and drives the balancing robot to a table, `manipulate()`
+runs that table's controller in the same simulation, `finished` ends. There is
+no second model and no keyframe jump: on arrival a pre-declared weld equality
+between the chassis and the world is switched on (`data.eq_active`) so the base
+holds still like a parking brake, the solver's impedance ratio is raised to 200
+for the pinch, and both are switched back before the next drive.
+
+```bash
+# The agent decides the calls. Needs ANTHROPIC_API_KEY.
+.venv/bin/python scripts/demo.py "tidy the cubes table, then go to the ACT station"
+
+# No key: keyword routing to the same tools. "act" -> ball, "fly"/"blue" -> pick, "cubes" -> cubes.
+.venv/bin/python scripts/demo.py --planner sweep "clean the cubes then pick the blue cube"
+
+# Watch it (mjpython on macOS). No prompt = a `> ` loop; the robot stays where the last prompt left it.
+.venv/bin/mjpython scripts/demo.py --view
+```
+
+| Station | Manipulation tool at that table | State today |
+| --- | --- | --- |
+| `cubes` | Fable skills agent (`scripts/agent.py`, nested) or `--planner sweep` | works on the shared sim |
+| `pick` | Flybrain policy, `--checkpoint out/rl/arm_padded_calibrated/policy.zip` | picks and places the blue cube on the live sim; runs **without** its 20/20 validation gate and says so; the navigator parks within 4 cm / 2° here (`LiveSim.ARRIVE_AT`) because the carry fails from 9 cm out |
+| `ball` | ACT, `rlbot.act.prepare_act_live`; `--act-checkpoint` defaults to `checkpoints/act_ball_run1_noaug.pt` | one closed-loop episode per visit, from the collector's ready pose, back to it afterwards so `home` folds clean; the shipped ball placement is one this checkpoint misses (0 of 10 live, and on the fixed-base room too) - on random layouts it scores 1 of 3 here and 2 of 14 in PR #10 |
+
+Navigation still reads the simulator's pose, not SLAM. `manipulate` never
+falls back to another controller; an unavailable one is reported to the agent,
+which decides what to do next.
+
+Each table's controller was tuned on different contact pads - the skills on the
+pads `scripts/build_mjcf.py` lays on the blades, Flybrain on the fitted pads of
+`rlbot.gripper_pads` - and neither works on the other's. The live room carries
+one pad per blade and rewrites it on arrival (`LiveSim.use_pads`: position,
+size, friction, softness, the blade's inertials, its broadphase box), so the
+cubes table sees the skills' pads and the pick table sees Flybrain's. Two pad
+geoms on one blade, one of them inert, was tried first and cost the skills every
+grasp (0/16 against 16/16).
+
+The Flybrain checkpoint is made locally (`out/` is ignored). This is the
+history-and-calibration recipe from [docs/original_arm.md](docs/original_arm.md);
+about 15 minutes on a laptop CPU after `pip install -r requirements-rl.txt`
+and `scripts/prepare_connectome.py` for the FlyWire graph:
+
+```bash
+.venv/bin/python scripts/train_arm.py --history 16 --episodes 20 --updates 4000 --bc-lr 0.0003 --steps 0 --output out/rl/arm_history_padded
+.venv/bin/python scripts/train_arm.py --history 16 --motion-deadband 0.05 --resume out/rl/arm_history_padded/imitation.zip --calibrate-jaw 1.25 --output out/rl/arm_padded_calibrated
+```
+
+Headless, the whole tour - tidy the cubes, drive on and pick the blue cube,
+then drive to the ACT table and try the ball - runs in one model in a few
+minutes of wall time:
+
+```bash
+.venv/bin/python scripts/demo.py --planner sweep --checkpoint out/rl/arm_padded_calibrated/policy.zip "clean the cubes, then pick up the blue cube, then go to the ACT table"
+```
 
 ## Setup
 
@@ -217,8 +277,17 @@ pip install -r requirements.txt
 # Drive one arm by hand and record pick-and-place demonstrations for the VLA.
 .venv/bin/mjpython scripts/teleop.py --cube m
 
+# Collect demonstrations without an operator: 200 episodes each, layouts randomized.
+.venv/bin/python scripts/collect_demos.py --table ball --episodes 200
+.venv/bin/python scripts/collect_demos.py --table ware --object bowl --episodes 200
+
 # Put the camera frames back onto recorded demonstrations, and preview them.
 .venv/bin/python scripts/render_demos.py out/demos/cubes --preview
+
+# Train ACT on the ball demonstrations (needs requirements-train.txt), then run it in the sim.
+.venv/bin/pip install -r requirements-train.txt
+.venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
+.venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
 
 # Run the sponsors' arm IK library (Linux arm64 only, so inside a container on a Mac).
 docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim \
@@ -337,6 +406,12 @@ scripts/room.py             Live viewer you can drive the robot around the room 
 scripts/agent.py            Tidy a table, driven by Claude Fable 5.1 or a fixed policy.
 scripts/teleop.py           Keyboard teleop of one arm, recording demonstrations for the VLA.
 scripts/render_demos.py     Renders the cameras for recorded demonstrations, after the fact.
+scripts/collect_demos.py    Scripted demonstrations: the teleop controller driven by code, layouts randomized.
+scripts/audit_demos.py      Cuts bad demonstrations and writes a folder's manifest.
+scripts/train_act.py        Trains ACT on demonstration folders, checkpointing and resuming.
+scripts/rollout_act.py      Runs a trained ACT policy closed-loop in the sim and scores it.
+scripts/replay_demo.py      Plays recorded episodes or rollouts back in the viewer.
+checkpoints/                Trained ACT policies, weights only, with their configs and logs.
 
 src/rlbot/robot.py          Load the robot, read its state, step the sim.
 src/rlbot/control.py        The PD balance controller.
@@ -351,6 +426,7 @@ src/rlbot/grasp.py          The motions a pick is made of, shared by the harness
 src/rlbot/skills.py         The robot as an agent sees it: typed skills, symbolic scene.
 src/rlbot/filming.py        Records a run to an mp4.
 src/rlbot/teleop.py         The jog controller and the demonstration recorder behind teleop.py.
+src/rlbot/act.py            ACT: the model, the demonstration loader, checkpoints.
 ```
 
 ## How the robot model was fixed
@@ -364,6 +440,19 @@ The URDF we got is a shape export from Onshape, not a physics model. Six things 
 5. **Every joint had the same fake strength limit.** 10 N cannot hold the arm carriage up, so the arms slid down the rail. Limits are now sized from the real gravity load.
 6. **The second gripper finger was getting its own motor.** It should only follow the first finger. The extra motor was removed.
 7. **The fingers could not hold anything.** MuJoCo treats a mesh as its convex hull, and each finger is a hooked claw with a hollow inside. Hulled, the two of them fill the gap solid: a 55 mm cube placed dead centre between fingers 139 mm apart was already touching both of them, and closing shot it across the room. Each blade now gets a flat pad fitted to its real inner face instead, traced off the mesh slice by slice.
+
+8. **The head camera never saw the table.** It was mounted level at 1.575 m, and
+   from there a docked table's top is 46 to 75 degrees below the horizon, outside
+   a 58 degree view: every head frame was floor. It is now pitched 62 degrees
+   down, straight at the middle of a docked table.
+
+9. **The second finger rang like a bell.** It has no servo, only a mimic
+   constraint tying it to the first, and next to no mass. Closing on a ball it
+   slammed shut, whipped 0.9 rad open and settled a third of a second later,
+   which showed up as a flickering gripper in every replay. Damping fixed the
+   ringing and cost every carry - the drag changes where the blade settles and
+   the ball comes out. Rotor inertia does not: `armature="0.005"` on the four
+   blade joints, and the close is one motion with the same pick rate.
 
 ## Numbers
 
@@ -501,17 +590,76 @@ as one `.npz`: at 20 Hz, the full `qpos`, `qvel` and `ctrl`, both arms' joints
 and gripper commands, the jaw pose, the jaw target and wrist yaw, whether the
 hand is closed and what it holds, and every object's pose; plus the task text,
 the key presses, and the success flag. Camera frames are not recorded. They are
-a function of `qpos`, so `scripts/render_demos.py` renders them afterwards from
-the head and both wrist cameras at whatever size the model wants.
+a function of the pose, so `scripts/render_demos.py` renders them afterwards
+from the head and both wrist cameras at whatever size the model wants, into
+`<episode>_frames.npz`: one uint8 array per camera, rows x 224 x 224 x 3, plus
+each camera's vertical field of view. Rows are posed by joint name and object
+name rather than by copying the state vector back, so a room rebuilt after the
+recording still replays it.
 
 `--jitter 0.02` scatters the cubes by up to 2 cm on each reset, for variety.
 `--balance` runs the same thing on the wheels with the station keeper.
+
+### Collecting without an operator
+
+`scripts/collect_demos.py` drives the same controller from code: over the
+object, down in two settled stops, close, lift, one slow joint-space ramp to a
+clear spot in the crate, let go, back off. Every episode moves both the object
+and the crate - the object anywhere in the band either arm can reach (0.14 to
+0.28 m from the centreline, either side, 4 cm either way in depth), the crate
+up to 8 cm along and 5 cm deep from the middle, never overlapping. The crate
+has no joint, so it is moved by editing its body position in the compiled
+model, and that position is saved in the episode's metadata for the renderer.
+
+Episodes are scored the way the operator's are and only successes count.
+Failures are kept under `failed/` for the record. Every tenth success is also
+rendered to a GIF under `viz/`, over-the-shoulder beside the working wrist
+camera. Rates at the time of writing: the ball crates about 7 in 10 attempts,
+the bowl about 1 in 5 - the bowl grasp is marginal with this hand and the
+wrist angle barely moves it - at two to three seconds an attempt.
 
 Driven by a script rather than a hand, the same controller picks and crates
 every cube on the table with either arm, at key-repeat rate and at tap rate.
 The two outer cubes sit at the edge of the wrist's range: the last centimetre
 across to them gets refused at a wrist yaw of 90 degrees, and turning the wrist
 gets it back.
+
+## A first policy: ACT on the ball
+
+`src/rlbot/act.py` is Action Chunking with Transformers (Zhao et al. 2023),
+sized for a laptop: a shared ResNet-18 over the three cameras at 128 px, a
+256-wide transformer with 4 encoder and 4 decoder layers, a 32-dimensional
+CVAE latent, 22M parameters. State and action are the recorder's 16 numbers,
+both arms' seven joints plus the gripper blade, as measured and as commanded.
+It predicts 32 commands at a time, 1.6 s at 20 Hz. Training is L1 on the
+chunk plus the KL term at weight 10, AdamW at 1e-4 (1e-5 for the backbone),
+batch 8, float32 on the MPS backend at about 0.2 s a step on an M5.
+
+Two runs on the 80-episode ball set, 72 training and 8 held out:
+
+| Run | Augmentation | Steps | Best val L1 | Rollouts into the crate |
+| --- | --- | --- | --- | --- |
+| `checkpoints/act_ball_run1_noaug.pt` | none | 20K | 0.0167 | 2 of 14 |
+| `checkpoints/act_ball_run2_aug.pt` | random 6 px image shift | 17K | 0.0153 | 1 of 6 at step 15.7K |
+
+Rollouts are on layouts the policy never saw, ball and crate both moved, scored
+by the collector's own test. Both checkpoints reach the ball and close on it
+about four times in ten; most of those then lose the ball on the carry, which
+is the ball's weakness with this hand rather than the policy's - the scripted
+collector, with perfect information, drops a third of its carries too. The
+checkpoints are weights only in half precision; `scripts/rollout_act.py`
+loads either. `--mode open-loop` runs each chunk out before re-planning and
+has done better than the paper's temporal ensemble here.
+
+Things learned the hard way, in case they save someone an afternoon:
+
+- Rollouts must start where the demonstrations start, after the collector's
+  ready move. Handed the rest pose, the policy swung the arm through the ball.
+- The policy starts closing about half a second earlier than the
+  demonstrations, before the arm has settled at the ball's height, so the pads
+  catch the top of the ball. More demonstrations and augmentation reduce it.
+- Frames are memory-mapped from a per-episode cache at 128 px; at 224 px the
+  set does not fit beside the model on a 24 GB machine.
 
 ## Plan for the next steps
 

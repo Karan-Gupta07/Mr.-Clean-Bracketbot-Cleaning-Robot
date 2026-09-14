@@ -407,8 +407,12 @@ def build(total_mass: float = TOTAL_MASS) -> None:
                       rgba=[0.2, 0.8, 0.3, 0.6])
         root.add_camera(
             name="head_cam", pos=[0.075, 0, 1.575],
-            # a MuJoCo camera looks down its own -z with +y up: -z -> +x world
-            xyaxes=[0, -1, 0, 0, 0, 1], fovy=58,
+            # a MuJoCo camera looks down its own -z with +y up.  Level, it
+            # never saw the table: from 1.575 m up the table top is 46 to 75
+            # degrees below the horizon, outside a 58 degree view.  So pitch
+            # it 62 degrees down - straight at the middle of a docked table -
+            # by tilting the up axis back by the same angle.
+            xyaxes=[0, -1, 0, 0.882948, 0, 0.469472], fovy=58,
         )
 
         model = spec.compile()
@@ -482,6 +486,11 @@ def build(total_mass: float = TOTAL_MASS) -> None:
             limit = max(URDF_EFFORT, SERVO_MARGIN * need)
             joint.actfrcrange = [-limit, limit]
             joint.actfrclimited = mujoco.mjtLimited.mjLIMITED_TRUE
+        # No rotor inertia on the blade joints here.  ACT's demonstrations
+        # were recorded with armature 0.005 on all four (it stops the follower
+        # ringing on the ball), but with it on the skills place 0 of 4 cubes
+        # against 4 of 4 without: rlbot.act applies BLADE_ARMATURE for its own
+        # episodes and puts it back.
         model = spec.compile()
 
         xml = spec.to_xml()

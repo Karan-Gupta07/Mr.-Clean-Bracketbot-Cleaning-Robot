@@ -37,6 +37,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from rlbot.act import BLADE_ARMATURE, set_blade_armature # noqa: E402
 from rlbot.grasp import hold_everything                              # noqa: E402
 from rlbot.skills import Robot                                       # noqa: E402
 from rlbot.teleop import NUDGE_RANGE, DemoRecorder, Jog, task_text  # noqa: E402
@@ -190,6 +191,7 @@ def main() -> None:
     args = ap.parse_args()
 
     robot = Robot(args.table, balancing=args.balance)
+    set_blade_armature(robot.model, BLADE_ARMATURE)   # what the policy will run with
     cube = f"cube_{args.cube}" if args.table == "cubes" else next(
         n for n, i in robot.items.items() if i.graspable)
     session = Session(robot, args.arm, cube, Path(args.out) / args.table,

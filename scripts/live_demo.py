@@ -62,7 +62,7 @@ def main(argv=None):
     parser.add_argument('--checkpoint', type=Path,
                         help='Required for pick; checkpoint and its validation/report.json must pass existing preflight')
     parser.add_argument('--act-checkpoint', type=Path,
-                        help='ACT scaffold checkpoint path; unavailable until the real backend is supplied')
+                        help='ACT checkpoint for the ball route (default checkpoints/act_ball_run1_noaug.pt)')
     parser.add_argument('--seed', type=int, default=3000)
     parser.add_argument('--prompt-api-key', action='store_true',
                         help='Read a replacement Fable API key from a secure local console prompt; never saved')
@@ -104,7 +104,7 @@ def main(argv=None):
                   'Existing preflight requires a checkpoint-bound perfect evaluation of at least 20 episodes '
                   'and matching checkpoint/report environment metadata; no bypass or scripted fallback.', flush=True)
         else:
-            print('ACT is unavailable until controller code and a compatible checkpoint are supplied; no fallback.', flush=True)
+            print(f'ACT checkpoint: {args.act_checkpoint or "checkpoints/act_ball_run1_noaug.pt"}; one closed-loop episode, no fallback.', flush=True)
         if args.dry_run:
             print('DRY RUN: route only, readiness NOT checked; no API call, viewer, or movement.', flush=True)
             save_report(args.report, metadata, status='dry_run', ready='not_checked')

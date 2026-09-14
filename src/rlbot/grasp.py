@@ -142,6 +142,20 @@ class Rig:
         self.step(int(t / self.model.opt.timestep))
 
 
+def set_const(model, data=None) -> None:
+    """`mj_setConst` that keeps the room's declared `statistic`.
+
+    Besides the qpos0 constants it recomputes `stat.extent` and `stat.center`
+    from the geometry - 4 m becomes 11.4 m in this room - and every camera's
+    near plane is `extent * znear`: 80 mm becomes 230 mm, which clips the
+    jaws and a ball between them out of the wrist views.
+    """
+    extent, center = float(model.stat.extent), model.stat.center.copy()
+    mujoco.mj_setConst(model, mujoco.MjData(model) if data is None else data)
+    model.stat.extent = extent
+    model.stat.center[:] = center
+
+
 def hold_everything(model, data) -> None:
     """Point every position servo at the pose it is already in.
 

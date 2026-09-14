@@ -193,15 +193,23 @@ class LiveDemoTests(unittest.TestCase):
         self.assertEqual(self.run_demo([*CUBES, '--planner', 'sweep']), 1)
         self.flybrain.assert_not_called()
 
-    def test_act_stays_unavailable_without_navigation_or_fallback(self):
-        self.assert_stopped(BALL, 'Scaffold only: ACT backend is not implemented')
+    def test_act_preflights_the_checkpoint_then_navigates_and_runs_one_episode(self):
+        with patch.object(live_demo.orchestrate, 'prepare_act', return_value=self.execute) as act:
+            self.assertEqual(self.run_demo(BALL), 0)
+        act.assert_called_once_with(None, view=True)
+        self.navigate.assert_called_once()
+        self.execute.assert_called_once_with()
         self.assert_no_preflight()
-        self.assertIn('ACT is unavailable', self.stdout.getvalue())
+        self.assertIn('ACT checkpoint', self.stdout.getvalue())
+
+    def test_act_with_a_missing_checkpoint_stops_before_navigation(self):
+        self.assert_stopped([*BALL, '--act-checkpoint', 'nowhere.pt'], 'ACT checkpoint unavailable: nowhere.pt')
+        self.assert_no_preflight()
 
     def test_act_dry_run_can_report_the_route_without_claiming_it_is_ready(self):
         self.assertEqual(self.run_demo([*BALL, '--dry-run']), 0)
         self.assertIn('"tool": "run_act"', self.stdout.getvalue())
-        self.assertIn('ACT is unavailable', self.stdout.getvalue())
+        self.assertIn('ACT checkpoint', self.stdout.getvalue())
         self.assertIn('readiness NOT checked', self.stdout.getvalue())
         self.assert_no_preflight()
         self.navigate.assert_not_called()

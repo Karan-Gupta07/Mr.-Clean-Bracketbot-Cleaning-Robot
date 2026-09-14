@@ -38,6 +38,7 @@ CLOSE_RATE = 0.6           # rad/s the gripper command walks in at, as `squeeze`
 OPEN_RATE = 0.3            # rad/s it walks back out: faster is a flick, and the
                            # blades throw a 50 g cube clear of the crate
 RAMP = 1.5                 # s to ramp the servos to a far pose (reset, ready)
+CARRY_PER_RAD = 2.5        # s per radian of joint travel for an unhurried move
 CONTINUITY = 0.4           # rad, summed over the arm; more than this on a nudge
                            # means IK jumped to another branch, and the arm would
                            # swing through the table to get there
@@ -230,7 +231,7 @@ class Jog:
             return False
         travel = float(np.abs(got.qpos - seed).sum())
         if seconds is None:
-            seconds = max(RAMP, 2.5 * travel)
+            seconds = max(RAMP, CARRY_PER_RAD * travel)
         self._ramp.clear()
         self._segments.clear()
         self._queue(seed, got.qpos, seconds)
@@ -301,9 +302,10 @@ class DemoRecorder:
     out at training time.  Deciding that here would bake one policy's input
     format into every demonstration collected before the policy existed.
 
-    Camera frames are not here either: they are a pure function of `qpos`, so
-    `scripts/render_demos.py` re-renders them afterwards at whatever size and
-    from whichever cameras the model turns out to want.
+    Camera frames are not here either: they are a pure function of the pose,
+    so `scripts/render_demos.py` re-renders them afterwards at whatever size
+    and from whichever cameras the model turns out to want.  What it needs to
+    do that - the robot's joints by name, every object's pose - is here.
     """
 
     def __init__(self, robot: Robot, out_dir: Path, hz: int = CONTROL_HZ):
@@ -313,8 +315,23 @@ class DemoRecorder:
         self.hz = hz
         self.objects = list(robot.items)
         self.bodies = [robot.model.body(n).id for n in self.objects]
+        # The robot's joints by name, with where each sits in qpos and qvel.
+        # The room gets rebuilt, and each rebuild can move the objects about
+        # in the state vector or take joints away from them; a replay that
+        # trusts raw indices then poses the wrong thing.  Names do not move.
+        model = robot.model
+        self.joints = {}
+        for j in range(model.njnt):
+            name = model.joint(j).name
+            if name and model.jnt_bodyid[j] not in self.bodies:
+                self.joints[name] = (int(model.jnt_qposadr[j]),
+                                     int(model.jnt_dofadr[j]),
+                                     int(model.jnt_type[j]))
+        self._grip_adr = {side: model.jnt_qposadr[model.joint(GRIPPER[side]).id]
+                          for side in ("right", "left")}
         self.demo: Demo | None = None
         self.count = 0
+        self.saved = 0
 
     @property
     def active(self) -> bool:
@@ -324,6 +341,10 @@ class DemoRecorder:
         self.demo = Demo(dict(meta, table=self.robot.table.name,
                               balancing=self.robot.balancing,
                               control_hz=self.hz, objects=self.objects,
+                              joints=self.joints,
+                              cameras={self.robot.model.camera(i).name:
+                                       float(self.robot.model.cam_fovy[i])
+                                       for i in range(self.robot.model.ncam)},
                               timestep=self.robot.model.opt.timestep))
         self.count = 0
 
@@ -350,8 +371,14 @@ class DemoRecorder:
             "ctrl": d.ctrl.copy(),
             "arm_right": d.qpos[arms["right"].ik.qadr].copy(),
             "arm_left": d.qpos[arms["left"].ik.qadr].copy(),
+            "arm_right_vel": d.qvel[arms["right"].ik.dofs].copy(),
+            "arm_left_vel": d.qvel[arms["left"].ik.dofs].copy(),
+            "arm_right_cmd": d.ctrl[arms["right"].acts].copy(),
+            "arm_left_cmd": d.ctrl[arms["left"].acts].copy(),
             "grip_right": float(d.ctrl[arms["right"].grip_act]),
             "grip_left": float(d.ctrl[arms["left"].grip_act]),
+            "grip_right_qpos": float(d.qpos[self._grip_adr["right"]]),
+            "grip_left_qpos": float(d.qpos[self._grip_adr["left"]]),
             "active_arm": 0 if jog.side == "right" else 1,
             "ee_pos": jog.jaws,
             "ee_quat": quat,
@@ -378,9 +405,56 @@ class DemoRecorder:
                     seconds=float(demo.rows[-1]["time"] - demo.rows[0]["time"]),
                     events=demo.events)
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        path = self.out_dir / time.strftime("ep_%Y%m%d_%H%M%S.npz")
+        # Seconds are not enough: a scripted collector finishes an episode
+        # every two or three, and two in the same second overwrote each other.
+        self.saved += 1
+        path = self.out_dir / (time.strftime("ep_%Y%m%d_%H%M%S")
+                               + f"_{self.saved:04d}.npz")
         np.savez_compressed(path, meta=json.dumps(meta), **arrays)
         return path
+
+
+ROBOT_NQ = 20      # qpos the welded robot takes up, ahead of the objects, in
+                   # episodes recorded before joints were stamped by name
+
+
+class Poser:
+    """Puts one recorded row into the model, by name."""
+
+    def __init__(self, robot: Robot, meta: dict):
+        self.model, self.data = robot.model, robot.data
+        model = self.model
+        # (recorded qpos column, live qpos address, width) per robot joint
+        self.robot_map = []
+        joints = meta.get("joints")
+        if joints:
+            for name, (qadr, _, kind) in joints.items():
+                width = 7 if kind == 0 else 4 if kind == 1 else 1
+                live = model.joint(name)
+                self.robot_map.append((qadr, int(model.jnt_qposadr[live.id]),
+                                       width))
+        else:
+            self.robot_map.append((0, 0, ROBOT_NQ))     # same layout, same robot
+        # every object on the table: a free joint to set, or a body to move
+        self.objects = []
+        for k, name in enumerate(meta["objects"]):
+            body = model.body(name)
+            adr = (int(model.jnt_qposadr[body.jntadr[0]])
+                   if body.jntnum[0] > 0 else None)
+            self.objects.append((k, body.id, adr))
+
+    def __call__(self, qpos_row, obj_pos_row, obj_quat_row) -> None:
+        d, m = self.data, self.model
+        for src, dst, width in self.robot_map:
+            d.qpos[dst:dst + width] = qpos_row[src:src + width]
+        for k, body, adr in self.objects:
+            if adr is None:
+                m.body_pos[body] = obj_pos_row[k]
+                m.body_quat[body] = obj_quat_row[k]
+            else:
+                d.qpos[adr:adr + 3] = obj_pos_row[k]
+                d.qpos[adr + 3:adr + 7] = obj_quat_row[k]
+        mujoco.mj_forward(m, d)
 
 
 def load_demo(path) -> tuple[dict, dict[str, np.ndarray]]:
