@@ -135,7 +135,7 @@ original URDF in `models/bracketbot/` is never edited.
 | --- | --- |
 | Joints | 26 = 6 floating base + 2 wheels + 18 in the arms and grippers |
 | Motors | 2 wheel motors (±8 N·m) + 16 arm servos |
-| Sensors | gyro, accelerometer, orientation on the `imu` site; wheel speeds; a 72-beam lidar at the `lidar` site; a head camera and one camera per wrist |
+| Sensors | gyro, accelerometer, orientation on the `imu` site; wheel angles and speeds; a ray-cast lidar at the `lidar` site; a head camera and one camera per wrist. See [How the sensors are simulated](#how-the-sensors-are-simulated). |
 | Gripper | holds objects 40 to 60 mm across. Smooth balls are not held. |
 | Balance gains | `kp_pitch=80, kd_pitch=15, kp_speed=0.010` in `src/rlbot/control.py` |
 
@@ -174,15 +174,79 @@ in the room from cold.
 
 ## Path finding
 
-### Sensors
+### How the sensors are simulated
 
-`src/rlbot/sensing.py` provides the two inputs SLAM needs.
+The robot has no real sensors yet. Every input below is computed from the
+MuJoCo state, at a real sensor's rate, with a real sensor's failure modes.
+The simulator's true pose is read in exactly one place, `true_pose()` in
+`src/rlbot/sensing.py`, and only to score an estimate.
 
-- **Lidar.** A planar scan cast from the `lidar` site. 72 beams by default in
-  the sim; the SLAM recorder uses 360. Moving robot links occlude; those rays
-  are `NaN`. Out-of-range rays are `+inf`.
-- **Odometry.** `src/rlbot/odometry.py` integrates wheel rotation and gyro
-  yaw. It blends wheel and gyro yaw increments. It is not a covariance filter.
+**Wheel encoders.** `scripts/build_mjcf.py` gives each wheel a hinge joint.
+The encoder reading is that joint's angle, `data.qpos[wheel_left]` and
+`data.qpos[wheel_right]`, in radians and unwrapped. Two `jointvel` sensors,
+`vel_left` and `vel_right`, give wheel speed for the balancer. The URDF has
+no wheel radius. The builder measures it from the tyre mesh (0.0846 m), and
+odometry reads it back from the compiled wheel geom
+(`WheelImuOdometry.from_model`), never from a constant.
+
+**IMU.** The builder puts an `imu` site on the chassis 0.20 m up. Three
+MuJoCo sensors attach to it: `gyro` (angular rate), `accel` (linear
+acceleration with gravity), and `orient` (a frame quaternion). Odometry
+consumes only the gyro. `orient` exists for diagnostics and is never fed to
+an estimator.
+
+**Odometry.** `WheelImuOdometry` in `src/rlbot/odometry.py` is dead
+reckoning, not a filter. Each step it does three things. It integrates the
+gyro to track roll and pitch. It adds the pitch rate to the wheel rotation
+to recover ground travel. It blends yaw from the wheel differential and the
+gyro (`gyro_weight=0.9`). The estimate drifts the way wheel odometry drifts,
+plus one extra way. A balancing robot spins its wheels to catch itself, so
+every recovery from a nudge writes phantom distance into the estimate. That
+drift is what SLAM exists to correct.
+
+**Lidar.** There is no lidar hardware model. Each beam is a ray cast from the
+`lidar` site, 0.32 m up the mast, in the site's own xy plane. The ray is cast
+with `mujoco.mj_ray` or `mj_multiRay`, not with MuJoCo `rangefinder`
+sensors, for two reasons. A rangefinder skips only its own body, so a beam
+from the mast axis would hit the robot's shell at 6 mm. And MuJoCo evaluates
+sensors every physics step; 72 beams against 50 meshes is most of the step
+time. Casting by hand lets the scan run at 10 Hz and filter by geom group.
+Two versions exist:
+
+| Class | Beams | Used by | Self-hits | Out of range |
+| --- | --- | --- | --- | --- |
+| `sensing.Lidar` | 72 | `scripts/room.py`, local checks | filtered by geom group (room is groups 0-1, robot is 2-3) | `+inf` |
+| `sensors.Lidar` | 360 | ROS bridge, `record_slam_inputs.py` | mounting assembly masked; moving links still occlude and return `NaN` | `+inf`; below 0.05 m is `NaN` |
+
+The beams follow the chassis. A robot leaning 3 degrees sweeps a plane
+tilted 3 degrees, and real floor hits stay in the scan. `project_scan` in
+`src/rlbot/sensors.py` re-projects each scan into a level `lidar_planar`
+frame using the gyro-estimated tilt and the mount geometry. It drops the
+whole scan when the tilt exceeds 2 degrees. It drops single returns outside
+the 0.12 to 0.52 m height band. It never fills a missing ray with free
+space. Optional Gaussian range noise is available (`noise=`); the recorded
+runs use none.
+
+**Cameras.** The head camera is a MuJoCo camera on the chassis at 1.575 m,
+pitched 62 degrees down, 58 degree field of view. Each wrist camera sits at
+the grip frame and looks along the approach direction, 70 degrees. Frames
+are rendered offscreen with `mujoco.Renderer` at 224 px
+(`scripts/render_demos.py`, `src/rlbot/act.py`). Demonstrations do not
+record frames; they are re-rendered from the saved poses afterwards. The
+lidar and odometry never see an image.
+
+**Rates.** Physics runs at 500 Hz. The balancer reads the gyro and wheel
+speeds every step. The ROS bridge (`ros2_ws/src/rlbot_bridge/rlbot_bridge/simulation.py`)
+ticks at 50 Hz and publishes `/odom`, `/imu/data`, `/joint_states`, TF, and
+`/clock` at that rate, and `/scan_raw`, `/scan`, and `/scan_valid` at 10 Hz.
+`scripts/record_slam_inputs.py` records the same signals to one `.npz`
+without ROS: wheel angles, gyro, accelerometer, and odometry at 500 Hz,
+scans at 10 Hz, plus `truth_pose` for scoring only.
+
+```bash
+.venv/bin/python scripts/record_slam_inputs.py --output out/slam_inputs.npz
+.venv/bin/python scripts/record_slam_inputs.py --push 300 --output out/slam_inputs_push.npz
+```
 
 ### SLAM
 
