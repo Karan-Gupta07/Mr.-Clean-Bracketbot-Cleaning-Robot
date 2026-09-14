@@ -488,7 +488,7 @@ carry. Flat pads have nothing to bite on a sphere, and the scripted collector
 drops a third of its carries too.
 
 ```bash
-.venv/bin/pip install -r requirements-rl.txt
+.venv/bin/pip install -r requirements-train.txt
 .venv/bin/python scripts/train_act.py --data out/demos/ball --out out/act/ball_aug --shift 6
 .venv/bin/mjpython scripts/rollout_act.py --ckpt checkpoints/act_ball_run2_aug.pt --episodes 3 --view --mode open-loop
 .venv/bin/python scripts/run_act.py --describe
