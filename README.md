@@ -86,6 +86,8 @@ shoulder at 30 fps and pipes to `ffmpeg`; it runs headless.
 
 ## System overview
 
+![Architecture: prompt, agent, path finding, manipulation, simulation, training](docs/architecture.png)
+
 | Part | Files | Job |
 | --- | --- | --- |
 | Agent | `scripts/demo.py`, `scripts/agent.py` | Turn the prompt into tool calls |
