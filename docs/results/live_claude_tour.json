@@ -1,0 +1,125 @@
+{
+  "prompts": [
+    "tidy the cubes table, then pick up the blue cube at the Flybrain table, then put the red ball in its box at the ACT table"
+  ],
+  "planner": "fable",
+  "calls": 8,
+  "stations": [
+    "cubes",
+    "pick",
+    "ball"
+  ],
+  "results": [
+    {
+      "tool": "go_to",
+      "station": "cubes",
+      "ok": true,
+      "details": {
+        "station": "cubes",
+        "err_xy": 0.02421751512755484,
+        "err_yaw": 3.4324868758198757,
+        "seconds": 54.70200000002089,
+        "replans": 11,
+        "fell": false,
+        "touched": [],
+        "failed": null,
+        "ok": true
+      }
+    },
+    {
+      "tool": "run_fable",
+      "station": "cubes",
+      "ok": true,
+      "details": {
+        "tool": "run_fable",
+        "planner": "fable",
+        "placed": [
+          "cube_s",
+          "cube_m",
+          "cube_l",
+          "cube_xl"
+        ],
+        "expected": [
+          "cube_s",
+          "cube_m",
+          "cube_l",
+          "cube_xl"
+        ],
+        "calls": 13
+      }
+    },
+    {
+      "tool": "go_to",
+      "station": "pick",
+      "ok": true,
+      "details": {
+        "station": "pick",
+        "err_xy": 0.014000256084615947,
+        "err_yaw": 1.9706654925869693,
+        "seconds": 127.20200000060737,
+        "replans": 27,
+        "fell": false,
+        "touched": [],
+        "failed": null,
+        "ok": true
+      }
+    },
+    {
+      "tool": "run_flybrain",
+      "station": "pick",
+      "ok": false,
+      "details": {
+        "tool": "run_flybrain",
+        "validated": false,
+        "seed": 3000,
+        "checkpoint": "out/rl/arm_padded_calibrated/policy.zip",
+        "success": false,
+        "distance": 0.6173448266351947,
+        "max_lift": 0.1507106033618818,
+        "held_seconds": 13.74400000000126,
+        "stable_seconds": 0.0,
+        "steps": 446
+      }
+    },
+    {
+      "tool": "run_flybrain",
+      "station": "pick",
+      "ok": false,
+      "details": {
+        "reason": "Reset pose unreachable from the parked pose"
+      }
+    },
+    {
+      "tool": "go_to",
+      "station": "ball",
+      "ok": true,
+      "details": {
+        "station": "ball",
+        "err_xy": 0.08301651352723484,
+        "err_yaw": 4.476058046985294,
+        "seconds": 107.00200000051092,
+        "replans": 20,
+        "fell": false,
+        "touched": [],
+        "failed": null,
+        "ok": true
+      }
+    },
+    {
+      "tool": "run_act",
+      "station": "ball",
+      "ok": false,
+      "details": {
+        "tool": "run_act",
+        "checkpoint": "checkpoints/act_ball_run1_noaug.pt",
+        "step": 19750,
+        "mode": "ensemble",
+        "note": "on the table",
+        "side": "right",
+        "ticks": 500,
+        "seconds": 26.800000000127966,
+        "retreated": true
+      }
+    }
+  ]
+}
